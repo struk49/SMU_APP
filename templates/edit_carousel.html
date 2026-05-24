@@ -3,277 +3,340 @@
 {% block content %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <div>
-    <h1 class="h3 fw-bold mb-1">Edit Carousel</h1>
-    <p class="text-muted mb-0">Reorder images, choose a cover image, and update your carousel details.</p>
-  </div>
+    <div>
+        <h1 class="h3 fw-bold mb-1">Edit Carousel</h1>
+        <p class="text-muted mb-0">
+            Reorder images, choose a cover image, and update your carousel details.
+        </p>
+    </div>
 
-  <a href="{{ url_for('view_post', post_id=carousel.id) }}" class="btn btn-outline-secondary">
-    Back to Post
-  </a>
+    <a href="{{ url_for('view_post', post_id=carousel.id) }}"
+       class="btn btn-outline-secondary">
+        Back to Post
+    </a>
 </div>
 
 <div class="card border-0 shadow-sm rounded-4">
-  <div class="card-body p-4">
+    <div class="card-body p-4">
 
-    <form method="POST">
-      <input type="hidden" name="carousel_order" id="carouselOrder">
-      <input type="hidden" name="cover_post_id" id="coverPostId" value="{{ posts[0].id }}">
+        <form method="POST">
 
-      <div class="mb-4">
-        <label class="form-label fw-semibold">Carousel Preview</label>
+            <input type="hidden"
+                   name="carousel_order"
+                   id="carouselOrder">
 
-        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
-          <div class="position-relative bg-light d-flex align-items-center justify-content-center" style="height: 280px;">
+            <input type="hidden"
+                   name="cover_post_id"
+                   id="coverPostId"
+                   value="{{ posts[0].id }}">
 
-            <button type="button" id="prevPreview" class="btn btn-dark btn-sm position-absolute start-0 ms-2" style="z-index: 2;">
-              ‹
-            </button>
+            <!-- PREVIEW -->
+            <div class="mb-4">
+                <label class="form-label fw-semibold">
+                    Carousel Preview
+                </label>
 
-            <img
-              id="mainPreview"
-              src="{{ posts[0].file_url }}"
-              class="img-fluid"
-              style="max-height: 260px; max-width: 100%; object-fit: contain;"
-              alt="Preview"
-            >
+                <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
 
-            <button type="button" id="nextPreview" class="btn btn-dark btn-sm position-absolute end-0 me-2" style="z-index: 2;">
-              ›
-            </button>
-          </div>
+                    <div class="position-relative bg-light d-flex align-items-center justify-content-center"
+                         style="height: 280px;">
 
-          <div class="p-3 bg-white border-top">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <div id="previewCounter" class="small text-muted">
-                Image 1 of {{ posts|length }}
-              </div>
+                        <button type="button"
+                                id="prevPreview"
+                                class="btn btn-dark btn-sm position-absolute start-0 ms-2"
+                                style="z-index: 2;">
+                            ‹
+                        </button>
 
-              <div class="small text-muted">
-                Drag thumbnails to reorder
-              </div>
-            </div>
+                        <img id="mainPreview"
+                             src="{{ posts[0].file_url }}"
+                             class="img-fluid"
+                             style="max-height: 260px; max-width: 100%; object-fit: contain;"
+                             alt="Preview">
 
-            <div id="thumbnailPreview" class="d-flex gap-2 overflow-auto pb-2">
-              {% for item in posts %}
-                <div
-                  class="position-relative carousel-thumb"
-                  data-post-id="{{ item.id }}"
-                  data-url="{{ item.file_url }}"
-                  style="width: 76px; height: 76px; flex: 0 0 auto;"
-                >
-                  <img
-                    src="{{ item.file_url }}"
-                    style="width: 76px; height: 76px; object-fit: cover; border-radius: 12px; cursor: grab; border: {% if loop.first %}3px solid #0d6efd{% else %}2px solid transparent{% endif %};"
-                    alt="Carousel thumbnail"
-                  >
+                        <button type="button"
+                                id="nextPreview"
+                                class="btn btn-dark btn-sm position-absolute end-0 me-2"
+                                style="z-index: 2;">
+                            ›
+                        </button>
+                    </div>
 
-                  <span
-                    class="position-absolute top-0 start-0 badge bg-dark thumb-number"
-                    style="font-size: 10px; border-radius: 10px 0 10px 0;"
-                  >
-                    {{ loop.index }}
-                  </span>
+                    <!-- THUMBNAILS -->
+                    <div class="p-3 bg-white border-top">
 
-                  <button
-                    type="button"
-                    class="btn btn-sm position-absolute bottom-0 start-0 end-0 cover-btn {% if item.is_cover %}btn-warning{% else %}btn-light{% endif %}"
-                    style="font-size: 10px; padding: 2px; border-radius: 0 0 12px 12px;"
-                  >
-                    {% if item.is_cover %}★ Cover{% else %}Set Cover{% endif %}
-                  </button>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div id="previewCounter"
+                                 class="small text-muted">
+                                Image 1 of {{ posts|length }}
+                            </div>
+
+                            <div class="small text-muted">
+                                Drag thumbnails to reorder
+                            </div>
+                        </div>
+
+                        <div id="thumbnailPreview"
+                             class="d-flex gap-2 overflow-auto pb-2">
+
+                            {% for item in posts %}
+                            <div class="position-relative carousel-thumb"
+                                 data-post-id="{{ item.id }}"
+                                 data-url="{{ item.file_url }}"
+                                 style="width: 76px; height: 76px; flex: 0 0 auto;">
+
+                                <img src="{{ item.file_url }}"
+                                     alt="Carousel thumbnail"
+                                     style="
+                                        width: 76px;
+                                        height: 76px;
+                                        object-fit: cover;
+                                        border-radius: 12px;
+                                        cursor: grab;
+                                        border:
+                                        {% if loop.first %}
+                                            3px solid #0d6efd
+                                        {% else %}
+                                            2px solid transparent
+                                        {% endif %};
+                                     ">
+
+                                <span class="position-absolute top-0 start-0 badge bg-dark thumb-number"
+                                      style="font-size:10px;border-radius:10px 0 10px 0;">
+                                    {{ loop.index }}
+                                </span>
+
+                                <button type="button"
+                                        class="btn btn-sm position-absolute bottom-0 start-0 end-0 cover-btn {% if item.is_cover %}btn-warning{% else %}btn-light{% endif %}"
+                                        style="
+                                            font-size:10px;
+                                            padding:2px;
+                                            border-radius:0 0 12px 12px;
+                                        ">
+                                    {% if item.is_cover %}
+                                        ★ Cover
+                                    {% else %}
+                                        Set Cover
+                                    {% endif %}
+                                </button>
+
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                    </div>
                 </div>
-              {% endfor %}
             </div>
-          </div>
-        </div>
-      </div>
 
-      <div class="mb-4">
-        <label class="form-label fw-semibold">Caption</label><textarea name="caption" class="form-control" rows="4">{{ carousel.caption if carousel.caption else '' }}</textarea> <textarea name="caption" class="form-control" rows="4">{{ carousel.caption or '' }}</textarea>
-      </div>
+            <!-- CAPTION -->
+            <div class="mb-4">
+                <label class="form-label fw-semibold">
+                    Caption
+                </label>
 
-      <div class="mb-4">
-        <label class="form-label fw-semibold d-block">Platforms</label>
+                <textarea name="caption"
+                          class="form-control"
+                          rows="4">{% if carousel.caption %}{{ carousel.caption }}{% endif %}</textarea>
+            </div>
 
-        <div class="form-check form-check-inline">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            name="platforms"
-            value="instagram"
-            id="platformInstagram"
-            {% if carousel.platforms and 'instagram' in carousel.platforms %}checked{% endif %}
-          >
-          <label class="form-check-label" for="platformInstagram">Instagram</label>
-        </div>
+            <!-- PLATFORMS -->
+            <div class="mb-4">
+                <label class="form-label fw-semibold d-block">
+                    Platforms
+                </label>
 
-        <div class="form-check form-check-inline">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            name="platforms"
-            value="facebook"
-            id="platformFacebook"
-            {% if carousel.platforms and 'facebook' in carousel.platforms %}checked{% endif %}
-          >
-          <label class="form-check-label" for="platformFacebook">Facebook</label>
-        </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="platforms"
+                           value="instagram"
+                           id="platformInstagram"
+                           {% if carousel.platforms and 'instagram' in carousel.platforms %}
+                           checked
+                           {% endif %}>
 
-        <div class="form-check form-check-inline">
-          <input
-            class="form-check-input"
-            type="checkbox"
-            name="platforms"
-            value="linkedin"
-            id="platformLinkedin"
-            {% if carousel.platforms and 'linkedin' in carousel.platforms %}checked{% endif %}
-          >
-          <label class="form-check-label" for="platformLinkedin">LinkedIn</label>
-        </div>
-      </div>
+                    <label class="form-check-label"
+                           for="platformInstagram">
+                        Instagram
+                    </label>
+                </div>
 
-      <button type="submit" class="btn btn-primary btn-lg w-100">
-        Save Carousel Changes
-      </button>
-    </form>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input"
+                           type="checkbox"
+                           name="platforms"
+                           value="facebook"
+                           id="platformFacebook"
+                           {% if carousel.platforms and 'facebook' in carousel.platforms %}
+                           checked
+                           {% endif %}>
 
-  </div>
+                    <label class="form-check-label"
+                           for="platformFacebook">
+                        Facebook
+                    </label>
+                </div>
+            </div>
+
+            <button type="submit"
+                    class="btn btn-primary btn-lg w-100">
+                Save Carousel Changes
+            </button>
+
+        </form>
+
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
 <script>
-  const thumbnailPreview = document.getElementById("thumbnailPreview");
-  const mainPreview = document.getElementById("mainPreview");
-  const previewCounter = document.getElementById("previewCounter");
-  const prevPreview = document.getElementById("prevPreview");
-  const nextPreview = document.getElementById("nextPreview");
-  const carouselOrderInput = document.getElementById("carouselOrder");
-  const coverPostIdInput = document.getElementById("coverPostId");
+const thumbnailPreview = document.getElementById("thumbnailPreview");
+const mainPreview = document.getElementById("mainPreview");
+const previewCounter = document.getElementById("previewCounter");
+const prevPreview = document.getElementById("prevPreview");
+const nextPreview = document.getElementById("nextPreview");
+const carouselOrderInput = document.getElementById("carouselOrder");
+const coverPostIdInput = document.getElementById("coverPostId");
 
-  let currentPreviewIndex = 0;
+let currentPreviewIndex = 0;
 
-  function getThumbs() {
-    return Array.from(thumbnailPreview.querySelectorAll(".carousel-thumb"));
-  }
+function getThumbs() {
+    return Array.from(
+        thumbnailPreview.querySelectorAll(".carousel-thumb")
+    );
+}
 
-  function updateCarouselOrder() {
-    const order = getThumbs().map(item => Number(item.dataset.postId));
+function updateCarouselOrder() {
+    const order = getThumbs().map(
+        item => Number(item.dataset.postId)
+    );
+
     carouselOrderInput.value = JSON.stringify(order);
-    console.log("Carousel order:", carouselOrderInput.value);
-  }
+}
 
-  function updateThumbnailNumbers() {
+function updateThumbnailNumbers() {
     getThumbs().forEach((item, index) => {
-      const badge = item.querySelector(".thumb-number");
-      if (badge) badge.textContent = index + 1;
-    });
-  }
+        const badge = item.querySelector(".thumb-number");
 
-  function setMainPreview(index) {
+        if (badge) {
+            badge.textContent = index + 1;
+        }
+    });
+}
+
+function setMainPreview(index) {
     const thumbs = getThumbs();
 
     if (!thumbs.length) return;
 
-    if (index < 0) index = thumbs.length - 1;
-    if (index >= thumbs.length) index = 0;
+    if (index < 0) {
+        index = thumbs.length - 1;
+    }
+
+    if (index >= thumbs.length) {
+        index = 0;
+    }
 
     currentPreviewIndex = index;
 
     const selected = thumbs[index];
 
     mainPreview.src = selected.dataset.url;
-    previewCounter.textContent = `Image ${index + 1} of ${thumbs.length}`;
 
-    thumbs.forEach((item, thumbIndex) => {
-      const img = item.querySelector("img");
-      if (!img) return;
+    previewCounter.textContent =
+        "Image " + (index + 1) + " of " + thumbs.length;
 
-      img.style.border = thumbIndex === index
-        ? "3px solid #0d6efd"
-        : "2px solid transparent";
+    thumbs.forEach(function(item, thumbIndex) {
+        const img = item.querySelector("img");
+
+        if (!img) return;
+
+        img.style.border =
+            thumbIndex === index
+                ? "3px solid #0d6efd"
+                : "2px solid transparent";
     });
-  }
+}
 
-  function updateCoverButtons(selectedPostId) {
+function updateCoverButtons(selectedPostId) {
     coverPostIdInput.value = String(selectedPostId);
 
     getThumbs().forEach(item => {
-      const btn = item.querySelector(".cover-btn");
-      const postId = Number(item.dataset.postId);
+        const btn = item.querySelector(".cover-btn");
+        const postId = Number(item.dataset.postId);
 
-      if (!btn) return;
+        if (!btn) return;
 
-      if (postId === Number(selectedPostId)) {
-        btn.textContent = "★ Cover";
-        btn.className = "btn btn-warning btn-sm position-absolute bottom-0 start-0 end-0 cover-btn";
-      } else {
-        btn.textContent = "Set Cover";
-        btn.className = "btn btn-light btn-sm position-absolute bottom-0 start-0 end-0 cover-btn";
-      }
-
-      btn.style.fontSize = "10px";
-      btn.style.padding = "2px";
-      btn.style.borderRadius = "0 0 12px 12px";
+        if (postId === Number(selectedPostId)) {
+            btn.textContent = "★ Cover";
+            btn.className =
+                "btn btn-warning btn-sm position-absolute bottom-0 start-0 end-0 cover-btn";
+        } else {
+            btn.textContent = "Set Cover";
+            btn.className =
+                "btn btn-light btn-sm position-absolute bottom-0 start-0 end-0 cover-btn";
+        }
     });
-  }
+}
 
-  thumbnailPreview.addEventListener("click", function (e) {
+thumbnailPreview.addEventListener("click", function(e) {
     const coverBtn = e.target.closest(".cover-btn");
     const thumb = e.target.closest(".carousel-thumb");
 
     if (!thumb) return;
 
     if (coverBtn) {
-      e.stopPropagation();
-      updateCoverButtons(Number(thumb.dataset.postId));
-      return;
+        e.stopPropagation();
+
+        updateCoverButtons(
+            Number(thumb.dataset.postId)
+        );
+
+        return;
     }
 
     const thumbs = getThumbs();
     const index = thumbs.indexOf(thumb);
-    setMainPreview(index);
-  });
 
-  new Sortable(thumbnailPreview, {
+    setMainPreview(index);
+});
+
+new Sortable(thumbnailPreview, {
     animation: 150,
     ghostClass: "opacity-50",
     draggable: ".carousel-thumb",
-    onEnd: function () {
-      updateCarouselOrder();
-      updateThumbnailNumbers();
-      setMainPreview(0);
+
+    onEnd: function() {
+        updateCarouselOrder();
+        updateThumbnailNumbers();
+        setMainPreview(0);
     }
-  });
+});
 
-  prevPreview.addEventListener("click", function () {
+prevPreview.addEventListener("click", function() {
     setMainPreview(currentPreviewIndex - 1);
-  });
+});
 
-  nextPreview.addEventListener("click", function () {
+nextPreview.addEventListener("click", function() {
     setMainPreview(currentPreviewIndex + 1);
-  });
+});
 
-  function initCarouselEditor() {
+function initCarouselEditor() {
     updateCarouselOrder();
     updateThumbnailNumbers();
 
-    const existingCover = thumbnailPreview.querySelector(".cover-btn.btn-warning");
     const firstThumb = getThumbs()[0];
 
-    if (existingCover) {
-      const coverThumb = existingCover.closest(".carousel-thumb");
-      coverPostIdInput.value = coverThumb.dataset.postId;
-    } else if (firstThumb) {
-      coverPostIdInput.value = firstThumb.dataset.postId;
-      updateCoverButtons(Number(firstThumb.dataset.postId));
+    if (firstThumb) {
+        coverPostIdInput.value =
+            firstThumb.dataset.postId;
     }
 
     setMainPreview(0);
-  }
+}
 
-  initCarouselEditor();
+initCarouselEditor();
 </script>
 
 {% endblock %}
