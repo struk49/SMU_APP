@@ -1,0 +1,399 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 fw-bold mb-1">Create Post</h1>
+    <p class="text-muted mb-0">Upload media, generate AI images, create carousels, and schedule posts.</p>
+  </div>
+
+  <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+    Back to Dashboard
+  </a>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+  <div class="card-body p-4">
+
+    <form method="POST" enctype="multipart/form-data">
+
+      <input type="hidden" name="carousel_order" id="carouselOrder">
+      <input type="hidden" name="cover_index" id="coverIndex" value="0">
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Upload Image(s) or Video</label>
+        <input
+          type="file"
+          name="media"
+          id="mediaInput"
+          class="form-control"
+          multiple
+          accept="image/*,video/*"
+        >
+        <div class="form-text">
+          Select multiple images, tick carousel, then reorder and choose your cover image.
+        </div>
+      </div>
+
+      <div id="previewSection" class="mb-4 d-none">
+        <label class="form-label fw-semibold">Carousel Preview</label>
+
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+          <div class="position-relative bg-light d-flex align-items-center justify-content-center" style="height: 280px;">
+
+            <button
+              type="button"
+              id="prevPreview"
+              class="btn btn-dark btn-sm position-absolute start-0 ms-2"
+              style="z-index: 2;"
+            >
+              ‹
+            </button>
+
+            <img
+              id="mainPreview"
+              src=""
+              class="img-fluid"
+              style="max-height: 260px; max-width: 100%; object-fit: contain;"
+              alt="Preview"
+            >
+
+            <button
+              type="button"
+              id="nextPreview"
+              class="btn btn-dark btn-sm position-absolute end-0 me-2"
+              style="z-index: 2;"
+            >
+              ›
+            </button>
+          </div>
+
+          <div class="p-3 bg-white border-top">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div id="previewCounter" class="small text-muted">
+                Image 1 of 1
+              </div>
+
+              <div class="small text-muted">
+                Drag thumbnails to reorder
+              </div>
+            </div>
+
+            <div id="thumbnailPreview" class="d-flex gap-2 overflow-auto pb-2"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">AI Image Prompt</label>
+        <textarea
+          name="prompt"
+          class="form-control"
+          rows="4"
+          placeholder="Example: luxury modern estate agent advert, cinematic lighting, clean professional design"
+        ></textarea>
+        <div class="form-text">
+          Leave blank if uploading your own media.
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Caption</label>
+        <textarea
+          name="caption"
+          class="form-control"
+          rows="4"
+          placeholder="Write your social media caption here..."
+        ></textarea>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold d-block">Platforms</label>
+
+        <div class="form-check form-check-inline">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            name="platforms"
+            value="instagram"
+            id="platformInstagram"
+            checked
+          >
+          <label class="form-check-label" for="platformInstagram">Instagram</label>
+        </div>
+
+        <div class="form-check form-check-inline">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            name="platforms"
+            value="facebook"
+            id="platformFacebook"
+            checked
+          >
+          <label class="form-check-label" for="platformFacebook">Facebook</label>
+        </div>
+
+        <div class="form-check form-check-inline">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            name="platforms"
+            value="linkedin"
+            id="platformLinkedin"
+          >
+          <label class="form-check-label" for="platformLinkedin">LinkedIn</label>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <div class="form-check">
+          <input
+            class="form-check-input"
+            type="checkbox"
+            name="make_carousel"
+            id="makeCarousel"
+          >
+          <label class="form-check-label fw-semibold" for="makeCarousel">
+            Create carousel post
+          </label>
+        </div>
+        <div class="form-text">
+          Upload 2–10 images and enable this to create an Instagram-style carousel.
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <label class="form-label fw-semibold">Schedule Post</label>
+        <input
+          type="datetime-local"
+          name="scheduled_time"
+          class="form-control"
+        >
+        <div class="form-text">
+          Optional. Leave blank to save as draft.
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-lg w-100">
+        Create Post
+      </button>
+
+    </form>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+
+<script>
+  const mediaInput = document.getElementById("mediaInput");
+  const previewSection = document.getElementById("previewSection");
+  const mainPreview = document.getElementById("mainPreview");
+  const thumbnailPreview = document.getElementById("thumbnailPreview");
+  const previewCounter = document.getElementById("previewCounter");
+  const prevPreview = document.getElementById("prevPreview");
+  const nextPreview = document.getElementById("nextPreview");
+  const carouselOrderInput = document.getElementById("carouselOrder");
+  const coverIndexInput = document.getElementById("coverIndex");
+
+  let previewFiles = [];
+  let previewUrls = [];
+  let currentPreviewIndex = 0;
+  let coverRealIndex = 0;
+
+  mediaInput.addEventListener("change", function () {
+    previewFiles = Array.from(this.files).filter(file =>
+      file.type.startsWith("image/")
+    );
+
+    previewUrls = previewFiles.map(file => URL.createObjectURL(file));
+    currentPreviewIndex = 0;
+    coverRealIndex = 0;
+
+    carouselOrderInput.value = "";
+    coverIndexInput.value = "0";
+    thumbnailPreview.innerHTML = "";
+
+    if (previewFiles.length === 0) {
+      previewSection.classList.add("d-none");
+      return;
+    }
+
+    previewSection.classList.remove("d-none");
+
+    previewUrls.forEach((imageUrl, index) => {
+      const thumbWrap = document.createElement("div");
+      thumbWrap.className = "position-relative";
+      thumbWrap.dataset.index = index;
+      thumbWrap.style.width = "76px";
+      thumbWrap.style.height = "76px";
+      thumbWrap.style.flex = "0 0 auto";
+
+      const thumb = document.createElement("img");
+      thumb.src = imageUrl;
+      thumb.style.width = "76px";
+      thumb.style.height = "76px";
+      thumb.style.objectFit = "cover";
+      thumb.style.borderRadius = "12px";
+      thumb.style.cursor = "grab";
+      thumb.style.border = "2px solid transparent";
+
+      thumb.addEventListener("click", function () {
+        const currentOrder = getCurrentOrder();
+        const realIndex = Number(thumbWrap.dataset.index);
+        const displayIndex = currentOrder.indexOf(realIndex);
+
+        if (displayIndex !== -1) {
+          setMainPreview(displayIndex);
+        }
+      });
+
+      const numberBadge = document.createElement("span");
+      numberBadge.className = "position-absolute top-0 start-0 badge bg-dark";
+      numberBadge.style.fontSize = "10px";
+      numberBadge.style.borderRadius = "10px 0 10px 0";
+      numberBadge.textContent = index + 1;
+
+      const coverBtn = document.createElement("button");
+      coverBtn.type = "button";
+      coverBtn.className = index === 0
+        ? "btn btn-warning btn-sm position-absolute bottom-0 start-0 end-0"
+        : "btn btn-light btn-sm position-absolute bottom-0 start-0 end-0";
+      coverBtn.style.fontSize = "10px";
+      coverBtn.style.padding = "2px";
+      coverBtn.style.borderRadius = "0 0 12px 12px";
+      coverBtn.textContent = index === 0 ? "★ Cover" : "Set Cover";
+
+      coverBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+
+        coverRealIndex = Number(thumbWrap.dataset.index);
+        coverIndexInput.value = String(coverRealIndex);
+
+        updateCoverButtons();
+      });
+
+      thumbWrap.appendChild(thumb);
+      thumbWrap.appendChild(numberBadge);
+      thumbWrap.appendChild(coverBtn);
+      thumbnailPreview.appendChild(thumbWrap);
+    });
+
+    updateCarouselOrder();
+    updateThumbnailNumbers();
+    updateCoverButtons();
+    setMainPreview(0);
+  });
+
+  new Sortable(thumbnailPreview, {
+    animation: 150,
+    ghostClass: "opacity-50",
+    onEnd: function () {
+      updateCarouselOrder();
+      updateThumbnailNumbers();
+      updateCoverButtons();
+      setMainPreview(0);
+    }
+  });
+
+  function getCurrentOrder() {
+    return Array.from(thumbnailPreview.children).map(item =>
+      Number(item.dataset.index)
+    );
+  }
+
+  function updateCarouselOrder() {
+    const order = getCurrentOrder();
+    carouselOrderInput.value = JSON.stringify(order);
+    coverIndexInput.value = String(coverRealIndex);
+
+    console.log("Carousel order:", carouselOrderInput.value);
+    console.log("Cover index:", coverIndexInput.value);
+  }
+
+  function updateThumbnailNumbers() {
+    Array.from(thumbnailPreview.children).forEach((item, index) => {
+      const badge = item.querySelector("span");
+
+      if (badge) {
+        badge.textContent = index + 1;
+      }
+    });
+  }
+
+  function updateCoverButtons() {
+    Array.from(thumbnailPreview.children).forEach((item) => {
+      const btn = item.querySelector("button");
+      const realIndex = Number(item.dataset.index);
+
+      if (!btn) return;
+
+      if (realIndex === coverRealIndex) {
+        btn.textContent = "★ Cover";
+        btn.className = "btn btn-warning btn-sm position-absolute bottom-0 start-0 end-0";
+      } else {
+        btn.textContent = "Set Cover";
+        btn.className = "btn btn-light btn-sm position-absolute bottom-0 start-0 end-0";
+      }
+
+      btn.style.fontSize = "10px";
+      btn.style.padding = "2px";
+      btn.style.borderRadius = "0 0 12px 12px";
+    });
+
+    coverIndexInput.value = String(coverRealIndex);
+  }
+
+  function setMainPreview(displayIndex) {
+    const order = getCurrentOrder();
+
+    if (!order.length) return;
+
+    currentPreviewIndex = displayIndex;
+
+    const realIndex = order[displayIndex];
+
+    mainPreview.src = previewUrls[realIndex];
+    previewCounter.textContent = `Image ${displayIndex + 1} of ${order.length}`;
+
+    Array.from(thumbnailPreview.children).forEach((item, index) => {
+      const img = item.querySelector("img");
+
+      if (!img) return;
+
+      img.style.border = index === displayIndex
+        ? "3px solid #0d6efd"
+        : "2px solid transparent";
+    });
+  }
+
+  prevPreview.addEventListener("click", function () {
+    const order = getCurrentOrder();
+
+    if (!order.length) return;
+
+    const newIndex =
+      currentPreviewIndex === 0
+        ? order.length - 1
+        : currentPreviewIndex - 1;
+
+    setMainPreview(newIndex);
+  });
+
+  nextPreview.addEventListener("click", function () {
+    const order = getCurrentOrder();
+
+    if (!order.length) return;
+
+    const newIndex =
+      currentPreviewIndex === order.length - 1
+        ? 0
+        : currentPreviewIndex + 1;
+
+    setMainPreview(newIndex);
+  });
+</script>
+
+{% endblock %}

@@ -1,0 +1,44 @@
+body {
+    background: linear-gradient(
+        180deg,
+        #f5f7fb 0%,
+        #eef2ff 100%
+    );
+    min-height: 100vh;
+}
+
+.hero-card {
+    background: linear-gradient(
+        135deg,
+        #0d6efd 0%,
+        #6f42c1 100%
+    );
+
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+}
+
+.preview-thumb {
+    height: 260px;
+    object-fit: cover;
+    background: #111;
+}
+
+.caption-box {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 16px;
+    padding: 16px;
+    min-height: 120px;
+    white-space: pre-wrap;
+    font-size: 0.95rem;
+}
+
+.card {
+    transition:
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+}
