@@ -1502,6 +1502,7 @@ def create_content_pack_carousel():
             return redirect(url_for("content_pack"))
 
         group_id = str(uuid.uuid4())
+        placeholder_url = get_placeholder_image_url()
      
 
         for index, slide_text in enumerate(slides):
