@@ -1489,7 +1489,7 @@ def create_content_pack_carousel():
                 if line.strip()
             ]
 
-                slides = slides[:3]
+            slides = slides[:3]
 
         if len(slides) < 2:
             flash("Carousel needs at least 2 slides.", "danger")
