@@ -1,0 +1,212 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">TikTok Repurpose</h1>
+        <p class="text-muted mb-0">
+            Turn a TikTok video into Instagram/Facebook content, carousel ideas, hashtags, and image prompts.
+        </p>
+    </div>
+
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+        Back to Dashboard
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+
+        <form method="POST" action="{{ url_for('tiktok_repurpose') }}">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">TikTok URL</label>
+
+                <input
+                    type="url"
+                    name="tiktok_url"
+                    class="form-control"
+                    placeholder="Paste TikTok URL here..."
+                    value="{{ tiktok_url }}"
+                    required
+                >
+            </div>
+            <div class="mb-4">
+    <label class="form-label fw-semibold">Image Style</label>
+
+    <select name="image_style" class="form-select imageStyleSelect">
+        <option value="">Default</option>
+        <option value="realistic">Realistic</option>
+        <option value="viral_carousel">Viral Carousel</option>
+        <option value="luxury">Luxury Brand</option>
+        <option value="minimal">Minimalist</option>
+        <option value="corporate">Corporate</option>
+        <option value="pixar">3D Animated</option>
+    </select>
+
+    <div class="form-text">
+        Choose a style for the image or carousel generated from this TikTok content.
+    </div>
+</div>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">
+                Generate Repurposed Content
+            </button>
+        </form>
+
+    </div>
+</div>
+
+{% if transcript %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Transcript / Source Text</h2>
+
+        <div class="caption-box">
+            {{ transcript }}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if generated_content %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+
+        <h2 class="h5 fw-bold mb-3">Generated Content</h2>
+
+        <textarea
+            id="generatedContent"
+            class="form-control mb-3"
+            rows="18"
+        >{{ generated_content }}</textarea>
+
+        <div class="alert alert-info">
+            Review the generated content below. When you're happy, click
+            <strong>Generate Image + Save Draft</strong>.
+        </div>
+
+       <div class="d-grid gap-2">
+
+    <form method="POST" action="{{ url_for('create_tiktok_draft') }}">
+        <input type="hidden" name="generated_content" class="generatedContentHidden">
+        <input type="hidden" name="caption" class="captionHidden">
+        <input type="hidden" name="image_prompt" class="imagePromptHidden">
+        <input type="hidden" name="image_style" class="imageStyleHidden">
+        <button type="submit" class="btn btn-success btn-lg w-100">
+            Generate Image + Save Draft
+        </button>
+    </form>
+
+    <form method="POST" action="{{ url_for('create_tiktok_carousel_draft') }}">
+        <input type="hidden" name="generated_content" class="generatedContentHidden">
+        <input type="hidden" name="caption" class="captionHidden">
+        <input type="hidden" name="image_prompt" class="imagePromptHidden">
+        <input type="hidden" name="carousel_idea" class="carouselIdeaHidden">
+
+        <button type="submit" class="btn btn-dark btn-lg w-100">
+            Generate Carousel Draft
+        </button>
+    </form>
+
+</div>
+{% endif %}
+
+<script>
+function extractSection(text, sectionName) {
+    const sections = [
+        "INSTAGRAM_CAPTION:",
+        "FACEBOOK_CAPTION:",
+        "CAROUSEL_IDEA:",
+        "IMAGE_PROMPT:",
+        "HASHTAGS:"
+    ];
+
+    const startLabel = sectionName + ":";
+    const startIndex = text.indexOf(startLabel);
+
+    if (startIndex === -1) {
+        return "";
+    }
+
+    const contentStart = startIndex + startLabel.length;
+    let contentEnd = text.length;
+
+    sections.forEach(function(label) {
+        const index = text.indexOf(label, contentStart);
+
+        if (index !== -1 && index < contentEnd) {
+            contentEnd = index;
+        }
+    });
+
+    return text.substring(contentStart, contentEnd).trim();
+}
+
+function prepareDraftFields() {
+    const generatedContentEl = document.getElementById("generatedContent");
+    const imageStyleSelect = document.querySelector(".imageStyleSelect");
+    const selectedStyle = imageStyleSelect ? imageStyleSelect.value : "";
+    if (!generatedContentEl) {
+        return;
+    }
+
+    const fullText = generatedContentEl.value;
+
+    const instagramCaption = extractSection(fullText, "INSTAGRAM_CAPTION");
+    const hashtags = extractSection(fullText, "HASHTAGS");
+    const imagePrompt = extractSection(fullText, "IMAGE_PROMPT");
+    const carouselIdea = extractSection(fullText, "CAROUSEL_IDEA");
+
+    let finalCaption = instagramCaption;
+
+    if (hashtags) {
+        finalCaption += "\n\n" + hashtags;
+    }
+
+    document.querySelectorAll(".generatedContentHidden").forEach(function(input) {
+        input.value = fullText;
+    });
+
+    document.querySelectorAll(".captionHidden").forEach(function(input) {
+        input.value = finalCaption;
+    });
+
+    document.querySelectorAll(".imagePromptHidden").forEach(function(input) {
+        input.value = imagePrompt;
+    });
+
+    document.querySelectorAll(".carouselIdeaHidden").forEach(function(input) {
+        input.value = carouselIdea;
+    });
+    document.querySelectorAll(".imageStyleHidden").forEach(function(input) {
+    input.value = selectedStyle;
+});
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    prepareDraftFields();
+
+    const generatedContentEl = document.getElementById("generatedContent");
+
+    if (generatedContentEl) {
+        generatedContentEl.addEventListener("input", function() {
+            prepareDraftFields();
+        });
+    }
+
+    document.querySelectorAll("form").forEach(function(form) {
+        form.addEventListener("submit", function() {
+            prepareDraftFields();
+        });
+    });
+    const imageStyleSelect = document.querySelector(".imageStyleSelect");
+
+if (imageStyleSelect) {
+    imageStyleSelect.addEventListener("change", function() {
+        prepareDraftFields();
+    });
+}
+});
+</script>
+{% endblock %}

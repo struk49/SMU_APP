@@ -147,6 +147,20 @@
                                 🚀 Send Carousel to Make.com
                             </button>
                         </form>
+                        {% if post.post_type == 'carousel' %}
+
+<form method="POST"
+      action="{{ url_for('duplicate_carousel', group_id=post.group_id) }}"
+      class="d-inline">
+
+    <button type="submit"
+            class="btn btn-info">
+        Duplicate Carousel
+    </button>
+
+</form>
+
+{% endif %}
 
                     {% else %}
 
@@ -215,6 +229,22 @@
                     >
                         Delete Post
                     </button>
+                    {% if post.post_type != 'carousel' %}
+                    </form>
+<a
+    href="{{ url_for('edit_post', post_id=post.id) }}"
+    class="btn btn-warning"
+>
+    Edit Post
+</a>
+<form method="POST"
+      action="{{ url_for('duplicate_post', post_id=post.id) }}"
+      class="d-inline">
+    <button type="submit" class="btn btn-info">
+        Duplicate Post
+    </button>
+</form>
+{% endif %}
                 </form>
 
             </div>

@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Content Pack Generator</h1>
+        <p class="text-muted mb-0">
+            Turn one TikTok URL, topic, or idea into a full content pack.
+        </p>
+    </div>
+
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+        Back to Dashboard
+    </a>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+
+        <form method="POST" action="{{ url_for('content_pack') }}">
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Source Type</label>
+
+                <select name="source_type" class="form-select">
+                    <option value="text">Topic / Text</option>
+                    <option value="tiktok">TikTok URL</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">
+                    TikTok URL, Topic, or Text
+                </label>
+
+                <textarea
+                    name="source_input"
+                    class="form-control"
+                    rows="5"
+                    placeholder="Paste a TikTok URL, transcript, or content idea..."
+                    required
+                ></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">
+                Generate Content Pack
+            </button>
+
+        </form>
+
+    </div>
+</div>
+
+{% if source_text %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Source Text</h2>
+
+        <div class="caption-box">
+            {{ source_text }}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if content_pack_result %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Generated Content Pack</h2>
+
+        <textarea
+            id="contentPackTextarea"
+            class="form-control"
+            rows="24"
+        >{{ content_pack_result }}</textarea>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-4">
+
+        <form method="POST" action="{{ url_for('create_content_pack_carousel') }}">
+
+            <input
+                type="hidden"
+                name="content_pack_result"
+                id="contentPackResultHidden"
+                value=""
+            >
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Image Style</label>
+
+                <select name="image_style" class="form-select">
+                    <option value="">Default</option>
+                    <option value="realistic">Realistic</option>
+                    <option value="viral_carousel">Viral Carousel</option>
+                    <option value="luxury">Luxury Brand</option>
+                    <option value="minimal">Minimalist</option>
+                    <option value="corporate">Corporate</option>
+                    <option value="pixar">3D Animated</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-dark btn-lg w-100">
+                Create Carousel Draft
+            </button>
+
+        </form>
+
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const textarea = document.getElementById("contentPackTextarea");
+    const hiddenInput = document.getElementById("contentPackResultHidden");
+
+    function syncContentPack() {
+        if (textarea && hiddenInput) {
+            hiddenInput.value = textarea.value;
+        }
+    }
+
+    syncContentPack();
+
+    if (textarea) {
+        textarea.addEventListener("input", syncContentPack);
+    }
+
+    const form = document.querySelector("form[action='{{ url_for('create_content_pack_carousel') }}']");
+
+    if (form) {
+        form.addEventListener("submit", function () {
+            syncContentPack();
+        });
+    }
+});
+</script>
+{% endif %}
+
+{% endblock %}

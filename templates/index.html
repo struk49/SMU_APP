@@ -11,7 +11,153 @@
         + Create Post
     </a>
 </div>
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('index') }}">
+            <input type="hidden" name="status" value="{{ status_filter }}">
+            <input type="hidden" name="type" value="{{ type_filter }}">
 
+            <div class="row g-2">
+                <div class="col-md-9">
+                    <input
+                        type="text"
+                        name="q"
+                        class="form-control form-control-lg"
+                        placeholder="Search captions, prompts, status, platforms..."
+                        value="{{ search_query }}"
+                    >
+                </div>
+
+                <div class="col-md-3 d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        Search
+                    </button>
+                </div>
+            </div>
+
+            {% if search_query %}
+                <div class="mt-3">
+                   url_for('index', status='draft', type=type_filter, q=search_query)
+                       class="btn btn-sm btn-outline-secondary">
+                        Clear Search
+                    </a>
+                </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body">
+
+        <div class="row g-3">
+            <div class="row g-3 mb-4">
+
+    <div class="col-6 col-md-2">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body text-center">
+                <div class="text-muted small">Total</div>
+                <div class="h3 fw-bold mb-0">{{ stats.total }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-2">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body text-center">
+                <div class="text-muted small">Drafts</div>
+                <div class="h3 fw-bold mb-0">{{ stats.drafts }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-2">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body text-center">
+                <div class="text-muted small">Scheduled</div>
+                <div class="h3 fw-bold mb-0">{{ stats.scheduled }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-2">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body text-center">
+                <div class="text-muted small">Sent</div>
+                <div class="h3 fw-bold mb-0">{{ stats.sent }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body text-center">
+                <div class="text-muted small">Carousel Items</div>
+                <div class="h3 fw-bold mb-0">{{ stats.carousels }}</div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">
+                    Filter by Status
+                </label>
+
+                <div class="d-flex flex-wrap gap-2">
+
+                    <a href="{{ url_for('index') }}"
+                       class="btn {% if status_filter == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        All
+                    </a>
+
+                    <a href="{{ url_for('index', status='draft', type=type_filter) }}"
+                       class="btn {% if status_filter == 'draft' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        Drafts
+                    </a>
+
+                    <a href="{{ url_for('index', status='scheduled', type=type_filter) }}"
+                       class="btn {% if status_filter == 'scheduled' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        Scheduled
+                    </a>
+
+                    <a href="{{ url_for('index', status='sent_to_make', type=type_filter) }}"
+                       class="btn {% if status_filter == 'sent_to_make' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                        Sent
+                    </a>
+
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">
+                    Filter by Type
+                </label>
+
+                <div class="d-flex flex-wrap gap-2">
+
+                    <a href="{{ url_for('index', status=status_filter) }}"
+                       class="btn {% if type_filter == 'all' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                        All
+                    </a>
+
+                    <a href="{{ url_for('index', status=status_filter, type='single') }}"
+                       class="btn {% if type_filter == 'single' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                        Single Posts
+                    </a>
+
+                    <a href="{{ url_for('index', status=status_filter, type='carousel') }}"
+                       class="btn {% if type_filter == 'carousel' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                        Carousels
+                    </a>
+
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
 {% if posts %}
 
 {% set shown_groups = [] %}

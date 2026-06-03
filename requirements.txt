@@ -38,3 +38,4 @@ tzdata==2025.3
 tzlocal==5.3.1
 urllib3==2.6.3
 Werkzeug==3.1.7
+yt-dlp==2026.3.17

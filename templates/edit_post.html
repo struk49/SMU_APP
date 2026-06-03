@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Edit Post</h1>
+        <p class="text-muted mb-0">
+            Update the caption, prompt, platforms, or regenerate the image.
+        </p>
+    </div>
+
+    <a href="{{ url_for('view_post', post_id=post.id) }}" class="btn btn-outline-secondary">
+        Back to Post
+    </a>
+</div>
+
+<div class="row g-4">
+
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
+            {% if post.file_type == 'image' %}
+                <img
+                    src="{{ post.file_url }}"
+                    class="img-fluid"
+                    alt="Post image"
+                >
+            {% elif post.file_type == 'video' %}
+                <video class="w-100" controls style="background:#000;">
+                    <source src="{{ post.file_url }}" type="video/mp4">
+                </video>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4">
+
+                <form method="POST">
+
+                    <div class="mb-4">
+    <label class="form-label fw-semibold">Caption</label>
+
+    <textarea
+        name="caption"
+        id="captionTextarea"
+        class="form-control"
+        rows="6"
+    >{% if post.caption %}{{ post.caption }}{% endif %}</textarea>
+</div>
+
+<div class="card border-0 bg-light rounded-4 mb-4">
+    <div class="card-body">
+        <h2 class="h6 fw-bold mb-3">AI Caption Tools</h2>
+
+        <div class="d-flex flex-wrap gap-2">
+
+            <button
+                type="submit"
+                formaction="{{ url_for('rewrite_caption', post_id=post.id) }}"
+                formmethod="POST"
+                name="rewrite_type"
+                value="viral"
+                class="btn btn-outline-primary btn-sm"
+            >
+                Make More Viral
+            </button>
+
+            <button
+                type="submit"
+                formaction="{{ url_for('rewrite_caption', post_id=post.id) }}"
+                formmethod="POST"
+                name="rewrite_type"
+                value="shorten"
+                class="btn btn-outline-primary btn-sm"
+            >
+                Shorten
+            </button>
+
+            <button
+                type="submit"
+                formaction="{{ url_for('rewrite_caption', post_id=post.id) }}"
+                formmethod="POST"
+                name="rewrite_type"
+                value="expand"
+                class="btn btn-outline-primary btn-sm"
+            >
+                Expand
+            </button>
+
+            <button
+                type="submit"
+                formaction="{{ url_for('rewrite_caption', post_id=post.id) }}"
+                formmethod="POST"
+                name="rewrite_type"
+                value="cta"
+                class="btn btn-outline-primary btn-sm"
+            >
+                Add CTA
+            </button>
+
+            <button
+                type="submit"
+                formaction="{{ url_for('rewrite_caption', post_id=post.id) }}"
+                formmethod="POST"
+                name="rewrite_type"
+                value="hashtags"
+                class="btn btn-outline-primary btn-sm"
+            >
+                Add Hashtags
+            </button>
+
+            <button
+                type="submit"
+                formaction="{{ url_for('rewrite_caption', post_id=post.id) }}"
+                formmethod="POST"
+                name="rewrite_type"
+                value="professional"
+                class="btn btn-outline-primary btn-sm"
+            >
+                Professional
+            </button>
+
+        </div>
+
+        <div class="form-text mt-2">
+            These buttons rewrite the caption and save it to this post.
+        </div>
+    </div>
+</div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Image Prompt</label>
+                        <textarea
+                            name="prompt"
+                            class="form-control"
+                            rows="5"
+                        >{% if post.prompt %}{{ post.prompt }}{% endif %}</textarea>
+
+                        <div class="form-text">
+                            Used if you choose to regenerate the image.
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold d-block">Platforms</label>
+
+                        <div class="form-check form-check-inline">
+                            <input
+                                class="form-check-input"
+                                type="checkbox"
+                                name="platforms"
+                                value="instagram"
+                                id="platformInstagram"
+                                {% if post.platforms and 'instagram' in post.platforms %}checked{% endif %}
+                            >
+                            <label class="form-check-label" for="platformInstagram">
+                                Instagram
+                            </label>
+                        </div>
+
+                        <div class="form-check form-check-inline">
+                            <input
+                                class="form-check-input"
+                                type="checkbox"
+                                name="platforms"
+                                value="facebook"
+                                id="platformFacebook"
+                                {% if post.platforms and 'facebook' in post.platforms %}checked{% endif %}
+                            >
+                            <label class="form-check-label" for="platformFacebook">
+                                Facebook
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input
+                                class="form-check-input"
+                                type="checkbox"
+                                name="regenerate_image"
+                                id="regenerateImage"
+                            >
+                            <label class="form-check-label fw-semibold" for="regenerateImage">
+                                Regenerate image from prompt
+                            </label>
+                        </div>
+
+                        <div class="form-text text-warning">
+                            This will replace the current image.
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        Save Changes
+                    </button>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
