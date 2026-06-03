@@ -468,6 +468,37 @@ def check_scheduled_posts():
                 print("Scheduler error:", e)
 
 
+def generate_pending_carousel_images():
+    with app.app_context():
+        pending_post = Post.query.filter_by(
+            status="generating",
+            file_type="image"
+        ).order_by(
+            Post.created_at.asc(),
+            Post.sort_order.asc()
+        ).first()
+
+        if not pending_post:
+            return
+
+        try:
+            print(f"Generating image for post {pending_post.id}")
+
+            image_url = generate_openai_image(pending_post.prompt)
+
+            pending_post.file_url = image_url
+            pending_post.status = "draft"
+
+            db.session.commit()
+
+            print(f"✅ Generated image for post {pending_post.id}")
+
+        except Exception as e:
+            print("Background image generation error:", e)
+            pending_post.status = "generation_failed"
+            db.session.commit()
+
+
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=check_scheduled_posts, trigger="interval", seconds=30)
 scheduler.add_job(func=generate_pending_carousel_images, trigger="interval", seconds=20)
@@ -1605,35 +1636,7 @@ Avoid:
         return redirect(url_for("content_pack"))
 
 
-def generate_pending_carousel_images():
-    with app.app_context():
-        pending_post = Post.query.filter_by(
-            status="generating",
-            file_type="image"
-        ).order_by(
-            Post.created_at.asc(),
-            Post.sort_order.asc()
-        ).first()
 
-        if not pending_post:
-            return
-
-        try:
-            print(f"Generating image for post {pending_post.id}")
-
-            image_url = generate_openai_image(pending_post.prompt)
-
-            pending_post.file_url = image_url
-            pending_post.status = "draft"
-
-            db.session.commit()
-
-            print(f"✅ Generated image for post {pending_post.id}")
-
-        except Exception as e:
-            print("Background image generation error:", e)
-            pending_post.status = "generation_failed"
-            db.session.commit()
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
