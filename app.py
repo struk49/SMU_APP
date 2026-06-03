@@ -1496,6 +1496,7 @@ def create_content_pack_carousel():
             return redirect(url_for("content_pack"))
 
         group_id = str(uuid.uuid4())
+        placeholder_url = get_placeholder_image_url()
 
         for index, slide_text in enumerate(slides):
             if index == 0:
@@ -1569,19 +1570,21 @@ Avoid:
             image_url = generate_openai_image(full_prompt)
 
             post = Post(
-                file_url=image_url,
-                file_type="image",
-                prompt=full_prompt,
-                caption=caption,
-                platforms="instagram,facebook",
-                post_type="carousel",
-                status="draft",
-                group_id=group_id,
-                sort_order=index,
-                is_cover=(index == 0)
-            )
+            file_url=placeholder_url,
+            file_type="image",
+            prompt=full_prompt,
+            caption=caption,
+            platforms="instagram,facebook",
+            post_type="carousel",
+            status="generating",
+            group_id=group_id,
+            sort_order=index,
+            is_cover=(index == 0)
+)
 
-            db.session.add(post)
+        db.session.add(requests.post)
+
+        db.session.add(post)
 
         db.session.commit()
 
