@@ -43,6 +43,7 @@ cloudinary.config(
 )
 
 
+
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     file_url = db.Column(db.String(500), nullable=False)
@@ -125,6 +126,10 @@ def upload_to_cloudinary(file_or_url):
         folder="social_posts",
         resource_type="auto"
     )
+
+
+def get_placeholder_image_url():
+    return "https://res.cloudinary.com/demo/image/upload/w_1080,h_1080,c_fill,b_rgb:111111/l_text:Arial_60_bold:Generating%20Image,co_rgb:ffffff/sample.jpg"
 
 
 def make_instagram_safe_url(url):
@@ -1497,7 +1502,7 @@ def create_content_pack_carousel():
             return redirect(url_for("content_pack"))
 
         group_id = str(uuid.uuid4())
-        placeholder_url = get_placeholder_image_url()
+     
 
         for index, slide_text in enumerate(slides):
 
