@@ -465,6 +465,7 @@ def check_scheduled_posts():
 
 scheduler = BackgroundScheduler()
 scheduler.add_job(func=check_scheduled_posts, trigger="interval", seconds=30)
+scheduler.add_job(func=generate_pending_carousel_images, trigger="interval", seconds=20)
 scheduler.start()
 
 
@@ -1489,7 +1490,7 @@ def create_content_pack_carousel():
                 if line.strip()
             ]
 
-            slides = slides[:3]
+        slides = slides[:6]
 
         if len(slides) < 2:
             flash("Carousel needs at least 2 slides.", "danger")
@@ -1497,9 +1498,9 @@ def create_content_pack_carousel():
 
         group_id = str(uuid.uuid4())
         placeholder_url = get_placeholder_image_url()
-       
 
         for index, slide_text in enumerate(slides):
+
             if index == 0:
                 full_prompt = f"""
 Create a HIGH-CONVERTING viral Instagram carousel COVER slide.
@@ -1568,24 +1569,20 @@ Avoid:
 - generic image style
 """
 
-            image_url = generate_openai_image(full_prompt)
-
             post = Post(
-            file_url=placeholder_url,
-            file_type="image",
-            prompt=full_prompt,
-            caption=caption,
-            platforms="instagram,facebook",
-            post_type="carousel",
-            status="generating",
-            group_id=group_id,
-            sort_order=index,
-            is_cover=(index == 0)
-)
+                file_url=placeholder_url,
+                file_type="image",
+                prompt=full_prompt,
+                caption=caption,
+                platforms="instagram,facebook",
+                post_type="carousel",
+                status="generating",
+                group_id=group_id,
+                sort_order=index,
+                is_cover=(index == 0)
+            )
 
-        db.session.add(requests.post)
-
-        db.session.add(post)
+            db.session.add(post)
 
         db.session.commit()
 
@@ -1593,7 +1590,7 @@ Avoid:
             Post.sort_order.asc()
         ).first()
 
-        flash("Content pack carousel draft created successfully.", "success")
+        flash("Carousel draft created. Images are generating in the background.", "success")
         return redirect(url_for("view_post", post_id=first_post.id))
 
     except Exception as e:
@@ -1601,6 +1598,36 @@ Avoid:
         flash(f"Failed to create content pack carousel: {e}", "danger")
         return redirect(url_for("content_pack"))
 
+
+def generate_pending_carousel_images():
+    with app.app_context():
+        pending_post = Post.query.filter_by(
+            status="generating",
+            file_type="image"
+        ).order_by(
+            Post.created_at.asc(),
+            Post.sort_order.asc()
+        ).first()
+
+        if not pending_post:
+            return
+
+        try:
+            print(f"Generating image for post {pending_post.id}")
+
+            image_url = generate_openai_image(pending_post.prompt)
+
+            pending_post.file_url = image_url
+            pending_post.status = "draft"
+
+            db.session.commit()
+
+            print(f"✅ Generated image for post {pending_post.id}")
+
+        except Exception as e:
+            print("Background image generation error:", e)
+            pending_post.status = "generation_failed"
+            db.session.commit()
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
