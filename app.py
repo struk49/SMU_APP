@@ -25,7 +25,13 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
-app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(BASE_DIR, 'posts.db')}"
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL or f"sqlite:///{os.path.join(BASE_DIR, 'posts.db')}"
+print("DATABASE:", app.config["SQLALCHEMY_DATABASE_URI"][:50])
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
