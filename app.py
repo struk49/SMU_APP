@@ -542,6 +542,9 @@ PINTEREST_PIN_TITLE:
 PINTEREST_PIN_DESCRIPTION:
 ...
 
+REDDIT_POST:
+...
+
 X_POST:
 ...
 
@@ -601,6 +604,7 @@ def extract_content_pack_section(text, section_name):
 def index():
     status_filter = request.args.get("status", "all")
     type_filter = request.args.get("type", "all")
+    platform_filter = request.args.get("platform", "all")
     search_query = request.args.get("q", "").strip()
 
     query = Post.query
@@ -610,6 +614,9 @@ def index():
 
     if type_filter != "all":
         query = query.filter(Post.post_type == type_filter)
+
+    if platform_filter != "all":
+        query = query.filter(Post.platforms.ilike(f"%{platform_filter}%"))
 
     if search_query:
         search_term = f"%{search_query}%"
@@ -643,6 +650,7 @@ def index():
         posts=posts,
         status_filter=status_filter,
         type_filter=type_filter,
+        platform_filter=platform_filter,
         search_query=search_query,
         stats=stats
     )
@@ -1617,7 +1625,7 @@ Avoid:
                 file_type="image",
                 prompt=full_prompt,
                 caption=caption,
-                platforms="instagram,facebook",
+                platforms="instagram",
                 post_type="carousel",
                 status="generating",
                 group_id=group_id,
@@ -1642,7 +1650,112 @@ Avoid:
         return redirect(url_for("content_pack"))
 
 
+@app.route("/content-pack/create-platform-draft", methods=["POST"])
+def create_content_pack_platform_draft():
+    content_pack_result = request.form.get("content_pack_result", "").strip()
+    platform = request.form.get("platform", "").strip()
+    image_style = request.form.get("image_style", "").strip()
 
+    allowed_platforms = [
+        "instagram",
+        "facebook",
+        "linkedin",
+        "pinterest",
+        "reddit",
+        "x",
+    ]
 
+    if not content_pack_result:
+        flash("No content pack found.", "danger")
+        return redirect(url_for("content_pack"))
+
+    if platform not in allowed_platforms:
+        flash("Invalid platform selected.", "danger")
+        return redirect(url_for("content_pack"))
+
+    image_prompt = extract_content_pack_section(content_pack_result, "IMAGE_PROMPT")
+    hashtags = extract_content_pack_section(content_pack_result, "HASHTAGS")
+
+    if platform == "instagram":
+        caption = extract_content_pack_section(content_pack_result, "INSTAGRAM_CAPTION")
+
+        if hashtags:
+            caption = caption + "\n\n" + hashtags
+
+    elif platform == "facebook":
+        caption = extract_content_pack_section(content_pack_result, "FACEBOOK_POST")
+
+    elif platform == "linkedin":
+        caption = extract_content_pack_section(content_pack_result, "LINKEDIN_POST")
+
+    elif platform == "pinterest":
+        title = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_TITLE")
+        description = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_DESCRIPTION")
+
+        caption = ""
+
+        if title:
+            caption += title
+
+        if description:
+            caption += "\n\n" + description
+
+    elif platform == "reddit":
+        caption = extract_content_pack_section(content_pack_result, "REDDIT_POST")
+
+    elif platform == "x":
+        caption = extract_content_pack_section(content_pack_result, "X_POST")
+
+    if not caption:
+        flash(f"No {platform} content found in the content pack.", "danger")
+        return redirect(url_for("content_pack"))
+
+    try:
+        enhanced_prompt = f"""
+Create a social media image for this {platform} post.
+
+The image must directly match the meaning, mood, and topic of this post.
+
+Post caption:
+{caption}
+
+Extra visual direction from the content pack:
+{image_prompt}
+
+Image requirements:
+- Make the image clearly connected to the post caption.
+- Use visual elements that support the message.
+- Avoid random unrelated objects.
+- Avoid generic stock image style.
+- Square 1:1 format.
+- High quality.
+- Suitable for {platform}.
+"""
+
+        styled_prompt = apply_image_style(enhanced_prompt, image_style)
+        image_url = generate_openai_image(styled_prompt)
+
+        post = Post(
+            file_url=image_url,
+            file_type="image",
+            prompt=styled_prompt,
+            caption=caption,
+            platforms=platform,
+            post_type="single",
+            status="draft",
+            sort_order=0,
+            is_cover=False
+        )
+
+        db.session.add(post)
+        db.session.commit()
+
+        flash(f"{platform.title()} draft created successfully.", "success")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    except Exception as e:
+        print("Create platform draft error:", e)
+        flash(f"Failed to create {platform} draft: {e}", "danger")
+        return redirect(url_for("content_pack"))
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

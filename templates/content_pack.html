@@ -77,8 +77,70 @@
     </div>
 </div>
 
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+
+        <h2 class="h5 fw-bold mb-3">Create Single Image Drafts</h2>
+
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Image Style</label>
+
+            <select id="platformImageStyle" class="form-select">
+                <option value="">Default</option>
+                <option value="realistic">Realistic</option>
+                <option value="viral_carousel">Viral Carousel</option>
+                <option value="luxury">Luxury Brand</option>
+                <option value="minimal">Minimalist</option>
+                <option value="corporate">Corporate</option>
+                <option value="pixar">3D Animated</option>
+            </select>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+
+    {% for platform, button_class, label in [
+        ("instagram", "btn-success", "Instagram"),
+        ("facebook", "btn-primary", "Facebook"),
+        ("linkedin", "btn-info", "LinkedIn"),
+        ("pinterest", "btn-danger", "Pinterest"),
+        ("reddit", "btn-warning", "Reddit"),
+        ("x", "btn-dark", "X")
+    ] %}
+
+    <form method="POST"
+          action="{{ url_for('create_content_pack_platform_draft') }}"
+          class="platform-draft-form">
+
+        <input type="hidden"
+               name="content_pack_result"
+               class="contentPackHidden">
+
+        <input type="hidden"
+               name="image_style"
+               class="platformImageStyleHidden">
+
+        <input type="hidden"
+               name="platform"
+               value="{{ platform }}">
+
+        <button type="submit"
+                class="btn {{ button_class }}">
+            Create {{ label }} Draft
+        </button>
+
+    </form>
+
+    {% endfor %}
+
+</div>
+
+    </div>
+</div>
+
 <div class="card border-0 shadow-sm rounded-4">
     <div class="card-body p-4">
+
+        <h2 class="h5 fw-bold mb-3">Create Instagram Carousel</h2>
 
         <form method="POST" action="{{ url_for('create_content_pack_carousel') }}">
 
@@ -90,21 +152,25 @@
             >
 
             <div class="mb-3">
-                <label class="form-label fw-semibold">Image Style</label>
+                <label class="form-label fw-semibold">Carousel Image Style</label>
 
                 <select name="image_style" class="form-select">
+                    <option value="viral_carousel">Viral Carousel</option>
                     <option value="">Default</option>
                     <option value="realistic">Realistic</option>
-                    <option value="viral_carousel">Viral Carousel</option>
                     <option value="luxury">Luxury Brand</option>
                     <option value="minimal">Minimalist</option>
                     <option value="corporate">Corporate</option>
                     <option value="pixar">3D Animated</option>
                 </select>
+
+                <div class="form-text">
+                    This creates multiple Instagram carousel slides from the CAROUSEL_IDEA section.
+                </div>
             </div>
 
             <button type="submit" class="btn btn-dark btn-lg w-100">
-                Create Carousel Draft
+                Create Instagram Carousel Draft
             </button>
 
         </form>
@@ -115,12 +181,29 @@
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const textarea = document.getElementById("contentPackTextarea");
-    const hiddenInput = document.getElementById("contentPackResultHidden");
+    const carouselHiddenInput = document.getElementById("contentPackResultHidden");
+    const platformHiddenInputs = document.querySelectorAll(".contentPackHidden");
+    const platformStyleSelect = document.getElementById("platformImageStyle");
+    const platformStyleHiddenInputs = document.querySelectorAll(".platformImageStyleHidden");
 
     function syncContentPack() {
-        if (textarea && hiddenInput) {
-            hiddenInput.value = textarea.value;
+        if (!textarea) {
+            return;
         }
+
+        if (carouselHiddenInput) {
+            carouselHiddenInput.value = textarea.value;
+        }
+
+        platformHiddenInputs.forEach(function(input) {
+            input.value = textarea.value;
+        });
+
+        const selectedStyle = platformStyleSelect ? platformStyleSelect.value : "";
+
+        platformStyleHiddenInputs.forEach(function(input) {
+            input.value = selectedStyle;
+        });
     }
 
     syncContentPack();
@@ -129,13 +212,13 @@ document.addEventListener("DOMContentLoaded", function () {
         textarea.addEventListener("input", syncContentPack);
     }
 
-    const form = document.querySelector("form[action='{{ url_for('create_content_pack_carousel') }}']");
-
-    if (form) {
-        form.addEventListener("submit", function () {
-            syncContentPack();
-        });
+    if (platformStyleSelect) {
+        platformStyleSelect.addEventListener("change", syncContentPack);
     }
+
+    document.querySelectorAll("form").forEach(function(form) {
+        form.addEventListener("submit", syncContentPack);
+    });
 });
 </script>
 {% endif %}

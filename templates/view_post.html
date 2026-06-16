@@ -4,12 +4,10 @@
 
 <div class="row g-4">
 
-    <!-- LEFT: MEDIA -->
     <div class="col-lg-7">
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
 
             {% if post.post_type == 'carousel' and carousel_posts %}
-
                 <div class="p-3 bg-light border-bottom">
                     <span class="badge bg-dark">
                         Carousel · {{ carousel_posts|length }} images
@@ -19,43 +17,38 @@
                 <div class="p-3">
                     <div class="row g-3">
                         {% for item in carousel_posts %}
-                            <div class="col-6 col-md-4">
-                                <img
-                                    src="{{ item.file_url }}"
-                                    class="img-fluid rounded-3"
-                                    alt="Carousel image"
-                                    style="height: 180px; width: 100%; object-fit: cover;"
-                                >
+                            <div class="col-6 col-md-4 position-relative">
+                                {% if item.is_cover %}
+                                    <span class="badge bg-warning text-dark position-absolute m-2">
+                                        Cover
+                                    </span>
+                                {% endif %}
+
+                                <img src="{{ item.file_url }}"
+                                     class="img-fluid rounded-3"
+                                     alt="Carousel image"
+                                     style="height:180px;width:100%;object-fit:cover;">
                             </div>
                         {% endfor %}
                     </div>
                 </div>
-
             {% else %}
-
                 {% if post.file_type == 'image' %}
-                    <img
-                        src="{{ post.file_url }}"
-                        class="img-fluid"
-                        alt="Post media"
-                    >
+                    <img src="{{ post.file_url }}" class="img-fluid" alt="Post media">
                 {% elif post.file_type == 'video' %}
                     <video class="w-100" controls style="background:#000;">
                         <source src="{{ post.file_url }}" type="video/mp4">
                     </video>
                 {% endif %}
-
             {% endif %}
 
         </div>
     </div>
 
-    <!-- RIGHT: DETAILS -->
     <div class="col-lg-5">
         <div class="card border-0 shadow-sm rounded-4 h-100">
             <div class="card-body p-4">
 
-                <!-- HEADER -->
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h1 class="h5 mb-0 fw-bold">
                         {% if post.post_type == 'carousel' %}
@@ -65,15 +58,23 @@
                         {% endif %}
                     </h1>
 
-                    <span class="badge bg-secondary text-uppercase">
-                        {{ post.status }}
-                    </span>
+                    {% if post.status == 'draft' %}
+                        <span class="badge bg-secondary">Draft</span>
+                    {% elif post.status == 'scheduled' %}
+                        <span class="badge bg-warning text-dark">Scheduled</span>
+                    {% elif post.status == 'sent_to_make' %}
+                        <span class="badge bg-success">Sent to Make</span>
+                    {% elif post.status == 'generating' %}
+                        <span class="badge bg-info text-dark">Generating</span>
+                    {% elif post.status == 'generation_failed' %}
+                        <span class="badge bg-danger">Generation Failed</span>
+                    {% else %}
+                        <span class="badge bg-secondary">{{ post.status|title }}</span>
+                    {% endif %}
                 </div>
 
-                <!-- TYPE -->
-                <p class="mb-1">
+                <p class="mb-2">
                     <strong>Type:</strong>
-
                     {% if post.post_type == 'carousel' %}
                         Carousel
                     {% else %}
@@ -81,170 +82,128 @@
                     {% endif %}
                 </p>
 
-                <!-- PLATFORMS -->
                 {% if post.platforms %}
-                    <p class="mb-1">
-                        <strong>Platforms:</strong>
-                        {{ post.platforms }}
-                    </p>
+                    <div class="mb-3">
+                        <strong class="d-block mb-2">Platforms:</strong>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for platform in post.platforms.split(',') %}
+                                <span class="badge bg-primary">
+                                    {% if platform.strip() == 'x' %}
+                                        X
+                                    {% else %}
+                                        {{ platform.strip().title() }}
+                                    {% endif %}
+                                </span>
+                            {% endfor %}
+                        </div>
+                    </div>
                 {% endif %}
 
-                <!-- DATE -->
                 <p class="mb-3 text-muted small">
                     Created {{ post.created_at.strftime('%d %b %Y at %H:%M') }}
                 </p>
 
                 <hr>
 
-                <!-- AI PROMPT -->
                 {% if post.prompt %}
                     <div class="mb-4">
-                        <h2 class="h6 fw-semibold text-muted">
-                            AI Prompt
-                        </h2>
-
+                        <h2 class="h6 fw-semibold text-muted">AI Prompt</h2>
                         <div class="caption-box">
                             {{ post.prompt }}
                         </div>
                     </div>
                 {% endif %}
 
-                <!-- CAPTION -->
                 <div class="mb-4">
-                    <h2 class="h6 fw-semibold text-muted">
-                        Caption
-                    </h2>
-
+                    <h2 class="h6 fw-semibold text-muted">Caption</h2>
                     <div class="caption-box">
                         {{ post.caption if post.caption else 'No caption added.' }}
                     </div>
                 </div>
 
-                <!-- ACTIONS -->
-                {% if post.status != 'scheduled' %}
+                <div class="d-grid gap-2">
 
-                    <!-- CAROUSEL ACTIONS -->
                     {% if post.post_type == 'carousel' and post.group_id %}
 
-                        <!-- EDIT -->
-                        <a
-                            href="{{ url_for('edit_carousel', group_id=post.group_id) }}"
-                            class="btn btn-outline-primary w-100 mb-2"
-                        >
-                            ✏️ Edit Carousel
+                        <a href="{{ url_for('edit_carousel', group_id=post.group_id) }}"
+                           class="btn btn-primary">
+                            Edit Carousel
                         </a>
 
-                        <!-- SEND -->
-                        <form
-                            method="POST"
-                            action="{{ url_for('send_carousel_to_make', group_id=post.group_id) }}"
-                            class="mb-2"
-                        >
-                            <button
-                                type="submit"
-                                class="btn btn-success w-100 btn-lg"
-                            >
-                                🚀 Send Carousel to Make.com
+                        <form method="POST"
+                              action="{{ url_for('duplicate_carousel', group_id=post.group_id) }}">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                Duplicate Carousel
                             </button>
                         </form>
-                        {% if post.post_type == 'carousel' %}
 
-<form method="POST"
-      action="{{ url_for('duplicate_carousel', group_id=post.group_id) }}"
-      class="d-inline">
-
-    <button type="submit"
-            class="btn btn-info">
-        Duplicate Carousel
-    </button>
-
-</form>
-
-{% endif %}
+                        {% if post.status != 'scheduled' %}
+                            <form method="POST"
+                                  action="{{ url_for('send_carousel_to_make', group_id=post.group_id) }}">
+                                <button type="submit" class="btn btn-success w-100">
+                                    Send Carousel to Make
+                                </button>
+                            </form>
+                        {% endif %}
 
                     {% else %}
 
-                        <!-- SINGLE POST -->
-                        <form
-                            method="POST"
-                            action="{{ url_for('send_to_make', post_id=post.id) }}"
-                            class="mb-2"
-                        >
-                            <button
-                                type="submit"
-                                class="btn btn-success w-100 btn-lg"
-                            >
-                                🚀 Send to Make.com
+                        <a href="{{ url_for('edit_post', post_id=post.id) }}"
+                           class="btn btn-primary">
+                            Edit Post
+                        </a>
+
+                        <form method="POST"
+                              action="{{ url_for('duplicate_post', post_id=post.id) }}">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                Duplicate Post
                             </button>
                         </form>
+
+                        {% if post.status != 'scheduled' %}
+                            <form method="POST"
+                                  action="{{ url_for('send_to_make', post_id=post.id) }}">
+                                <button type="submit" class="btn btn-success w-100">
+                                    Send to Make
+                                </button>
+                            </form>
+                        {% endif %}
 
                     {% endif %}
 
-                    <!-- SCHEDULE -->
-                    <div class="mt-3">
-                        <h2 class="h6 fw-semibold text-muted">
-                            Schedule Post
-                        </h2>
+                </div>
 
-                        <form
-                            method="POST"
-                            action="{{ url_for('schedule_post', post_id=post.id) }}"
-                        >
+                {% if post.status != 'scheduled' %}
+                    <div class="mt-4">
+                        <h2 class="h6 fw-semibold text-muted">Schedule Post</h2>
+
+                        <form method="POST"
+                              action="{{ url_for('schedule_post', post_id=post.id) }}">
                             <div class="mb-2">
-                                <input
-                                    type="datetime-local"
-                                    name="scheduled_time"
-                                    class="form-control"
-                                    required
-                                >
+                                <input type="datetime-local"
+                                       name="scheduled_time"
+                                       class="form-control"
+                                       required>
                             </div>
 
-                            <button
-                                type="submit"
-                                class="btn btn-warning w-100"
-                            >
-                                ⏰ Schedule Post
+                            <button type="submit" class="btn btn-warning w-100">
+                                Schedule Post
                             </button>
                         </form>
                     </div>
-
                 {% else %}
-
-                    <div class="alert alert-info">
-                        ⏰ Scheduled for
-                        {{ post.scheduled_time.strftime('%d %b %Y %H:%M') }}
+                    <div class="alert alert-info mt-4">
+                        Scheduled for {{ post.scheduled_time.strftime('%d %b %Y %H:%M') }}
                     </div>
-
                 {% endif %}
 
-                <!-- DELETE -->
-                <form
-                    method="POST"
-                    action="{{ url_for('delete_post', post_id=post.id) }}"
-                    class="mt-3"
-                >
-                    <button
-                        type="submit"
-                        class="btn btn-outline-danger w-100"
-                    >
+                <form method="POST"
+                      action="{{ url_for('delete_post', post_id=post.id) }}"
+                      class="mt-3">
+                    <button type="submit" class="btn btn-outline-danger w-100">
                         Delete Post
                     </button>
-                    {% if post.post_type != 'carousel' %}
-                    </form>
-<a
-    href="{{ url_for('edit_post', post_id=post.id) }}"
-    class="btn btn-warning"
->
-    Edit Post
-</a>
-<form method="POST"
-      action="{{ url_for('duplicate_post', post_id=post.id) }}"
-      class="d-inline">
-    <button type="submit" class="btn btn-info">
-        Duplicate Post
-    </button>
-</form>
-{% endif %}
                 </form>
 
             </div>
