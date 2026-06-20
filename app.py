@@ -1375,6 +1375,7 @@ def create_tiktok_carousel_draft():
 
     try:
         styled_image_prompt = apply_image_style(image_prompt, image_style)
+
         slides = []
 
         for line in carousel_idea.splitlines():
@@ -1400,6 +1401,7 @@ def create_tiktok_carousel_draft():
             return redirect(url_for("tiktok_repurpose"))
 
         group_id = str(uuid.uuid4())
+        placeholder_url = get_placeholder_image_url()
 
         for index, slide_text in enumerate(slides):
             if index == 0:
@@ -1439,16 +1441,14 @@ Design style:
 - square 1:1 format
 """
 
-            image_url = generate_openai_image(full_prompt)
-
             post = Post(
-                file_url=image_url,
+                file_url=placeholder_url,
                 file_type="image",
                 prompt=full_prompt,
                 caption=caption,
                 platforms="instagram,facebook",
                 post_type="carousel",
-                status="draft",
+                status="generating",
                 group_id=group_id,
                 sort_order=index,
                 is_cover=(index == 0),
@@ -1464,38 +1464,13 @@ Design style:
             user_id=current_user.id
         ).order_by(Post.sort_order.asc()).first()
 
-        flash("TikTok carousel draft created successfully.", "success")
+        flash("TikTok carousel draft created. Images are generating in the background.", "success")
         return redirect(url_for("view_post", post_id=first_post.id))
 
     except Exception as e:
         print("Create TikTok carousel draft error:", e)
         flash(f"Failed to create carousel draft: {e}", "danger")
         return redirect(url_for("tiktok_repurpose"))
-
-
-@app.route("/calendar")
-@login_required
-def calendar_view():
-    scheduled_posts = Post.query.filter(
-        Post.user_id == current_user.id,
-        Post.scheduled_time != None,
-        Post.status == "scheduled"
-    ).order_by(
-        Post.scheduled_time.asc(),
-        Post.created_at.asc()
-    ).all()
-
-    grouped_posts = {}
-
-    for post in scheduled_posts:
-        date_key = post.scheduled_time.strftime("%A %d %B %Y")
-
-        if date_key not in grouped_posts:
-            grouped_posts[date_key] = []
-
-        grouped_posts[date_key].append(post)
-
-    return render_template("calendar.html", grouped_posts=grouped_posts)
 
 
 @app.route("/content-pack", methods=["GET", "POST"])
