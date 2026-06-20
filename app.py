@@ -1506,6 +1506,27 @@ def content_pack():
     )
 
 
+@app.route("/calendar")
+@login_required
+def calendar_view():
+    scheduled_posts = Post.query.filter(
+        Post.user_id == current_user.id,
+        Post.scheduled_time != None,
+        Post.status == "scheduled"
+    ).order_by(
+        Post.scheduled_time.asc(),
+        Post.created_at.asc()
+    ).all()
+
+    grouped_posts = {}
+
+    for post in scheduled_posts:
+        date_key = post.scheduled_time.strftime("%A %d %B %Y")
+        grouped_posts.setdefault(date_key, []).append(post)
+
+    return render_template("calendar.html", grouped_posts=grouped_posts)
+
+
 @app.route("/content-pack/create-carousel", methods=["POST"])
 @login_required
 def create_content_pack_carousel():
