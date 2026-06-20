@@ -1730,6 +1730,28 @@ def logout():
     logout_user()
     flash("Logged out successfully.", "success")
     return redirect(url_for("login"))
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "").strip()
+
+        user = User.query.filter_by(email=email).first()
+
+        if not user or not check_password_hash(user.password_hash, password):
+            flash("Invalid email or password.", "danger")
+            return redirect(url_for("login"))
+
+        login_user(user)
+
+        flash("Logged in successfully.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("login.html")
     
 
 if __name__ == "__main__":
