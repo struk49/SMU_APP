@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-5">
+
+                <div class="text-center mb-4">
+                    <h1 class="h3 fw-bold">Create Account</h1>
+
+                    <p class="text-muted">
+                        Start creating and managing your AI-powered content.
+                    </p>
+                </div>
+
+                <form method="POST">
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            Email Address
+                        </label>
+
+                        <input
+                            type="email"
+                            name="email"
+                            class="form-control form-control-lg"
+                            placeholder="you@example.com"
+                            required
+                        >
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            Password
+                        </label>
+
+                        <input
+                            type="password"
+                            name="password"
+                            class="form-control form-control-lg"
+                            placeholder="Create a password"
+                            minlength="8"
+                            required
+                        >
+
+                        <div class="form-text">
+                            Minimum 8 characters.
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            Confirm Password
+                        </label>
+
+                        <input
+                            type="password"
+                            name="confirm_password"
+                            class="form-control form-control-lg"
+                            placeholder="Confirm your password"
+                            minlength="8"
+                            required
+                        >
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary btn-lg w-100"
+                    >
+                        Create Account
+                    </button>
+
+                </form>
+
+                <hr class="my-4">
+
+                <p class="text-center mb-0">
+                    Already have an account?
+
+                    <a href="{{ url_for('login') }}"
+                       class="fw-semibold text-decoration-none">
+                        Sign In
+                    </a>
+                </p>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

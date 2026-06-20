@@ -10,6 +10,8 @@ import pytz
 import requests
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, flash
+from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -35,6 +37,10 @@ print("DATABASE:", app.config["SQLALCHEMY_DATABASE_URI"][:50])
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "login"
+login_manager.login_message_category = "warning"
 
 MAKE_WEBHOOK_SINGLE = os.getenv("MAKE_WEBHOOK_SINGLE", "").strip()
 MAKE_WEBHOOK_CAROUSEL = os.getenv("MAKE_WEBHOOK_CAROUSEL", "").strip()
@@ -47,6 +53,15 @@ cloudinary.config(
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
 )
+
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(150), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    posts = db.relationship("Post", backref="user", lazy=True)
 
 
 
@@ -65,7 +80,14 @@ class Post(db.Model):
     platforms = db.Column(db.String(200), default="instagram,facebook")
     sort_order = db.Column(db.Integer, default=0)
     is_cover = db.Column(db.Boolean, default=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    
 
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 with app.app_context():
     db.create_all()
@@ -91,6 +113,10 @@ with app.app_context():
 
         if "is_cover" not in columns:
             conn.execute(db.text("ALTER TABLE post ADD COLUMN is_cover BOOLEAN DEFAULT 0"))
+
+
+        if "user_id" not in columns:
+            conn.execute(db.text("ALTER TABLE post ADD COLUMN user_id INTEGER"))
 
         conn.commit()
 
@@ -601,13 +627,14 @@ def extract_content_pack_section(text, section_name):
 
 
 @app.route("/")
+@login_required
 def index():
     status_filter = request.args.get("status", "all")
     type_filter = request.args.get("type", "all")
     platform_filter = request.args.get("platform", "all")
     search_query = request.args.get("q", "").strip()
 
-    query = Post.query
+    query = Post.query.filter_by(user_id=current_user.id)
 
     if status_filter != "all":
         query = query.filter(Post.status == status_filter)
@@ -638,11 +665,11 @@ def index():
     ).all()
 
     stats = {
-        "total": Post.query.count(),
-        "drafts": Post.query.filter_by(status="draft").count(),
-        "scheduled": Post.query.filter_by(status="scheduled").count(),
-        "sent": Post.query.filter_by(status="sent_to_make").count(),
-        "carousels": Post.query.filter_by(post_type="carousel").count(),
+        "total": Post.query.filter_by(user_id=current_user.id).count(),
+        "drafts": Post.query.filter_by(user_id=current_user.id, status="draft").count(),
+        "scheduled": Post.query.filter_by(user_id=current_user.id, status="scheduled").count(),
+        "sent": Post.query.filter_by(user_id=current_user.id, status="sent_to_make").count(),
+        "carousels": Post.query.filter_by(user_id=current_user.id, post_type="carousel").count(),
     }
 
     return render_template(
@@ -657,6 +684,7 @@ def index():
 
 
 @app.route("/create", methods=["GET", "POST"])
+@login_required
 def create_post():
     if request.method == "POST":
         files = request.files.getlist("media")
@@ -747,7 +775,8 @@ def create_post():
                         scheduled_time=scheduled_time,
                         group_id=group_id,
                         sort_order=index,
-                        is_cover=(index == 0)
+                        is_cover=(index == 0),
+                        user_id=current_user.id
                     )
 
                     db.session.add(post)
@@ -769,7 +798,6 @@ def create_post():
 
                 is_carousel = make_carousel and len(uploaded_files) > 1
                 group_id = str(uuid.uuid4()) if is_carousel else None
-
                 created_posts = []
 
                 for index, file in enumerate(uploaded_files):
@@ -791,7 +819,8 @@ def create_post():
                         scheduled_time=scheduled_time,
                         group_id=group_id,
                         sort_order=index,
-                        is_cover=(is_carousel and index == 0)
+                        is_cover=(is_carousel and index == 0),
+                        user_id=current_user.id
                     )
 
                     db.session.add(post)
@@ -807,7 +836,7 @@ def create_post():
                 return redirect(url_for("view_post", post_id=created_posts[0].id))
 
         except Exception as e:
-            print("ERROR:", e)
+            print("Create post error:", e)
             flash(f"Failed: {e}", "danger")
             return redirect(url_for("create_post"))
 
@@ -815,8 +844,13 @@ def create_post():
 
 
 @app.route("/post/<int:post_id>")
+@login_required
 def view_post(post_id):
     post = Post.query.get_or_404(post_id)
+
+    if post.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
 
     carousel_posts = []
 
@@ -831,8 +865,13 @@ def view_post(post_id):
 
 
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
+@login_required
 def edit_post(post_id):
     post = Post.query.get_or_404(post_id)
+
+    if post.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
 
     if post.post_type == "carousel":
         flash("Use Edit Carousel for carousel posts.", "warning")
@@ -875,8 +914,13 @@ def edit_post(post_id):
 
 
 @app.route("/rewrite-caption/<int:post_id>", methods=["POST"])
+@login_required
 def rewrite_caption(post_id):
     post = Post.query.get_or_404(post_id)
+
+    if post.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
 
     rewrite_type = request.form.get("rewrite_type", "").strip()
     current_caption = request.form.get("caption", "").strip()
@@ -901,6 +945,7 @@ def rewrite_caption(post_id):
 
 
 @app.route("/rewrite-carousel-caption/<group_id>", methods=["POST"])
+@login_required
 def rewrite_carousel_caption(group_id):
     posts = get_ordered_carousel_posts(group_id)
 
@@ -933,8 +978,13 @@ def rewrite_carousel_caption(group_id):
 
 
 @app.route("/duplicate-post/<int:post_id>", methods=["POST"])
+@login_required
 def duplicate_post(post_id):
     original = Post.query.get_or_404(post_id)
+
+    if original.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
 
     if original.post_type == "carousel":
         flash("Use duplicate carousel for carousel posts.", "warning")
@@ -953,7 +1003,8 @@ def duplicate_post(post_id):
             is_cover=False,
             group_id=None,
             scheduled_time=None,
-            sent_at=None
+            sent_at=None,
+            user_id=current_user.id
         )
 
         db.session.add(new_post)
@@ -969,12 +1020,9 @@ def duplicate_post(post_id):
 
 
 @app.route("/duplicate-carousel/<group_id>", methods=["POST"])
+@login_required
 def duplicate_carousel(group_id):
-    original_posts = Post.query.filter_by(
-        group_id=group_id
-    ).order_by(
-        Post.sort_order.asc()
-    ).all()
+    original_posts = get_ordered_carousel_posts(group_id)
 
     if not original_posts:
         flash("Carousel not found.", "danger")
@@ -997,7 +1045,8 @@ def duplicate_carousel(group_id):
                 sort_order=post.sort_order,
                 is_cover=post.is_cover,
                 scheduled_time=None,
-                sent_at=None
+                sent_at=None,
+                user_id=current_user.id
             )
 
             db.session.add(new_post)
@@ -1017,11 +1066,16 @@ def duplicate_carousel(group_id):
 
 
 @app.route("/send/<int:post_id>", methods=["POST"])
+@login_required
 def send_to_make(post_id):
     post = Post.query.get_or_404(post_id)
 
+    if post.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
+
     try:
-        if post.post_type == "carousel" and post.group_id:
+        if post.group_id:
             payload = build_carousel_payload(post.group_id)
 
             if not payload:
@@ -1030,7 +1084,7 @@ def send_to_make(post_id):
 
             send_payload_to_make(payload)
 
-            group_posts = Post.query.filter_by(group_id=post.group_id).all()
+            group_posts = get_ordered_carousel_posts(post.group_id)
 
             for group_post in group_posts:
                 group_post.status = "sent_to_make"
@@ -1052,12 +1106,14 @@ def send_to_make(post_id):
         flash("Sent to Make.com successfully.", "success")
 
     except Exception as e:
+        print("Send to Make error:", e)
         flash(f"Failed: {e}", "danger")
 
     return redirect(url_for("view_post", post_id=post.id))
 
 
 @app.route("/send-carousel/<group_id>", methods=["POST"])
+@login_required
 def send_carousel_to_make(group_id):
     posts = get_ordered_carousel_posts(group_id)
 
@@ -1083,12 +1139,14 @@ def send_carousel_to_make(group_id):
         flash("Carousel sent to Make.com successfully.", "success")
 
     except Exception as e:
+        print("Send carousel error:", e)
         flash(f"Failed: {e}", "danger")
 
     return redirect(url_for("index"))
 
 
 @app.route("/edit-carousel/<group_id>", methods=["GET", "POST"])
+@login_required
 def edit_carousel(group_id):
     posts = get_ordered_carousel_posts(group_id)
 
@@ -1137,8 +1195,13 @@ def edit_carousel(group_id):
 
 
 @app.route("/schedule/<int:post_id>", methods=["POST"])
+@login_required
 def schedule_post(post_id):
     post = Post.query.get_or_404(post_id)
+
+    if post.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
 
     scheduled_time_str = request.form.get("scheduled_time")
 
@@ -1149,8 +1212,8 @@ def schedule_post(post_id):
     try:
         scheduled_time = convert_uk_time_to_utc(scheduled_time_str)
 
-        if post.post_type == "carousel" and post.group_id:
-            group_posts = Post.query.filter_by(group_id=post.group_id).all()
+        if post.group_id:
+            group_posts = get_ordered_carousel_posts(post.group_id)
 
             for group_post in group_posts:
                 group_post.scheduled_time = scheduled_time
@@ -1169,17 +1232,23 @@ def schedule_post(post_id):
         flash("Post scheduled successfully.", "success")
 
     except Exception as e:
+        print("Schedule error:", e)
         flash(f"Error scheduling post: {e}", "danger")
 
     return redirect(url_for("view_post", post_id=post.id))
 
 
 @app.route("/delete/<int:post_id>", methods=["POST"])
+@login_required
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
 
-    if post.post_type == "carousel" and post.group_id:
-        group_posts = Post.query.filter_by(group_id=post.group_id).all()
+    if post.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
+
+    if post.group_id:
+        group_posts = get_ordered_carousel_posts(post.group_id)
 
         for group_post in group_posts:
             db.session.delete(group_post)
@@ -1197,8 +1266,13 @@ def delete_post(post_id):
 
 
 @app.route("/delete-carousel/<group_id>", methods=["POST"])
+@login_required
 def delete_carousel(group_id):
-    posts = Post.query.filter_by(group_id=group_id).all()
+    posts = get_ordered_carousel_posts(group_id)
+
+    if not posts:
+        flash("Carousel not found.", "danger")
+        return redirect(url_for("index"))
 
     for post in posts:
         db.session.delete(post)
@@ -1210,6 +1284,7 @@ def delete_carousel(group_id):
 
 
 @app.route("/tiktok", methods=["GET", "POST"])
+@login_required
 def tiktok_repurpose():
     transcript = None
     generated_content = None
@@ -1239,6 +1314,7 @@ def tiktok_repurpose():
 
 
 @app.route("/tiktok/create-draft", methods=["POST"])
+@login_required
 def create_tiktok_draft():
     caption = request.form.get("caption", "").strip()
     image_prompt = request.form.get("image_prompt", "").strip()
@@ -1265,7 +1341,8 @@ def create_tiktok_draft():
             post_type="single",
             status="draft",
             sort_order=0,
-            is_cover=False
+            is_cover=False,
+            user_id=current_user.id
         )
 
         db.session.add(post)
@@ -1281,6 +1358,7 @@ def create_tiktok_draft():
 
 
 @app.route("/tiktok/create-carousel-draft", methods=["POST"])
+@login_required
 def create_tiktok_carousel_draft():
     caption = request.form.get("caption", "").strip()
     image_prompt = request.form.get("image_prompt", "").strip()
@@ -1297,7 +1375,6 @@ def create_tiktok_carousel_draft():
 
     try:
         styled_image_prompt = apply_image_style(image_prompt, image_style)
-
         slides = []
 
         for line in carousel_idea.splitlines():
@@ -1332,41 +1409,16 @@ Create a HIGH-CONVERTING viral Instagram carousel COVER slide.
 Main headline:
 {slide_text}
 
-Visual inspiration:
-Bold creator-business Instagram carousel style.
-
-Design style:
-- black or dark background
-- premium modern marketing design
-- BIG bold typography
-- yellow accent blocks
-- white headline text
-- bright green and blue highlight colours
-- infographic style
-- visually striking composition
-- premium entrepreneur aesthetic
-- clean but attention-grabbing
-- high contrast
-- square Instagram format (1:1)
-- social media viral style
-
-Layout:
-- very large headline
-- clear visual hierarchy
-- room for supporting subheading
-- premium polished look
-- designed for high engagement
-
 Use this visual direction:
 {styled_image_prompt}
 
-Avoid:
-- clutter
-- tiny text
-- unreadable typography
-- bad spacing
-- generic stock image look
-- distorted text
+Design style:
+- dark background
+- bold typography
+- yellow accent blocks
+- white headline text
+- green and blue highlight colours
+- square 1:1 format
 """
             else:
                 full_prompt = f"""
@@ -1375,38 +1427,16 @@ Create a HIGH-CONVERTING Instagram carousel educational slide.
 Slide content:
 {slide_text}
 
-Visual inspiration:
-Modern viral entrepreneur Instagram carousel.
-
-Design style:
-- dark background
-- bold premium typography
-- yellow highlight boxes
-- white main text
-- green accent colours
-- infographic feel
-- modern creator-business aesthetic
-- highly readable
-- visually engaging
-- square Instagram format (1:1)
-
-Layout:
-- one clear takeaway
-- visually balanced composition
-- large readable text
-- simple icon or visual support
-- premium content creator feel
-
-Keep visual consistency with previous slides.
-
 Use this visual direction:
 {styled_image_prompt}
 
-Avoid:
-- clutter
-- tiny unreadable text
-- distorted text
-- generic image style
+Design style:
+- dark background
+- bold typography
+- yellow highlight boxes
+- white main text
+- green accents
+- square 1:1 format
 """
 
             image_url = generate_openai_image(full_prompt)
@@ -1421,16 +1451,18 @@ Avoid:
                 status="draft",
                 group_id=group_id,
                 sort_order=index,
-                is_cover=(index == 0)
+                is_cover=(index == 0),
+                user_id=current_user.id
             )
 
             db.session.add(post)
 
         db.session.commit()
 
-        first_post = Post.query.filter_by(group_id=group_id).order_by(
-            Post.sort_order.asc()
-        ).first()
+        first_post = Post.query.filter_by(
+            group_id=group_id,
+            user_id=current_user.id
+        ).order_by(Post.sort_order.asc()).first()
 
         flash("TikTok carousel draft created successfully.", "success")
         return redirect(url_for("view_post", post_id=first_post.id))
@@ -1442,8 +1474,10 @@ Avoid:
 
 
 @app.route("/calendar")
+@login_required
 def calendar_view():
     scheduled_posts = Post.query.filter(
+        Post.user_id == current_user.id,
         Post.scheduled_time != None,
         Post.status == "scheduled"
     ).order_by(
@@ -1461,13 +1495,11 @@ def calendar_view():
 
         grouped_posts[date_key].append(post)
 
-    return render_template(
-        "calendar.html",
-        grouped_posts=grouped_posts
-    )
+    return render_template("calendar.html", grouped_posts=grouped_posts)
 
 
 @app.route("/content-pack", methods=["GET", "POST"])
+@login_required
 def content_pack():
     source_text = ""
     content_pack_result = None
@@ -1498,7 +1530,9 @@ def content_pack():
         content_pack_result=content_pack_result
     )
 
+
 @app.route("/content-pack/create-carousel", methods=["POST"])
+@login_required
 def create_content_pack_carousel():
     content_pack_result = request.form.get("content_pack_result", "").strip()
     image_style = request.form.get("image_style", "").strip()
@@ -1521,7 +1555,6 @@ def create_content_pack_carousel():
 
     try:
         styled_image_prompt = apply_image_style(image_prompt, image_style)
-
         slides = []
 
         for line in carousel_idea.splitlines():
@@ -1548,76 +1581,23 @@ def create_content_pack_carousel():
 
         group_id = str(uuid.uuid4())
         placeholder_url = get_placeholder_image_url()
-     
 
         for index, slide_text in enumerate(slides):
-
-            if index == 0:
-                full_prompt = f"""
-Create a HIGH-CONVERTING viral Instagram carousel COVER slide.
-
-Main headline:
-{slide_text}
-
-Visual inspiration:
-Bold creator-business Instagram carousel style.
-
-Design style:
-- black or dark background
-- premium modern marketing design
-- BIG bold typography
-- yellow accent blocks
-- white headline text
-- bright green and blue highlight colours
-- infographic style
-- visually striking composition
-- premium entrepreneur aesthetic
-- clean but attention-grabbing
-- high contrast
-- square Instagram format 1:1
-- social media viral style
-
-Use this visual direction:
-{styled_image_prompt}
-
-Avoid:
-- clutter
-- tiny text
-- distorted text
-- bad spacing
-- generic stock image look
-"""
-            else:
-                full_prompt = f"""
-Create a HIGH-CONVERTING Instagram carousel educational slide.
+            full_prompt = f"""
+Create an Instagram carousel slide.
 
 Slide content:
 {slide_text}
 
-Visual inspiration:
-Modern viral entrepreneur Instagram carousel.
-
-Design style:
-- dark background
-- bold premium typography
-- yellow highlight boxes
-- white main text
-- green accent colours
-- infographic feel
-- modern creator-business aesthetic
-- highly readable
-- square Instagram format 1:1
-
-Keep visual consistency with previous slides.
-
-Use this visual direction:
+Visual direction:
 {styled_image_prompt}
 
-Avoid:
-- clutter
-- tiny unreadable text
-- distorted text
-- generic image style
+Design:
+- dark background
+- bold typography
+- high contrast
+- square 1:1 format
+- premium social media style
 """
 
             post = Post(
@@ -1630,16 +1610,18 @@ Avoid:
                 status="generating",
                 group_id=group_id,
                 sort_order=index,
-                is_cover=(index == 0)
+                is_cover=(index == 0),
+                user_id=current_user.id
             )
 
             db.session.add(post)
 
         db.session.commit()
 
-        first_post = Post.query.filter_by(group_id=group_id).order_by(
-            Post.sort_order.asc()
-        ).first()
+        first_post = Post.query.filter_by(
+            group_id=group_id,
+            user_id=current_user.id
+        ).order_by(Post.sort_order.asc()).first()
 
         flash("Carousel draft created. Images are generating in the background.", "success")
         return redirect(url_for("view_post", post_id=first_post.id))
@@ -1651,19 +1633,13 @@ Avoid:
 
 
 @app.route("/content-pack/create-platform-draft", methods=["POST"])
+@login_required
 def create_content_pack_platform_draft():
     content_pack_result = request.form.get("content_pack_result", "").strip()
     platform = request.form.get("platform", "").strip()
     image_style = request.form.get("image_style", "").strip()
 
-    allowed_platforms = [
-        "instagram",
-        "facebook",
-        "linkedin",
-        "pinterest",
-        "reddit",
-        "x",
-    ]
+    allowed_platforms = ["instagram", "facebook", "linkedin", "pinterest", "reddit", "x"]
 
     if not content_pack_result:
         flash("No content pack found.", "danger")
@@ -1678,7 +1654,6 @@ def create_content_pack_platform_draft():
 
     if platform == "instagram":
         caption = extract_content_pack_section(content_pack_result, "INSTAGRAM_CAPTION")
-
         if hashtags:
             caption = caption + "\n\n" + hashtags
 
@@ -1691,14 +1666,7 @@ def create_content_pack_platform_draft():
     elif platform == "pinterest":
         title = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_TITLE")
         description = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_DESCRIPTION")
-
-        caption = ""
-
-        if title:
-            caption += title
-
-        if description:
-            caption += "\n\n" + description
+        caption = f"{title}\n\n{description}".strip()
 
     elif platform == "reddit":
         caption = extract_content_pack_section(content_pack_result, "REDDIT_POST")
@@ -1714,22 +1682,17 @@ def create_content_pack_platform_draft():
         enhanced_prompt = f"""
 Create a social media image for this {platform} post.
 
-The image must directly match the meaning, mood, and topic of this post.
-
 Post caption:
 {caption}
 
-Extra visual direction from the content pack:
+Extra visual direction:
 {image_prompt}
 
-Image requirements:
-- Make the image clearly connected to the post caption.
-- Use visual elements that support the message.
-- Avoid random unrelated objects.
-- Avoid generic stock image style.
-- Square 1:1 format.
-- High quality.
-- Suitable for {platform}.
+Requirements:
+- match the meaning and mood
+- avoid random unrelated objects
+- square 1:1 format
+- high quality
 """
 
         styled_prompt = apply_image_style(enhanced_prompt, image_style)
@@ -1744,7 +1707,8 @@ Image requirements:
             post_type="single",
             status="draft",
             sort_order=0,
-            is_cover=False
+            is_cover=False,
+            user_id=current_user.id
         )
 
         db.session.add(post)
@@ -1757,5 +1721,78 @@ Image requirements:
         print("Create platform draft error:", e)
         flash(f"Failed to create {platform} draft: {e}", "danger")
         return redirect(url_for("content_pack"))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
+
+        if not email or not password:
+            flash("Please enter an email and password.", "danger")
+            return redirect(url_for("register"))
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return redirect(url_for("register"))
+
+        existing_user = User.query.filter_by(email=email).first()
+
+        if existing_user:
+            flash("An account with that email already exists.", "danger")
+            return redirect(url_for("register"))
+
+        user = User(
+            email=email,
+            password_hash=generate_password_hash(password)
+        )
+
+        db.session.add(user)
+        db.session.commit()
+
+        login_user(user)
+
+        flash("Account created successfully.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("register.html")
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "").strip()
+
+        user = User.query.filter_by(email=email).first()
+
+        if not user or not check_password_hash(user.password_hash, password):
+            flash("Invalid email or password.", "danger")
+            return redirect(url_for("login"))
+
+        login_user(user)
+
+        flash("Logged in successfully.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("Logged out successfully.", "success")
+    return redirect(url_for("login"))
+    
+
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-5">
+
+                <div class="text-center mb-4">
+                    <h1 class="h3 fw-bold">Welcome Back</h1>
+                    <p class="text-muted">
+                        Sign in to access your content dashboard.
+                    </p>
+                </div>
+
+                <form method="POST">
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            Email Address
+                        </label>
+
+                        <input
+                            type="email"
+                            name="email"
+                            class="form-control form-control-lg"
+                            placeholder="you@example.com"
+                            required
+                        >
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">
+                            Password
+                        </label>
+
+                        <input
+                            type="password"
+                            name="password"
+                            class="form-control form-control-lg"
+                            placeholder="Enter your password"
+                            required
+                        >
+                    </div>
+
+                    <button
+                        type="submit"
+                        class="btn btn-primary btn-lg w-100"
+                    >
+                        Sign In
+                    </button>
+
+                </form>
+
+                <hr class="my-4">
+
+                <p class="text-center mb-0">
+                    Don't have an account?
+
+                    <a href="{{ url_for('register') }}"
+                       class="fw-semibold text-decoration-none">
+                        Create Account
+                    </a>
+                </p>
+
+            </div>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}
