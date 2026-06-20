@@ -502,6 +502,8 @@ def check_scheduled_posts():
 
 def generate_pending_carousel_images():
     with app.app_context():
+        post = None
+
         try:
             post = Post.query.filter_by(
                 status="generating",
@@ -523,11 +525,21 @@ def generate_pending_carousel_images():
 
             db.session.commit()
 
-            print(f"Image generated for post {post.id}")
+            print(f"✅ Generated image for post {post.id}")
 
         except Exception as e:
             db.session.rollback()
+
             print("Background image generation error:", e)
+
+            if post:
+                try:
+                    post.status = "generation_failed"
+                    db.session.commit()
+                    print(f"Marked post {post.id} as generation_failed")
+                except Exception as inner_error:
+                    db.session.rollback()
+                    print("Failed to mark post as failed:", inner_error)
 
 def generate_content_pack(source_text):
     if not OPENAI_API_KEY:
