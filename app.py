@@ -502,40 +502,32 @@ def check_scheduled_posts():
 
 def generate_pending_carousel_images():
     with app.app_context():
-        pending_post = Post.query.filter_by(
-            status="generating",
-            file_type="image"
-        ).order_by(
-            Post.created_at.asc(),
-            Post.sort_order.asc()
-        ).first()
-
-        if not pending_post:
-            return
-
         try:
-            print(f"Generating image for post {pending_post.id}")
+            post = Post.query.filter_by(
+                status="generating",
+                file_type="image"
+            ).order_by(
+                Post.created_at.asc(),
+                Post.sort_order.asc()
+            ).first()
 
-            image_url = generate_openai_image(pending_post.prompt)
+            if not post:
+                return
 
-            pending_post.file_url = image_url
-            pending_post.status = "draft"
+            print(f"Generating image for post {post.id}")
+
+            image_url = generate_openai_image(post.prompt)
+
+            post.file_url = image_url
+            post.status = "draft"
 
             db.session.commit()
 
-            print(f"✅ Generated image for post {pending_post.id}")
+            print(f"Image generated for post {post.id}")
 
         except Exception as e:
+            db.session.rollback()
             print("Background image generation error:", e)
-            pending_post.status = "generation_failed"
-            db.session.commit()
-
-
-scheduler = BackgroundScheduler()
-scheduler.add_job(func=check_scheduled_posts, trigger="interval", seconds=30)
-scheduler.add_job(func=generate_pending_carousel_images, trigger="interval", seconds=20)
-scheduler.start()
-
 
 def generate_content_pack(source_text):
     if not OPENAI_API_KEY:
@@ -1685,23 +1677,25 @@ Extra visual direction:
 {image_prompt}
 
 Requirements:
-- match the meaning and mood
-- avoid random unrelated objects
-- square 1:1 format
-- high quality
+- Match the meaning and mood of the post
+- Avoid random unrelated objects
+- Avoid generic stock image style
+- Square 1:1 format
+- High quality
+- Suitable for {platform}
 """
 
         styled_prompt = apply_image_style(enhanced_prompt, image_style)
-        image_url = generate_openai_image(styled_prompt)
+        placeholder_url = get_placeholder_image_url()
 
         post = Post(
-            file_url=image_url,
+            file_url=placeholder_url,
             file_type="image",
             prompt=styled_prompt,
             caption=caption,
             platforms=platform,
             post_type="single",
-            status="draft",
+            status="generating",
             sort_order=0,
             is_cover=False,
             user_id=current_user.id
@@ -1710,77 +1704,13 @@ Requirements:
         db.session.add(post)
         db.session.commit()
 
-        flash(f"{platform.title()} draft created successfully.", "success")
+        flash(f"{platform.title()} draft created. Image is generating in the background.", "success")
         return redirect(url_for("view_post", post_id=post.id))
 
     except Exception as e:
         print("Create platform draft error:", e)
         flash(f"Failed to create {platform} draft: {e}", "danger")
         return redirect(url_for("content_pack"))
-
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if current_user.is_authenticated:
-        return redirect(url_for("index"))
-
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "").strip()
-        confirm_password = request.form.get("confirm_password", "").strip()
-
-        if not email or not password:
-            flash("Please enter an email and password.", "danger")
-            return redirect(url_for("register"))
-
-        if password != confirm_password:
-            flash("Passwords do not match.", "danger")
-            return redirect(url_for("register"))
-
-        existing_user = User.query.filter_by(email=email).first()
-
-        if existing_user:
-            flash("An account with that email already exists.", "danger")
-            return redirect(url_for("register"))
-
-        user = User(
-            email=email,
-            password_hash=generate_password_hash(password)
-        )
-
-        db.session.add(user)
-        db.session.commit()
-
-        login_user(user)
-
-        flash("Account created successfully.", "success")
-        return redirect(url_for("index"))
-
-    return render_template("register.html")
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for("index"))
-
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "").strip()
-
-        user = User.query.filter_by(email=email).first()
-
-        if not user or not check_password_hash(user.password_hash, password):
-            flash("Invalid email or password.", "danger")
-            return redirect(url_for("login"))
-
-        login_user(user)
-
-        flash("Logged in successfully.", "success")
-        return redirect(url_for("index"))
-
-    return render_template("login.html")
-
 
 @app.route("/logout")
 @login_required
