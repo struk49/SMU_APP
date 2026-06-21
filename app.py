@@ -10,7 +10,14 @@ import pytz
 import requests
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, redirect, url_for, flash
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    logout_user,
+    login_required,
+    current_user,
+)
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -19,7 +26,6 @@ import cloudinary
 import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
-
 
 load_dotenv()
 
@@ -32,7 +38,9 @@ DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL or f"sqlite:///{os.path.join(BASE_DIR, 'posts.db')}"
+app.config["SQLALCHEMY_DATABASE_URI"] = (
+    DATABASE_URL or f"sqlite:///{os.path.join(BASE_DIR, 'posts.db')}"
+)
 print("DATABASE:", app.config["SQLALCHEMY_DATABASE_URI"][:50])
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
@@ -64,7 +72,6 @@ class User(UserMixin, db.Model):
     posts = db.relationship("Post", backref="user", lazy=True)
 
 
-
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     file_url = db.Column(db.String(500), nullable=False)
@@ -81,13 +88,12 @@ class Post(db.Model):
     sort_order = db.Column(db.Integer, default=0)
     is_cover = db.Column(db.Boolean, default=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    
-
 
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
 
 with app.app_context():
     db.create_all()
@@ -100,20 +106,31 @@ with app.app_context():
             conn.execute(db.text("ALTER TABLE post ADD COLUMN group_id VARCHAR(100)"))
 
         if "post_type" not in columns:
-            conn.execute(db.text("ALTER TABLE post ADD COLUMN post_type VARCHAR(50) DEFAULT 'single'"))
+            conn.execute(
+                db.text(
+                    "ALTER TABLE post ADD COLUMN post_type VARCHAR(50) DEFAULT 'single'"
+                )
+            )
 
         if "platforms" not in columns:
-            conn.execute(db.text("ALTER TABLE post ADD COLUMN platforms VARCHAR(200) DEFAULT 'instagram,facebook'"))
+            conn.execute(
+                db.text(
+                    "ALTER TABLE post ADD COLUMN platforms VARCHAR(200) DEFAULT 'instagram,facebook'"
+                )
+            )
 
         if "scheduled_time" not in columns:
             conn.execute(db.text("ALTER TABLE post ADD COLUMN scheduled_time DATETIME"))
 
         if "sort_order" not in columns:
-            conn.execute(db.text("ALTER TABLE post ADD COLUMN sort_order INTEGER DEFAULT 0"))
+            conn.execute(
+                db.text("ALTER TABLE post ADD COLUMN sort_order INTEGER DEFAULT 0")
+            )
 
         if "is_cover" not in columns:
-            conn.execute(db.text("ALTER TABLE post ADD COLUMN is_cover BOOLEAN DEFAULT 0"))
-
+            conn.execute(
+                db.text("ALTER TABLE post ADD COLUMN is_cover BOOLEAN DEFAULT 0")
+            )
 
         if "user_id" not in columns:
             conn.execute(db.text("ALTER TABLE post ADD COLUMN user_id INTEGER"))
@@ -138,9 +155,7 @@ def parse_platforms(platforms_string):
         return []
 
     return [
-        platform.strip()
-        for platform in platforms_string.split(",")
-        if platform.strip()
+        platform.strip() for platform in platforms_string.split(",") if platform.strip()
     ]
 
 
@@ -154,9 +169,7 @@ def convert_uk_time_to_utc(scheduled_time_str):
 
 def upload_to_cloudinary(file_or_url):
     return cloudinary.uploader.upload(
-        file_or_url,
-        folder="social_posts",
-        resource_type="auto"
+        file_or_url, folder="social_posts", resource_type="auto"
     )
 
 
@@ -165,10 +178,7 @@ def get_placeholder_image_url():
 
 
 def make_instagram_safe_url(url):
-    return url.replace(
-        "/upload/",
-        "/upload/c_fill,w_1080,h_1080,q_auto,f_jpg/"
-    )
+    return url.replace("/upload/", "/upload/c_fill,w_1080,h_1080,q_auto,f_jpg/")
 
 
 def apply_image_style(prompt, style):
@@ -225,8 +235,7 @@ def rewrite_caption_with_ai(caption, rewrite_type):
     }
 
     instruction = instructions.get(
-        rewrite_type,
-        "Improve this social media caption while keeping the meaning."
+        rewrite_type, "Improve this social media caption while keeping the meaning."
     )
 
     prompt = f"""
@@ -264,16 +273,14 @@ def generate_openai_image(prompt):
         prompt=prompt,
         size="1024x1024",
         quality="medium",
-        output_format="jpeg"
+        output_format="jpeg",
     )
 
     image_base64 = result.data[0].b64_json
     image_bytes = base64.b64decode(image_base64)
 
     upload_result = cloudinary.uploader.upload(
-        image_bytes,
-        folder="social_posts",
-        resource_type="image"
+        image_bytes, folder="social_posts", resource_type="image"
     )
 
     return upload_result["secure_url"]
@@ -327,11 +334,11 @@ def build_single_payload(post):
 
 
 def get_ordered_carousel_posts(group_id):
-    return Post.query.filter_by(group_id=group_id).order_by(
-        Post.is_cover.desc(),
-        Post.sort_order.asc(),
-        Post.id.asc()
-    ).all()
+    return (
+        Post.query.filter_by(group_id=group_id)
+        .order_by(Post.is_cover.desc(), Post.sort_order.asc(), Post.id.asc())
+        .all()
+    )
 
 
 def build_carousel_payload(group_id):
@@ -454,11 +461,15 @@ def check_scheduled_posts():
     with app.app_context():
         now = datetime.utcnow()
 
-        posts = Post.query.filter(
-            Post.scheduled_time != None,
-            Post.status == "scheduled",
-            Post.scheduled_time <= now
-        ).order_by(Post.sort_order.asc(), Post.id.asc()).all()
+        posts = (
+            Post.query.filter(
+                Post.scheduled_time != None,
+                Post.status == "scheduled",
+                Post.scheduled_time <= now,
+            )
+            .order_by(Post.sort_order.asc(), Post.id.asc())
+            .all()
+        )
 
         processed_groups = set()
 
@@ -505,13 +516,11 @@ def generate_pending_carousel_images():
         post = None
 
         try:
-            post = Post.query.filter_by(
-                status="generating",
-                file_type="image"
-            ).order_by(
-                Post.created_at.asc(),
-                Post.sort_order.asc()
-            ).first()
+            post = (
+                Post.query.filter_by(status="generating", file_type="image")
+                .order_by(Post.created_at.asc(), Post.sort_order.asc())
+                .first()
+            )
 
             if not post:
                 return
@@ -540,6 +549,7 @@ def generate_pending_carousel_images():
                 except Exception as inner_error:
                     db.session.rollback()
                     print("Failed to mark post as failed:", inner_error)
+
 
 def generate_content_pack(source_text):
     if not OPENAI_API_KEY:
@@ -665,15 +675,21 @@ def index():
         Post.created_at.desc(),
         Post.is_cover.desc(),
         Post.sort_order.asc(),
-        Post.id.asc()
+        Post.id.asc(),
     ).all()
 
     stats = {
         "total": Post.query.filter_by(user_id=current_user.id).count(),
         "drafts": Post.query.filter_by(user_id=current_user.id, status="draft").count(),
-        "scheduled": Post.query.filter_by(user_id=current_user.id, status="scheduled").count(),
-        "sent": Post.query.filter_by(user_id=current_user.id, status="sent_to_make").count(),
-        "carousels": Post.query.filter_by(user_id=current_user.id, post_type="carousel").count(),
+        "scheduled": Post.query.filter_by(
+            user_id=current_user.id, status="scheduled"
+        ).count(),
+        "sent": Post.query.filter_by(
+            user_id=current_user.id, status="sent_to_make"
+        ).count(),
+        "carousels": Post.query.filter_by(
+            user_id=current_user.id, post_type="carousel"
+        ).count(),
     }
 
     return render_template(
@@ -683,7 +699,7 @@ def index():
         type_filter=type_filter,
         platform_filter=platform_filter,
         search_query=search_query,
-        stats=stats
+        stats=stats,
     )
 
 
@@ -712,9 +728,7 @@ def create_post():
             scheduled_time = convert_uk_time_to_utc(scheduled_time_str)
 
         original_files = [
-            (index, file)
-            for index, file in enumerate(files)
-            if file.filename != ""
+            (index, file) for index, file in enumerate(files) if file.filename != ""
         ]
 
         ordered_items = original_files
@@ -780,7 +794,7 @@ def create_post():
                         group_id=group_id,
                         sort_order=index,
                         is_cover=(index == 0),
-                        user_id=current_user.id
+                        user_id=current_user.id,
                     )
 
                     db.session.add(post)
@@ -797,7 +811,10 @@ def create_post():
 
             if has_files:
                 if make_carousel and len(uploaded_files) > 10:
-                    flash("Instagram carousel posts can only contain up to 10 images.", "danger")
+                    flash(
+                        "Instagram carousel posts can only contain up to 10 images.",
+                        "danger",
+                    )
                     return redirect(url_for("create_post"))
 
                 is_carousel = make_carousel and len(uploaded_files) > 1
@@ -824,7 +841,7 @@ def create_post():
                         group_id=group_id,
                         sort_order=index,
                         is_cover=(is_carousel and index == 0),
-                        user_id=current_user.id
+                        user_id=current_user.id,
                     )
 
                     db.session.add(post)
@@ -861,11 +878,7 @@ def view_post(post_id):
     if post.group_id:
         carousel_posts = get_ordered_carousel_posts(post.group_id)
 
-    return render_template(
-        "view_post.html",
-        post=post,
-        carousel_posts=carousel_posts
-    )
+    return render_template("view_post.html", post=post, carousel_posts=carousel_posts)
 
 
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
@@ -1008,7 +1021,7 @@ def duplicate_post(post_id):
             group_id=None,
             scheduled_time=None,
             sent_at=None,
-            user_id=current_user.id
+            user_id=current_user.id,
         )
 
         db.session.add(new_post)
@@ -1050,7 +1063,7 @@ def duplicate_carousel(group_id):
                 is_cover=post.is_cover,
                 scheduled_time=None,
                 sent_at=None,
-                user_id=current_user.id
+                user_id=current_user.id,
             )
 
             db.session.add(new_post)
@@ -1313,7 +1326,7 @@ def tiktok_repurpose():
         "tiktok.html",
         tiktok_url=tiktok_url,
         transcript=transcript,
-        generated_content=generated_content
+        generated_content=generated_content,
     )
 
 
@@ -1346,7 +1359,7 @@ def create_tiktok_draft():
             status="draft",
             sort_order=0,
             is_cover=False,
-            user_id=current_user.id
+            user_id=current_user.id,
         )
 
         db.session.add(post)
@@ -1393,9 +1406,7 @@ def create_tiktok_carousel_draft():
 
         if not slides:
             slides = [
-                line.strip()
-                for line in carousel_idea.splitlines()
-                if line.strip()
+                line.strip() for line in carousel_idea.splitlines() if line.strip()
             ]
 
         slides = slides[:6]
@@ -1456,19 +1467,23 @@ Design style:
                 group_id=group_id,
                 sort_order=index,
                 is_cover=(index == 0),
-                user_id=current_user.id
+                user_id=current_user.id,
             )
 
             db.session.add(post)
 
         db.session.commit()
 
-        first_post = Post.query.filter_by(
-            group_id=group_id,
-            user_id=current_user.id
-        ).order_by(Post.sort_order.asc()).first()
+        first_post = (
+            Post.query.filter_by(group_id=group_id, user_id=current_user.id)
+            .order_by(Post.sort_order.asc())
+            .first()
+        )
 
-        flash("TikTok carousel draft created. Images are generating in the background.", "success")
+        flash(
+            "TikTok carousel draft created. Images are generating in the background.",
+            "success",
+        )
         return redirect(url_for("view_post", post_id=first_post.id))
 
     except Exception as e:
@@ -1506,21 +1521,22 @@ def content_pack():
     return render_template(
         "content_pack.html",
         source_text=source_text,
-        content_pack_result=content_pack_result
+        content_pack_result=content_pack_result,
     )
 
 
 @app.route("/calendar")
 @login_required
 def calendar_view():
-    scheduled_posts = Post.query.filter(
-        Post.user_id == current_user.id,
-        Post.scheduled_time != None,
-        Post.status == "scheduled"
-    ).order_by(
-        Post.scheduled_time.asc(),
-        Post.created_at.asc()
-    ).all()
+    scheduled_posts = (
+        Post.query.filter(
+            Post.user_id == current_user.id,
+            Post.scheduled_time != None,
+            Post.status == "scheduled",
+        )
+        .order_by(Post.scheduled_time.asc(), Post.created_at.asc())
+        .all()
+    )
 
     grouped_posts = {}
 
@@ -1568,9 +1584,7 @@ def create_content_pack_carousel():
 
         if not slides:
             slides = [
-                line.strip()
-                for line in carousel_idea.splitlines()
-                if line.strip()
+                line.strip() for line in carousel_idea.splitlines() if line.strip()
             ]
 
         slides = slides[:6]
@@ -1611,19 +1625,23 @@ Design:
                 group_id=group_id,
                 sort_order=index,
                 is_cover=(index == 0),
-                user_id=current_user.id
+                user_id=current_user.id,
             )
 
             db.session.add(post)
 
         db.session.commit()
 
-        first_post = Post.query.filter_by(
-            group_id=group_id,
-            user_id=current_user.id
-        ).order_by(Post.sort_order.asc()).first()
+        first_post = (
+            Post.query.filter_by(group_id=group_id, user_id=current_user.id)
+            .order_by(Post.sort_order.asc())
+            .first()
+        )
 
-        flash("Carousel draft created. Images are generating in the background.", "success")
+        flash(
+            "Carousel draft created. Images are generating in the background.",
+            "success",
+        )
         return redirect(url_for("view_post", post_id=first_post.id))
 
     except Exception as e:
@@ -1639,7 +1657,14 @@ def create_content_pack_platform_draft():
     platform = request.form.get("platform", "").strip()
     image_style = request.form.get("image_style", "").strip()
 
-    allowed_platforms = ["instagram", "facebook", "linkedin", "pinterest", "reddit", "x"]
+    allowed_platforms = [
+        "instagram",
+        "facebook",
+        "linkedin",
+        "pinterest",
+        "reddit",
+        "x",
+    ]
 
     if not content_pack_result:
         flash("No content pack found.", "danger")
@@ -1665,7 +1690,9 @@ def create_content_pack_platform_draft():
 
     elif platform == "pinterest":
         title = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_TITLE")
-        description = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_DESCRIPTION")
+        description = extract_content_pack_section(
+            content_pack_result, "PINTEREST_PIN_DESCRIPTION"
+        )
         caption = f"{title}\n\n{description}".strip()
 
     elif platform == "reddit":
@@ -1710,13 +1737,16 @@ Requirements:
             status="generating",
             sort_order=0,
             is_cover=False,
-            user_id=current_user.id
+            user_id=current_user.id,
         )
 
         db.session.add(post)
         db.session.commit()
 
-        flash(f"{platform.title()} draft created. Image is generating in the background.", "success")
+        flash(
+            f"{platform.title()} draft created. Image is generating in the background.",
+            "success",
+        )
         return redirect(url_for("view_post", post_id=post.id))
 
     except Exception as e:
@@ -1724,12 +1754,14 @@ Requirements:
         flash(f"Failed to create {platform} draft: {e}", "danger")
         return redirect(url_for("content_pack"))
 
+
 @app.route("/logout")
 @login_required
 def logout():
     logout_user()
     flash("Logged out successfully.", "success")
     return redirect(url_for("login"))
+
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
@@ -1752,7 +1784,50 @@ def login():
         return redirect(url_for("index"))
 
     return render_template("login.html")
-    
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
+
+        if not email or not password:
+            flash("Please enter an email and password.", "danger")
+            return redirect(url_for("register"))
+
+        if password != confirm_password:
+            flash("Passwords do not match.", "danger")
+            return redirect(url_for("register"))
+
+        existing_user = User.query.filter_by(email=email).first()
+
+        if existing_user:
+            flash("An account with that email already exists.", "danger")
+            return redirect(url_for("register"))
+
+        user = User(email=email, password_hash=generate_password_hash(password))
+
+        db.session.add(user)
+        db.session.commit()
+
+        login_user(user)
+
+        flash("Account created successfully.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("register.html")
+
+
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(generate_pending_carousel_images, "interval", seconds=20)
+scheduler.start()
+
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
