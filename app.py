@@ -69,6 +69,13 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    brand_brief = db.relationship(
+        "BrandBrief",
+        backref="user",
+        uselist=False,
+        lazy=True
+    )
+
     posts = db.relationship("Post", backref="user", lazy=True)
 
 
@@ -90,6 +97,25 @@ class Post(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
 
 
+class BrandBrief(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, unique=True)
+
+    business_name = db.Column(db.String(200))
+    niche = db.Column(db.String(200))
+    target_audience = db.Column(db.Text)
+    offer = db.Column(db.Text)
+    tone_of_voice = db.Column(db.String(200))
+    content_goals = db.Column(db.Text)
+    main_platforms = db.Column(db.String(300))
+    cta_style = db.Column(db.String(200))
+    words_to_avoid = db.Column(db.Text)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -99,6 +125,11 @@ with app.app_context():
     db.create_all()
 
     inspector = db.inspect(db.engine)
+
+    # Create brand_brief table if missing
+    if "brand_brief" not in inspector.get_table_names():
+        db.create_all()
+
     columns = [col["name"] for col in inspector.get_columns("post")]
 
     with db.engine.connect() as conn:
@@ -112,28 +143,7 @@ with app.app_context():
                 )
             )
 
-        if "platforms" not in columns:
-            conn.execute(
-                db.text(
-                    "ALTER TABLE post ADD COLUMN platforms VARCHAR(200) DEFAULT 'instagram,facebook'"
-                )
-            )
-
-        if "scheduled_time" not in columns:
-            conn.execute(db.text("ALTER TABLE post ADD COLUMN scheduled_time DATETIME"))
-
-        if "sort_order" not in columns:
-            conn.execute(
-                db.text("ALTER TABLE post ADD COLUMN sort_order INTEGER DEFAULT 0")
-            )
-
-        if "is_cover" not in columns:
-            conn.execute(
-                db.text("ALTER TABLE post ADD COLUMN is_cover BOOLEAN DEFAULT 0")
-            )
-
-        if "user_id" not in columns:
-            conn.execute(db.text("ALTER TABLE post ADD COLUMN user_id INTEGER"))
+        # keep the rest of your existing column checks here...
 
         conn.commit()
 
@@ -414,7 +424,10 @@ def extract_tiktok_transcript(tiktok_url):
     return transcript
 
 
-def repurpose_tiktok_content(transcript):
+def repurpose_tiktok_content(
+    transcript,
+    brand_context=""
+):
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is missing from your .env file")
 
@@ -422,6 +435,9 @@ def repurpose_tiktok_content(transcript):
 You are a social media content repurposing assistant.
 
 Turn this TikTok transcript into content for Instagram and Facebook.
+
+Brand Brief:
+{brand_context}
 
 Return the result in this exact format:
 
@@ -551,12 +567,15 @@ def generate_pending_carousel_images():
                     print("Failed to mark post as failed:", inner_error)
 
 
-def generate_content_pack(source_text):
+def generate_content_pack(source_text, brand_context=""):
     if not OPENAI_API_KEY:
         raise Exception("OPENAI_API_KEY is missing from your .env file")
 
     prompt = f"""
 You are a social media content repurposing assistant.
+
+Brand Brief:
+{brand_context}
 
 Turn this source content into a full social media content pack.
 
@@ -639,6 +658,48 @@ def extract_content_pack_section(text, section_name):
 
     return text[content_start:content_end].strip()
 
+
+def build_brand_context(user_id):
+    brief = BrandBrief.query.filter_by(user_id=user_id).first()
+
+    if not brief:
+        return ""
+
+    return f"""
+BRAND BRIEF
+
+Business Name:
+{brief.business_name}
+
+Niche:
+{brief.niche}
+
+Target Audience:
+{brief.target_audience}
+
+Offer:
+{brief.offer}
+
+Tone Of Voice:
+{brief.tone_of_voice}
+
+Content Goals:
+{brief.content_goals}
+
+Platforms:
+{brief.main_platforms}
+
+CTA Style:
+{brief.cta_style}
+
+Words To Avoid:
+{brief.words_to_avoid}
+
+IMPORTANT:
+All content must match this brand brief.
+Do not create generic content.
+Use the tone, audience and offer above.
+"""
 
 @app.route("/")
 @login_required
@@ -728,7 +789,9 @@ def create_post():
             scheduled_time = convert_uk_time_to_utc(scheduled_time_str)
 
         original_files = [
-            (index, file) for index, file in enumerate(files) if file.filename != ""
+            (index, file)
+            for index, file in enumerate(files)
+            if file.filename != ""
         ]
 
         ordered_items = original_files
@@ -775,8 +838,27 @@ def create_post():
         try:
             if prompt and not has_files:
                 image_count = 3 if make_carousel else 1
-                styled_prompt = apply_image_style(prompt, image_style)
-                image_urls = generate_multiple_openai_images(styled_prompt, image_count)
+
+                brand_context = build_brand_context(current_user.id)
+
+                branded_prompt = f"""
+{brand_context}
+
+Create a branded social media image.
+
+User Request:
+{prompt}
+"""
+
+                styled_prompt = apply_image_style(
+                    branded_prompt,
+                    image_style
+                )
+
+                image_urls = generate_multiple_openai_images(
+                    styled_prompt,
+                    image_count
+                )
 
                 group_id = str(uuid.uuid4()) if make_carousel else None
                 created_posts = []
@@ -862,7 +944,6 @@ def create_post():
             return redirect(url_for("create_post"))
 
     return render_template("create_post.html")
-
 
 @app.route("/post/<int:post_id>")
 @login_required
@@ -1316,7 +1397,12 @@ def tiktok_repurpose():
 
         try:
             transcript = extract_tiktok_transcript(tiktok_url)
-            generated_content = repurpose_tiktok_content(transcript)
+            brand_context = build_brand_context(current_user.id)
+
+            generated_content = repurpose_tiktok_content(
+                transcript,
+                brand_context
+            )
 
         except Exception as e:
             print("TikTok repurpose error:", e)
@@ -1391,7 +1477,20 @@ def create_tiktok_carousel_draft():
         return redirect(url_for("tiktok_repurpose"))
 
     try:
-        styled_image_prompt = apply_image_style(image_prompt, image_style)
+        brand_context = build_brand_context(
+    current_user.id
+)
+
+        image_prompt = f"""
+        {brand_context}
+
+        {image_prompt}
+        """
+
+        styled_image_prompt = apply_image_style(
+            image_prompt,
+            image_style
+        )
 
         slides = []
 
@@ -1512,7 +1611,8 @@ def content_pack():
             else:
                 source_text = source_input
 
-            content_pack_result = generate_content_pack(source_text)
+            brand_context = build_brand_context(current_user.id)
+            content_pack_result = generate_content_pack(source_text, brand_context)
 
         except Exception as e:
             print("Content pack error:", e)
@@ -1523,6 +1623,34 @@ def content_pack():
         source_text=source_text,
         content_pack_result=content_pack_result,
     )
+
+
+@app.route("/brand-brief", methods=["GET", "POST"])
+@login_required
+def brand_brief():
+    brief = BrandBrief.query.filter_by(user_id=current_user.id).first()
+
+    if request.method == "POST":
+        if not brief:
+            brief = BrandBrief(user_id=current_user.id)
+            db.session.add(brief)
+
+        brief.business_name = request.form.get("business_name", "").strip()
+        brief.niche = request.form.get("niche", "").strip()
+        brief.target_audience = request.form.get("target_audience", "").strip()
+        brief.offer = request.form.get("offer", "").strip()
+        brief.tone_of_voice = request.form.get("tone_of_voice", "").strip()
+        brief.content_goals = request.form.get("content_goals", "").strip()
+        brief.main_platforms = ",".join(request.form.getlist("main_platforms"))
+        brief.cta_style = request.form.get("cta_style", "").strip()
+        brief.words_to_avoid = request.form.get("words_to_avoid", "").strip()
+
+        db.session.commit()
+
+        flash("Brand Brief saved successfully.", "success")
+        return redirect(url_for("brand_brief"))
+
+    return render_template("brand_brief.html", brief=brief)
 
 
 @app.route("/calendar")
@@ -1679,6 +1807,7 @@ def create_content_pack_platform_draft():
 
     if platform == "instagram":
         caption = extract_content_pack_section(content_pack_result, "INSTAGRAM_CAPTION")
+
         if hashtags:
             caption = caption + "\n\n" + hashtags
 
@@ -1691,7 +1820,8 @@ def create_content_pack_platform_draft():
     elif platform == "pinterest":
         title = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_TITLE")
         description = extract_content_pack_section(
-            content_pack_result, "PINTEREST_PIN_DESCRIPTION"
+            content_pack_result,
+            "PINTEREST_PIN_DESCRIPTION"
         )
         caption = f"{title}\n\n{description}".strip()
 
@@ -1706,13 +1836,18 @@ def create_content_pack_platform_draft():
         return redirect(url_for("content_pack"))
 
     try:
+        brand_context = build_brand_context(current_user.id)
+
         enhanced_prompt = f"""
+Brand Brief:
+{brand_context}
+
 Create a social media image for this {platform} post.
 
-Post caption:
+Post Caption:
 {caption}
 
-Extra visual direction:
+Extra Visual Direction:
 {image_prompt}
 
 Requirements:
@@ -1755,36 +1890,6 @@ Requirements:
         return redirect(url_for("content_pack"))
 
 
-@app.route("/logout")
-@login_required
-def logout():
-    logout_user()
-    flash("Logged out successfully.", "success")
-    return redirect(url_for("login"))
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for("index"))
-
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "").strip()
-
-        user = User.query.filter_by(email=email).first()
-
-        if not user or not check_password_hash(user.password_hash, password):
-            flash("Invalid email or password.", "danger")
-            return redirect(url_for("login"))
-
-        login_user(user)
-
-        flash("Logged in successfully.", "success")
-        return redirect(url_for("index"))
-
-    return render_template("login.html")
-
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -1810,7 +1915,10 @@ def register():
             flash("An account with that email already exists.", "danger")
             return redirect(url_for("register"))
 
-        user = User(email=email, password_hash=generate_password_hash(password))
+        user = User(
+            email=email,
+            password_hash=generate_password_hash(password)
+        )
 
         db.session.add(user)
         db.session.commit()
@@ -1823,11 +1931,49 @@ def register():
     return render_template("register.html")
 
 
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "").strip()
+
+        user = User.query.filter_by(email=email).first()
+
+        if not user or not check_password_hash(user.password_hash, password):
+            flash("Invalid email or password.", "danger")
+            return redirect(url_for("login"))
+
+        login_user(user)
+
+        flash("Logged in successfully.", "success")
+        return redirect(url_for("index"))
+
+    return render_template("login.html")
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    logout_user()
+    flash("Logged out successfully.", "success")
+    return redirect(url_for("login"))
+
+
+print("Starting background scheduler...")
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(generate_pending_carousel_images, "interval", seconds=20)
+scheduler.add_job(
+    generate_pending_carousel_images,
+    "interval",
+    seconds=20,
+    max_instances=1
+)
 scheduler.start()
 
+print("Background scheduler started.")
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

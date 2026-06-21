@@ -41,6 +41,10 @@
                     <a href="{{ url_for('calendar_view') }}" class="app-nav-link">
                         Calendar
                     </a>
+                     <a href="{{ url_for('brand_brief') }}" class="app-nav-link">
+    Brand Brief
+</a>
+
 
                     <span class="app-user">
                         {{ current_user.email }}
@@ -50,6 +54,7 @@
                         Logout
                     </a>
 
+                   
                 {% else %}
 
                     <a href="{{ url_for('login') }}" class="app-nav-link">
