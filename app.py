@@ -44,7 +44,16 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 print("DATABASE:", app.config["SQLALCHEMY_DATABASE_URI"][:50])
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+    "pool_size": 5,
+    "max_overflow": 2,
+}
+
 db = SQLAlchemy(app)
+
+
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = "login"
@@ -95,7 +104,9 @@ class Post(db.Model):
     sort_order = db.Column(db.Integer, default=0)
     is_cover = db.Column(db.Boolean, default=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-
+    grade_result = db.Column(db.Text, nullable=True)
+    grade_score = db.Column(db.Float, nullable=True)
+    graded_at = db.Column(db.DateTime, nullable=True)
 
 class BrandBrief(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -142,6 +153,15 @@ with app.app_context():
                     "ALTER TABLE post ADD COLUMN post_type VARCHAR(50) DEFAULT 'single'"
                 )
             )
+        
+        if "grade_result" not in columns:
+            conn.execute(db.text("ALTER TABLE post ADD COLUMN grade_result TEXT"))
+
+        if "grade_score" not in columns:
+            conn.execute(db.text("ALTER TABLE post ADD COLUMN grade_score FLOAT"))
+
+        if "graded_at" not in columns:
+            conn.execute(db.text("ALTER TABLE post ADD COLUMN graded_at TIMESTAMP"))
 
         # keep the rest of your existing column checks here...
 
@@ -700,6 +720,79 @@ All content must match this brand brief.
 Do not create generic content.
 Use the tone, audience and offer above.
 """
+
+def grade_post_with_ai(post, brand_context=""):
+    prompt = f"""
+You are an expert social media strategist and content reviewer.
+
+Your job is to grade this social media post for effectiveness.
+
+Brand Brief:
+{brand_context}
+
+Post Caption:
+{post.caption or ""}
+
+Platform:
+{post.platforms or ""}
+
+Post Type:
+{post.post_type or "single"}
+
+Please score the post out of 10 for each category:
+
+1. Hook
+2. Clarity
+3. Engagement
+4. Call To Action
+5. Platform Fit
+6. Brand Fit
+
+Then provide:
+- OVERALL_SCORE: a single score out of 10
+- STRENGTHS: short bullet points
+- IMPROVEMENTS: short bullet points with specific advice
+
+Return the result in this exact format:
+
+HOOK_SCORE: X/10
+CLARITY_SCORE: X/10
+ENGAGEMENT_SCORE: X/10
+CTA_SCORE: X/10
+PLATFORM_FIT_SCORE: X/10
+BRAND_FIT_SCORE: X/10
+OVERALL_SCORE: X/10
+
+STRENGTHS:
+- ...
+- ...
+
+IMPROVEMENTS:
+- ...
+- ...
+"""
+
+    response = openai_client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+    )
+
+    return response.output_text.strip()
+
+
+def extract_overall_score(grade_result):
+    if not grade_result:
+        return None
+
+    match = re.search(r"OVERALL_SCORE:\s*([0-9]+(?:\.[0-9]+)?)\/10", grade_result)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            return None
+
+    return None
+
 
 @app.route("/")
 @login_required
@@ -1888,6 +1981,89 @@ Requirements:
         print("Create platform draft error:", e)
         flash(f"Failed to create {platform} draft: {e}", "danger")
         return redirect(url_for("content_pack"))
+    
+
+
+def grade_post_with_ai(post, brand_context=""):
+    prompt = f"""
+You are an expert social media strategist and content reviewer.
+
+Brand Brief:
+{brand_context}
+
+Post Caption:
+{post.caption or ""}
+
+Platform:
+{post.platforms or ""}
+
+Post Type:
+{post.post_type or "single"}
+
+Score the post out of 10 for:
+1. Hook
+2. Clarity
+3. Engagement
+4. Call To Action
+5. Platform Fit
+6. Brand Fit
+
+Return exactly:
+
+HOOK_SCORE: X/10
+CLARITY_SCORE: X/10
+ENGAGEMENT_SCORE: X/10
+CTA_SCORE: X/10
+PLATFORM_FIT_SCORE: X/10
+BRAND_FIT_SCORE: X/10
+OVERALL_SCORE: X/10
+
+STRENGTHS:
+- ...
+
+IMPROVEMENTS:
+- ...
+"""
+
+    response = openai_client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+    )
+
+    return response.output_text.strip()
+
+
+def extract_overall_score(grade_result):
+    match = re.search(r"OVERALL_SCORE:\s*([0-9]+(?:\.[0-9]+)?)\/10", grade_result or "")
+    return float(match.group(1)) if match else None
+
+
+@app.route("/post/<int:post_id>/grade", methods=["POST"])
+@login_required
+def grade_post(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    try:
+        brand_context = build_brand_context(current_user.id)
+        grade_result = grade_post_with_ai(post, brand_context)
+        overall_score = extract_overall_score(grade_result)
+
+        post.grade_result = grade_result
+        post.grade_score = overall_score
+        post.graded_at = datetime.utcnow()
+
+        db.session.commit()
+
+        flash("Post graded successfully.", "success")
+
+    except Exception as e:
+        print("Post grading error:", e)
+        flash(f"Failed to grade post: {e}", "danger")
+
+    return redirect(url_for("view_post", post_id=post.id))
 
 
 
@@ -1962,6 +2138,8 @@ def logout():
     return redirect(url_for("login"))
 
 
+
+
 print("Starting background scheduler...")
 
 scheduler = BackgroundScheduler()
@@ -1974,6 +2152,9 @@ scheduler.add_job(
 scheduler.start()
 
 print("Background scheduler started.")
+
+
+
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
