@@ -84,8 +84,28 @@ class User(UserMixin, db.Model):
         uselist=False,
         lazy=True
     )
+    connected_account = db.relationship(
+    "ConnectedAccount",
+    backref="user",
+    uselist=False,
+    lazy=True
+)
 
     posts = db.relationship("Post", backref="user", lazy=True)
+
+
+class PostRevision(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+
+    post_id = db.Column(db.Integer, db.ForeignKey("post.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+
+    version_number = db.Column(db.Integer, nullable=False)
+    caption = db.Column(db.Text, nullable=False)
+    score = db.Column(db.Float, nullable=True)
+    source = db.Column(db.String(50), default="manual")
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Post(db.Model):
@@ -107,6 +127,16 @@ class Post(db.Model):
     grade_result = db.Column(db.Text, nullable=True)
     grade_score = db.Column(db.Float, nullable=True)
     graded_at = db.Column(db.DateTime, nullable=True)
+    # AI Improved Version
+    improved_caption = db.Column(db.Text, nullable=True)
+    improved_at = db.Column(db.DateTime, nullable=True)
+
+    revisions = db.relationship(
+    "PostRevision",
+    backref="post",
+    lazy=True,
+    cascade="all, delete-orphan"
+)
 
 class BrandBrief(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -127,6 +157,25 @@ class BrandBrief(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class ConnectedAccount(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, unique=True)
+
+    instagram_connected = db.Column(db.Boolean, default=False)
+    facebook_connected = db.Column(db.Boolean, default=False)
+    linkedin_connected = db.Column(db.Boolean, default=False)
+    pinterest_connected = db.Column(db.Boolean, default=False)
+    reddit_connected = db.Column(db.Boolean, default=False)
+    x_connected = db.Column(db.Boolean, default=False)
+
+    make_webhook_single = db.Column(db.String(500))
+    make_webhook_carousel = db.Column(db.String(500))
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -137,7 +186,6 @@ with app.app_context():
 
     inspector = db.inspect(db.engine)
 
-    # Create brand_brief table if missing
     if "brand_brief" not in inspector.get_table_names():
         db.create_all()
 
@@ -153,7 +201,7 @@ with app.app_context():
                     "ALTER TABLE post ADD COLUMN post_type VARCHAR(50) DEFAULT 'single'"
                 )
             )
-        
+
         if "grade_result" not in columns:
             conn.execute(db.text("ALTER TABLE post ADD COLUMN grade_result TEXT"))
 
@@ -163,10 +211,17 @@ with app.app_context():
         if "graded_at" not in columns:
             conn.execute(db.text("ALTER TABLE post ADD COLUMN graded_at TIMESTAMP"))
 
-        # keep the rest of your existing column checks here...
+        if "improved_caption" not in columns:
+            conn.execute(
+                db.text("ALTER TABLE post ADD COLUMN improved_caption TEXT")
+            )
+
+        if "improved_at" not in columns:
+            conn.execute(
+                db.text("ALTER TABLE post ADD COLUMN improved_at TIMESTAMP")
+            )
 
         conn.commit()
-
 
 def get_file_type(filename: str) -> str:
     ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
@@ -326,27 +381,20 @@ def generate_multiple_openai_images(prompt, count=1):
     return image_urls
 
 
-def send_payload_to_make(payload):
-    if payload.get("post_type") == "carousel":
-        webhook_url = MAKE_WEBHOOK_CAROUSEL
-        webhook_name = "CAROUSEL"
-    else:
-        webhook_url = MAKE_WEBHOOK_SINGLE
-        webhook_name = "SINGLE"
+def send_payload_to_make(payload, webhook_url=None):
+    if not webhook_url:
+        if payload.get("post_type") == "carousel":
+            webhook_url = os.getenv("MAKE_WEBHOOK_CAROUSEL")
+        else:
+            webhook_url = os.getenv("MAKE_WEBHOOK_SINGLE")
 
     if not webhook_url:
-        raise Exception(f"{webhook_name} webhook URL is missing from your .env file")
-
-    print(f"Sending to {webhook_name} webhook:")
-    print(json.dumps(payload, indent=2))
+        raise Exception("No Make webhook configured.")
 
     response = requests.post(webhook_url, json=payload, timeout=30)
 
-    print("Make status:", response.status_code)
-    print("Make response:", response.text)
-
     if response.status_code >= 400:
-        raise Exception(f"Make.com error {response.status_code}: {response.text}")
+        raise Exception(f"Make webhook failed: {response.status_code} {response.text}")
 
     return response
 
@@ -792,6 +840,30 @@ def extract_overall_score(grade_result):
             return None
 
     return None
+
+
+def save_post_revision(post, source="manual"):
+    latest_revision = PostRevision.query.filter_by(
+        post_id=post.id,
+        user_id=post.user_id
+    ).order_by(PostRevision.version_number.desc()).first()
+
+    next_version = 1
+
+    if latest_revision:
+        next_version = latest_revision.version_number + 1
+
+    revision = PostRevision(
+        post_id=post.id,
+        user_id=post.user_id,
+        version_number=next_version,
+        caption=post.caption or "",
+        score=post.grade_score,
+        source=source
+    )
+
+    db.session.add(revision)
+    return revision
 
 
 @app.route("/")
@@ -1255,6 +1327,42 @@ def duplicate_carousel(group_id):
         flash(f"Failed to duplicate carousel: {e}", "danger")
         return redirect(url_for("index"))
 
+def get_user_connected_accounts():
+    return ConnectedAccount.query.filter_by(user_id=current_user.id).first()
+
+
+def get_enabled_platforms_for_user(selected_platforms):
+    accounts = get_user_connected_accounts()
+
+    if not accounts:
+        return []
+
+    platform_map = {
+        "instagram": accounts.instagram_connected,
+        "facebook": accounts.facebook_connected,
+        "linkedin": accounts.linkedin_connected,
+        "pinterest": accounts.pinterest_connected,
+        "reddit": accounts.reddit_connected,
+        "x": accounts.x_connected,
+    }
+
+    return [
+        platform for platform in selected_platforms
+        if platform_map.get(platform, False)
+    ]
+
+
+def get_user_make_webhook(post_type):
+    accounts = get_user_connected_accounts()
+
+    if not accounts:
+        return None
+
+    if post_type == "carousel":
+        return accounts.make_webhook_carousel or None
+
+    return accounts.make_webhook_single or None
+
 
 @app.route("/send/<int:post_id>", methods=["POST"])
 @login_required
@@ -1272,8 +1380,14 @@ def send_to_make(post_id):
             if not payload:
                 flash("Carousel payload could not be built.", "danger")
                 return redirect(url_for("index"))
+            selected_platforms = post.platforms.split(",") if post.platforms else []
+            enabled_platforms = get_enabled_platforms_for_user(selected_platforms)
 
-            send_payload_to_make(payload)
+            if not enabled_platforms:
+                flash("No connected platforms enabled for this post. Check Connected Accounts.", "danger")
+                return redirect(url_for("view_post", post_id=post.id))
+
+            send_payload_to_make(payload, webhook_url)
 
             group_posts = get_ordered_carousel_posts(post.group_id)
 
@@ -1288,6 +1402,14 @@ def send_to_make(post_id):
 
         payload = build_single_payload(post)
         send_payload_to_make(payload)
+        payload["platforms"] = enabled_platforms
+        webhook_url = get_user_make_webhook("single")
+
+        if not webhook_url:
+            flash("No single post webhook configured. Add it in Connected Accounts.", "danger")
+            return redirect(url_for("view_post", post_id=post.id))
+
+        send_payload_to_make(payload, webhook_url)
 
         post.status = "sent_to_make"
         post.sent_at = datetime.utcnow()
@@ -1313,13 +1435,34 @@ def send_carousel_to_make(group_id):
         return redirect(url_for("index"))
 
     try:
+        selected_platforms = posts[0].platforms.split(",") if posts[0].platforms else []
+        enabled_platforms = get_enabled_platforms_for_user(selected_platforms)
+
+        if not enabled_platforms:
+            flash(
+                "No connected platforms enabled for this carousel. Check Connected Accounts.",
+                "danger",
+            )
+            return redirect(url_for("view_post", post_id=posts[0].id))
+
+        webhook_url = get_user_make_webhook("carousel")
+
+        if not webhook_url:
+            flash(
+                "No carousel webhook configured. Add it in Connected Accounts.",
+                "danger",
+            )
+            return redirect(url_for("view_post", post_id=posts[0].id))
+
         payload = build_carousel_payload(group_id)
 
         if not payload:
             flash("Carousel payload could not be built.", "danger")
             return redirect(url_for("index"))
 
-        send_payload_to_make(payload)
+        payload["platforms"] = enabled_platforms
+
+        send_payload_to_make(payload, webhook_url)
 
         for post in posts:
             post.status = "sent_to_make"
@@ -1328,12 +1471,12 @@ def send_carousel_to_make(group_id):
         db.session.commit()
 
         flash("Carousel sent to Make.com successfully.", "success")
+        return redirect(url_for("index"))
 
     except Exception as e:
         print("Send carousel error:", e)
         flash(f"Failed: {e}", "danger")
-
-    return redirect(url_for("index"))
+        return redirect(url_for("view_post", post_id=posts[0].id))
 
 
 @app.route("/edit-carousel/<group_id>", methods=["GET", "POST"])
@@ -1981,6 +2124,69 @@ Requirements:
         print("Create platform draft error:", e)
         flash(f"Failed to create {platform} draft: {e}", "danger")
         return redirect(url_for("content_pack"))
+
+
+def improve_post_with_ai(post, brand_context=""):
+    prompt = f"""
+You are an expert social media copywriter.
+
+Improve this post using the brand brief and grading feedback.
+
+Brand Brief:
+{brand_context}
+
+Platform:
+{post.platforms or ""}
+
+Current Caption:
+{post.caption or ""}
+
+Post Grader Feedback:
+{post.grade_result or "No grading feedback available."}
+
+Rules:
+- Keep the same core meaning.
+- Strengthen the hook.
+- Improve clarity and engagement.
+- Improve the call to action.
+- Match the brand brief.
+- Keep it suitable for the selected platform.
+- Do not explain your changes.
+- Return only the improved caption.
+"""
+
+    response = openai_client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+    )
+
+    return response.output_text.strip()
+
+
+@app.route("/post/<int:post_id>/improve", methods=["POST"])
+@login_required
+def improve_post(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    try:
+        brand_context = build_brand_context(current_user.id)
+        improved_caption = improve_post_with_ai(post, brand_context)
+
+        post.improved_caption = improved_caption
+        post.improved_at = datetime.utcnow()
+
+        db.session.commit()
+
+        flash("Improved caption created successfully.", "success")
+
+    except Exception as e:
+        print("Improve post error:", e)
+        flash(f"Failed to improve post: {e}", "danger")
+
+    return redirect(url_for("view_post", post_id=post.id))
     
 
 
@@ -2065,6 +2271,46 @@ def grade_post(post_id):
 
     return redirect(url_for("view_post", post_id=post.id))
 
+
+@app.route("/post/<int:post_id>/use-improved", methods=["POST"])
+@login_required
+def use_improved_caption(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    if not post.improved_caption:
+        flash("No improved caption found.", "warning")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    save_post_revision(post, source="before_ai_improved")
+
+    post.caption = post.improved_caption
+    post.improved_caption = None
+    post.improved_at = None
+
+    db.session.commit()
+
+    flash("Improved caption is now the main caption.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
+
+
+@app.route("/post/<int:post_id>/discard-improved", methods=["POST"])
+@login_required
+def discard_improved_caption(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    post.improved_caption = None
+    post.improved_at = None
+
+    db.session.commit()
+
+    flash("Improved caption discarded.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -2153,6 +2399,53 @@ scheduler.start()
 
 print("Background scheduler started.")
 
+
+@app.route("/settings/accounts", methods=["GET", "POST"])
+@login_required
+def connected_accounts():
+    accounts = ConnectedAccount.query.filter_by(user_id=current_user.id).first()
+
+    if not accounts:
+        accounts = ConnectedAccount(user_id=current_user.id)
+        db.session.add(accounts)
+        db.session.commit()
+
+    if request.method == "POST":
+        accounts.instagram_connected = request.form.get("instagram_connected") == "on"
+        accounts.facebook_connected = request.form.get("facebook_connected") == "on"
+        accounts.linkedin_connected = request.form.get("linkedin_connected") == "on"
+        accounts.pinterest_connected = request.form.get("pinterest_connected") == "on"
+        accounts.reddit_connected = request.form.get("reddit_connected") == "on"
+        accounts.x_connected = request.form.get("x_connected") == "on"
+
+        accounts.make_webhook_single = request.form.get("make_webhook_single", "").strip()
+        accounts.make_webhook_carousel = request.form.get("make_webhook_carousel", "").strip()
+
+        db.session.commit()
+
+        flash("Connected accounts updated.", "success")
+        return redirect(url_for("connected_accounts"))
+
+    enabled_count = sum([
+        bool(accounts.instagram_connected),
+        bool(accounts.facebook_connected),
+        bool(accounts.linkedin_connected),
+        bool(accounts.pinterest_connected),
+        bool(accounts.reddit_connected),
+        bool(accounts.x_connected),
+    ])
+
+    webhooks_ready = (
+        bool(accounts.make_webhook_single),
+        bool(accounts.make_webhook_carousel),
+    )
+
+    return render_template(
+        "connected_accounts.html",
+        accounts=accounts,
+        enabled_count=enabled_count,
+        webhooks_ready=webhooks_ready,
+    )
 
 
 
