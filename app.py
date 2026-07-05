@@ -1630,6 +1630,9 @@ def studio_action(post_id, action):
 
         post.improved_caption = rewritten_caption
         post.improved_at = datetime.utcnow()
+
+        brand_context = build_brand_context(current_user.id)
+
         update_brand_coach(post, brand_context)
 
         db.session.commit()
@@ -2344,6 +2347,37 @@ Requirements:
         return redirect(url_for("content_pack"))
 
 
+@app.route("/post/<int:post_id>/improve", methods=["POST"])
+@login_required
+def improve_post(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    try:
+        brand_context = build_brand_context(current_user.id)
+        improved_caption = improve_post_with_ai(post, brand_context)
+
+        post.improved_caption = improved_caption
+        post.improved_at = datetime.utcnow()
+
+        brand_context = build_brand_context(current_user.id)
+
+        update_brand_coach(post, brand_context)
+
+        db.session.commit()
+
+        flash("Improved caption created successfully.", "success")
+
+    except Exception as e:
+        print("Improve post error:", e)
+        flash(f"Failed to improve post: {e}", "danger")
+
+    return redirect(url_for("view_post", post_id=post.id))
+    
+
+
 def improve_post_with_ai(post, brand_context=""):
     prompt = f"""
 You are an expert social media copywriter.
@@ -2381,32 +2415,7 @@ Rules:
     return response.output_text.strip()
 
 
-@app.route("/post/<int:post_id>/improve", methods=["POST"])
-@login_required
-def improve_post(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
 
-    try:
-        brand_context = build_brand_context(current_user.id)
-        improved_caption = improve_post_with_ai(post, brand_context)
-
-        post.improved_caption = improved_caption
-        post.improved_at = datetime.utcnow()
-        update_brand_coach(post, brand_context)
-
-        db.session.commit()
-
-        flash("Improved caption created successfully.", "success")
-
-    except Exception as e:
-        print("Improve post error:", e)
-        flash(f"Failed to improve post: {e}", "danger")
-
-    return redirect(url_for("view_post", post_id=post.id))
-    
 
 
 def grade_post_with_ai(post, brand_context=""):
@@ -2508,6 +2517,9 @@ def use_improved_caption(post_id):
     post.caption = post.improved_caption
     post.improved_caption = None
     post.improved_at = None
+
+    brand_context = build_brand_context(current_user.id)
+
     update_brand_coach(post, brand_context)
 
     db.session.commit()
@@ -2621,6 +2633,10 @@ def post_studio(post_id):
         post.improved_caption = None
         post.improved_at = None
 
+
+        brand_context = build_brand_context(current_user.id)
+        update_brand_coach(requests.post, brand_context)
+
         db.session.commit()
 
         flash("Studio caption saved successfully.", "success")
@@ -2655,6 +2671,9 @@ def studio_regrade(post_id):
         post.grade_result = grade_result
         post.grade_score = overall_score
         post.graded_at = datetime.utcnow
+
+        brand_context = build_brand_context(current_user.id)
+
         update_brand_coach(post, brand_context)
         
 
