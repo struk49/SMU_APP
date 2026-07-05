@@ -1,0 +1,18 @@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <h3 class="h5 fw-bold mb-3">Brand Assistant</h3>
+
+        {% if brief %}
+            <p><strong>Business:</strong><br>{{ brief.business_name or 'Not set' }}</p>
+            <p><strong>Audience:</strong><br>{{ brief.target_audience or 'Not set' }}</p>
+            <p><strong>Offer:</strong><br>{{ brief.offer or 'Not set' }}</p>
+            <p><strong>Tone:</strong><br>{{ brief.tone_of_voice or 'Not set' }}</p>
+            <p><strong>CTA:</strong><br>{{ brief.cta_style or 'Not set' }}</p>
+        {% else %}
+            <p class="text-muted">No Brand Brief saved yet.</p>
+            <a href="{{ url_for('brand_brief') }}" class="btn btn-outline-primary w-100">
+                Create Brand Brief
+            </a>
+        {% endif %}
+    </div>
+</div>

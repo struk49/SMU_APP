@@ -1,0 +1,28 @@
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-4">
+        <h3 class="h5 fw-bold mb-3">Revision History</h3>
+
+        {% if revisions %}
+            {% for revision in revisions %}
+                <div class="border-bottom pb-3 mb-3">
+                    <div class="d-flex justify-content-between">
+                        <strong>Version {{ revision.version_number }}</strong>
+                        {% if revision.score %}
+                            <span class="badge bg-primary">{{ revision.score }}/10</span>
+                        {% endif %}
+                    </div>
+
+                    <small class="text-muted d-block mb-2">
+                        {{ revision.source|replace('_', ' ')|title }}
+                    </small>
+
+                    <p class="small mb-0 text-muted">
+                        {{ revision.caption[:120] }}{% if revision.caption|length > 120 %}...{% endif %}
+                    </p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="text-muted mb-0">No revisions yet.</p>
+        {% endif %}
+    </div>
+</div>

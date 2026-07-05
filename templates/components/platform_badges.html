@@ -1,0 +1,13 @@
+{% if post.platforms %}
+<div class="d-flex flex-wrap gap-2">
+    {% for platform in post.platforms.split(',') %}
+        <span class="badge bg-primary">
+            {% if platform.strip() == 'x' %}
+                X
+            {% else %}
+                {{ platform.strip().title() }}
+            {% endif %}
+        </span>
+    {% endfor %}
+</div>
+{% endif %}

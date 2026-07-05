@@ -53,6 +53,8 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 
 db = SQLAlchemy(app)
 
+import json
+
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -130,6 +132,9 @@ class Post(db.Model):
     # AI Improved Version
     improved_caption = db.Column(db.Text, nullable=True)
     improved_at = db.Column(db.DateTime, nullable=True)
+    # Brand Coach
+    brand_score = db.Column(db.Float, nullable=True)
+    brand_feedback = db.Column(db.Text, nullable=True)
 
     revisions = db.relationship(
     "PostRevision",
@@ -220,6 +225,12 @@ with app.app_context():
             conn.execute(
                 db.text("ALTER TABLE post ADD COLUMN improved_at TIMESTAMP")
             )
+        
+        if "brand_score" not in columns:
+            conn.execute(db.text("ALTER TABLE post ADD COLUMN brand_score FLOAT"))
+
+        if "brand_feedback" not in columns:
+            conn.execute(db.text("ALTER TABLE post ADD COLUMN brand_feedback TEXT"))
 
         conn.commit()
 
@@ -347,6 +358,113 @@ Original caption:
     )
 
     return response.output_text.strip()
+
+
+def evaluate_brand_match(post, brand_context=""):
+    prompt = f"""
+You are a senior brand strategist.
+
+Evaluate how well this post matches the user's Brand Brief.
+
+Brand Brief:
+{brand_context}
+
+Post Caption:
+{post.caption or ""}
+
+Platforms:
+{post.platforms or ""}
+
+Return ONLY valid JSON in this exact structure:
+
+{{
+  "overall_score": 8.5,
+  "tone": true,
+  "audience": true,
+  "offer": false,
+  "cta": true,
+  "brand_voice": true,
+  "recommendations": [
+    "Mention the main offer earlier.",
+    "Make the CTA more specific."
+  ]
+}}
+
+Rules:
+- overall_score must be a number from 0 to 10.
+- tone, audience, offer, cta, and brand_voice must be true or false.
+- recommendations must be short and specific.
+- Do not include markdown.
+- Do not include explanations outside JSON.
+"""
+
+    response = openai_client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+    )
+
+    return response.output_text.strip()
+
+
+import json
+
+
+def parse_brand_feedback(feedback):
+    """
+    Safely parses the JSON returned by evaluate_brand_match().
+
+    Returns a dictionary with guaranteed keys, even if the AI
+    returns invalid or incomplete JSON.
+    """
+
+    defaults = {
+        "overall_score": 0.0,
+        "tone": False,
+        "audience": False,
+        "offer": False,
+        "cta": False,
+        "brand_voice": False,
+        "recommendations": [],
+    }
+
+    try:
+        data = json.loads(feedback)
+
+        # Ensure all expected keys exist
+        for key, value in defaults.items():
+            data.setdefault(key, value)
+
+        # Convert score safely
+        try:
+            data["overall_score"] = float(data["overall_score"])
+        except Exception:
+            data["overall_score"] = 0.0
+
+        # Ensure recommendations is always a list
+        if not isinstance(data["recommendations"], list):
+            data["recommendations"] = []
+
+        return data
+
+    except Exception as e:
+        print("Brand Coach JSON parse error:", e)
+        return defaults
+    
+
+def update_brand_coach(post, brand_context=""):
+    try:
+        feedback_json = evaluate_brand_match(post, brand_context)
+
+        parsed = parse_brand_feedback(feedback_json)
+
+        post.brand_score = parsed["overall_score"]
+        post.brand_feedback = json.dumps(parsed)
+
+        return parsed
+
+    except Exception as e:
+        print("Brand Coach update error:", e)
+        return None
 
 
 def generate_openai_image(prompt):
@@ -768,6 +886,48 @@ All content must match this brand brief.
 Do not create generic content.
 Use the tone, audience and offer above.
 """
+
+def rewrite_caption_with_action(post, brand_context="", action="improve"):
+    action_instructions = {
+        "hook": "Improve the opening hook. Make the first line more attention-grabbing.",
+        "cta": "Improve the call to action. Make the next step clearer and more persuasive.",
+        "shorten": "Shorten the caption while keeping the main message.",
+        "professional": "Rewrite the caption in a more professional tone.",
+        "friendly": "Rewrite the caption in a warmer, friendlier tone.",
+        "alternatives": "Create 3 alternative versions of this caption."
+    }
+
+    instruction = action_instructions.get(action, action_instructions["hook"])
+
+    prompt = f"""
+You are an expert social media copywriter.
+
+Brand Brief:
+{brand_context}
+
+Current Caption:
+{post.caption or ""}
+
+Platform:
+{post.platforms or ""}
+
+Task:
+{instruction}
+
+Rules:
+- Keep the message aligned with the Brand Brief.
+- Keep the content suitable for the selected platform.
+- Do not explain your changes.
+- Return only the rewritten caption.
+"""
+
+    response = openai_client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+    )
+
+    return response.output_text.strip()
+
 
 def grade_post_with_ai(post, brand_context=""):
     prompt = f"""
@@ -1423,6 +1583,64 @@ def send_to_make(post_id):
         flash(f"Failed: {e}", "danger")
 
     return redirect(url_for("view_post", post_id=post.id))
+
+
+@app.template_filter("from_json")
+def from_json_filter(value):
+    try:
+        return json.loads(value)
+    except Exception:
+        return {}
+
+
+@app.route("/post/<int:post_id>/studio/action/<action>", methods=["POST"])
+@login_required
+def studio_action(post_id, action):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    allowed_actions = [
+        "hook",
+        "cta",
+        "shorten",
+        "professional",
+        "friendly",
+        "alternatives",
+    ]
+
+    if action not in allowed_actions:
+        flash("Invalid studio action.", "danger")
+        return redirect(url_for("post_studio", post_id=post.id))
+
+    try:
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if final_caption:
+            post.caption = final_caption
+
+        brand_context = build_brand_context(current_user.id)
+
+        rewritten_caption = rewrite_caption_with_action(
+            post,
+            brand_context,
+            action
+        )
+
+        post.improved_caption = rewritten_caption
+        post.improved_at = datetime.utcnow()
+        update_brand_coach(post, brand_context)
+
+        db.session.commit()
+
+        flash("AI Studio action completed.", "success")
+
+    except Exception as e:
+        print("Studio action error:", e)
+        flash(f"Failed to run studio action: {e}", "danger")
+
+    return redirect(url_for("post_studio", post_id=post.id))
 
 
 @app.route("/send-carousel/<group_id>", methods=["POST"])
@@ -2177,6 +2395,7 @@ def improve_post(post_id):
 
         post.improved_caption = improved_caption
         post.improved_at = datetime.utcnow()
+        update_brand_coach(post, brand_context)
 
         db.session.commit()
 
@@ -2289,10 +2508,37 @@ def use_improved_caption(post_id):
     post.caption = post.improved_caption
     post.improved_caption = None
     post.improved_at = None
+    update_brand_coach(post, brand_context)
 
     db.session.commit()
 
     flash("Improved caption is now the main caption.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
+
+
+@app.route("/post/<int:post_id>/custom-caption", methods=["POST"])
+@login_required
+def use_custom_caption(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    custom_caption = request.form.get("custom_caption", "").strip()
+
+    if not custom_caption:
+        flash("Custom caption cannot be empty.", "danger")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    save_post_revision(post, source="before_custom_caption")
+
+    post.caption = custom_caption
+    post.improved_caption = None
+    post.improved_at = None
+
+    db.session.commit()
+
+    flash("Custom caption saved as the main caption.", "success")
     return redirect(url_for("view_post", post_id=post.id))
 
 
@@ -2311,6 +2557,116 @@ def discard_improved_caption(post_id):
 
     flash("Improved caption discarded.", "success")
     return redirect(url_for("view_post", post_id=post.id))
+
+
+@app.route("/post/<int:post_id>/ai-editor", methods=["GET", "POST"])
+@login_required
+def ai_editor(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    if request.method == "POST":
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if not final_caption:
+            flash("Final caption cannot be empty.", "danger")
+            return redirect(url_for("ai_editor", post_id=post.id))
+
+        save_post_revision(post, source="before_ai_editor")
+
+        post.caption = final_caption
+        post.improved_caption = None
+        post.improved_at = None
+        update_brand_coach(post, brand_context)
+
+        db.session.commit()
+
+        flash("Final caption saved successfully.", "success")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    return render_template("ai_editor.html", post=post)
+
+
+@app.route("/post/<int:post_id>/studio", methods=["GET", "POST"])
+@login_required
+def post_studio(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    brief = BrandBrief.query.filter_by(
+        user_id=current_user.id
+    ).first()
+
+    revisions = PostRevision.query.filter_by(
+        post_id=post.id,
+        user_id=current_user.id
+    ).order_by(
+        PostRevision.version_number.desc()
+    ).all()
+
+    if request.method == "POST":
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if not final_caption:
+            flash("Final caption cannot be empty.", "danger")
+            return redirect(url_for("post_studio", post_id=post.id))
+
+        save_post_revision(post, source="before_studio_save")
+
+        post.caption = final_caption
+        post.improved_caption = None
+        post.improved_at = None
+
+        db.session.commit()
+
+        flash("Studio caption saved successfully.", "success")
+        return redirect(url_for("post_studio", post_id=post.id))
+
+    return render_template(
+        "post_studio.html",
+        post=post,
+        brief=brief,
+        revisions=revisions
+    )
+
+
+@app.route("/post/<int:post_id>/studio/regrade", methods=["POST"])
+@login_required
+def studio_regrade(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    final_caption = request.form.get("final_caption", "").strip()
+
+    if final_caption:
+        post.caption = final_caption
+
+    try:
+        brand_context = build_brand_context(current_user.id)
+        grade_result = grade_post_with_ai(post, brand_context)
+        overall_score = extract_overall_score(grade_result)
+
+        post.grade_result = grade_result
+        post.grade_score = overall_score
+        post.graded_at = datetime.utcnow
+        update_brand_coach(post, brand_context)
+        
+
+        db.session.commit()
+
+        flash("Studio caption regraded successfully.", "success")
+
+    except Exception as e:
+        print("Studio regrade error:", e)
+        flash(f"Failed to regrade caption: {e}", "danger")
+
+    return redirect(url_for("post_studio", post_id=post.id))
 
 
 @app.route("/register", methods=["GET", "POST"])
@@ -2446,6 +2802,9 @@ def connected_accounts():
         enabled_count=enabled_count,
         webhooks_ready=webhooks_ready,
     )
+
+
+
 
 
 
