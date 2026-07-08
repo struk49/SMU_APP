@@ -1,0 +1,95 @@
+   <!-- LEFT: AI TOOLS -->
+        <div class="col-xl-3 col-lg-4">
+
+            <div class="card border-0 shadow-sm rounded-4 mb-4 sticky-top" style="top: 90px; z-index: 1;">
+                <div class="card-body p-4">
+
+                    <h3 class="h5 fw-bold mb-2">🤖 AI Writing Assistant</h3>
+                    <p class="text-muted small mb-4">
+                        Improve the caption currently inside the editor.
+                    </p>
+
+                    <div class="d-grid gap-2">
+
+                        <form method="POST"
+                              action="{{ url_for('studio_action', post_id=post.id, action='hook') }}"
+                              class="studio-action-form">
+                            <input type="hidden" name="final_caption">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                🚀 Improve Hook
+                            </button>
+                        </form>
+
+                        <form method="POST"
+                              action="{{ url_for('studio_action', post_id=post.id, action='cta') }}"
+                              class="studio-action-form">
+                            <input type="hidden" name="final_caption">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                👉 Improve CTA
+                            </button>
+                        </form>
+
+                        <form method="POST"
+                              action="{{ url_for('studio_action', post_id=post.id, action='shorten') }}"
+                              class="studio-action-form">
+                            <input type="hidden" name="final_caption">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                ✂️ Shorten
+                            </button>
+                        </form>
+
+                        <form method="POST"
+                              action="{{ url_for('studio_action', post_id=post.id, action='professional') }}"
+                              class="studio-action-form">
+                            <input type="hidden" name="final_caption">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                💼 More Professional
+                            </button>
+                        </form>
+
+                        <form method="POST"
+                              action="{{ url_for('studio_action', post_id=post.id, action='friendly') }}"
+                              class="studio-action-form">
+                            <input type="hidden" name="final_caption">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                😊 More Friendly
+                            </button>
+                        </form>
+
+                        <form method="POST"
+                              action="{{ url_for('studio_action', post_id=post.id, action='alternatives') }}"
+                              class="studio-action-form">
+                            <input type="hidden" name="final_caption">
+                            <button type="submit" class="btn btn-outline-success w-100">
+                                ✨ Generate 3 Alternatives
+                            </button>
+                        </form>
+
+                    </div>
+
+                </div>
+            </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    function syncStudioCaption(event) {
+        const editor = document.getElementById("studio-editor");
+
+        if (!editor) {
+            return;
+        }
+
+        const form = event.target;
+        const hiddenInput = form.querySelector("input[name='final_caption']");
+
+        if (hiddenInput) {
+            hiddenInput.value = editor.value;
+        }
+    }
+
+    document.querySelectorAll(".studio-action-form, .studio-regrade-form").forEach(function (form) {
+        form.addEventListener("submit", syncStudioCaption);
+    });
+});
+</script>
+

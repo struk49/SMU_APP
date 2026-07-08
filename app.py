@@ -2688,6 +2688,35 @@ def studio_regrade(post_id):
     return redirect(url_for("post_studio", post_id=post.id))
 
 
+@app.route("/post/<int:post_id>/revision/<int:revision_id>/restore", methods=["POST"])
+@login_required
+def restore_revision(post_id, revision_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    revision = PostRevision.query.filter_by(
+        id=revision_id,
+        post_id=post.id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    save_post_revision(post, source="before_revision_restore")
+
+    post.caption = revision.caption
+    post.improved_caption = None
+    post.improved_at = None
+
+    brand_context = build_brand_context(current_user.id)
+    update_brand_coach(post, brand_context)
+
+    db.session.commit()
+
+    flash(f"Version {revision.version_number} restored.", "success")
+    return redirect(url_for("post_studio", post_id=post.id))
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if current_user.is_authenticated:

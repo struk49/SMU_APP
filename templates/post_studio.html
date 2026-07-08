@@ -2,355 +2,240 @@
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="h3 fw-bold mb-1">AI Studio</h1>
-        <p class="text-muted mb-0">
-            Edit, improve, grade and prepare your post for publishing.
-        </p>
-    </div>
+<div class="container-fluid px-4 py-3">
 
-    <a href="{{ url_for('view_post', post_id=post.id) }}" class="btn btn-outline-secondary">
-        Back to Post
-    </a>
-</div>
-
-<div class="row g-4">
-
-    <!-- LEFT SIDEBAR -->
-    <div class="col-lg-3">
-
-        <!-- BRAND ASSISTANT -->
-      <div class="card border-0 shadow-sm rounded-4 mb-4">
-    <div class="card-body p-4">
-
-        <h3 class="h5 fw-bold mb-3">🎯 Brand Coach</h3>
-
-        {% if post.brand_feedback %}
-            {% set coach = post.brand_feedback|from_json %}
-            {% set score = post.brand_score or 0 %}
-
-            <div class="text-center mb-4">
-                <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center border border-4 border-primary"
-                     style="width:120px;height:120px;">
-                    <div>
-                        <div class="h2 fw-bold mb-0">{{ "%.1f"|format(score) }}</div>
-                        <small class="text-muted">/10</small>
-                    </div>
-                </div>
-
-                <div class="fw-semibold mt-2">Brand Match</div>
-
-                {% if score >= 8 %}
-                    <span class="badge bg-success mt-2">Strong</span>
-                {% elif score >= 6 %}
-                    <span class="badge bg-warning text-dark mt-2">Needs Work</span>
-                {% else %}
-                    <span class="badge bg-danger mt-2">Weak</span>
-                {% endif %}
-            </div>
-
-            {% set items = {
-                "Tone": coach.get("tone", false),
-                "Audience": coach.get("audience", false),
-                "Offer": coach.get("offer", false),
-                "CTA": coach.get("cta", false),
-                "Brand Voice": coach.get("brand_voice", false)
-            } %}
-
-            {% for label, passed in items.items() %}
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="small fw-semibold">{{ label }}</span>
-
-                    {% if passed %}
-                        <span class="badge bg-success">✓ Match</span>
-                    {% else %}
-                        <span class="badge bg-warning text-dark">Needs work</span>
-                    {% endif %}
-                </div>
-
-                <div class="progress mb-3" style="height:8px;">
-                    <div class="progress-bar {% if passed %}bg-success{% else %}bg-warning{% endif %}"
-                         style="width:{% if passed %}100{% else %}45{% endif %}%;">
-                    </div>
-                </div>
-            {% endfor %}
-
-            {% if coach.get("recommendations") %}
-                <div class="bg-light rounded-4 p-3">
-                    <h6 class="fw-bold mb-2">Top Recommendations</h6>
-
-                    <ul class="small mb-0 ps-3">
-                        {% for recommendation in coach.get("recommendations", []) %}
-                            <li class="mb-1">{{ recommendation }}</li>
-                        {% endfor %}
-                    </ul>
-                </div>
-            {% endif %}
-
-        {% else %}
-            <div class="text-muted small">
-                No Brand Coach analysis yet. Use Regrade or an AI action to generate feedback.
-            </div>
-        {% endif %}
-
-    </div>
-</div>
-
-        <!-- REVISION HISTORY -->
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body p-4">
-                <h3 class="h5 fw-bold mb-3">Revision History</h3>
-
-                {% if revisions %}
-                {% for revision in revisions %}
-                <div class="border-bottom pb-3 mb-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <strong>Version {{ revision.version_number }}</strong>
-
-                        {% if revision.score %}
-                        <span class="badge bg-primary">{{ revision.score }}/10</span>
-                        {% endif %}
-                    </div>
-
-                    <small class="text-muted d-block mb-2">
-                        {{ revision.source|replace('_', ' ')|title }}
-                    </small>
-
-                    <p class="small text-muted mb-0">
-                        {{ revision.caption[:120] }}{% if revision.caption|length > 120 %}...{% endif %}
-                    </p>
-                </div>
-                {% endfor %}
-                {% else %}
-                <p class="text-muted mb-0">No revisions yet.</p>
-                {% endif %}
-            </div>
+    <!-- HEADER -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 fw-bold mb-1">AI Content Studio</h1>
+            <p class="text-muted mb-0">
+                Create, refine, score and publish brand-consistent content.
+            </p>
         </div>
 
+        <a href="{{ url_for('view_post', post_id=post.id) }}" class="btn btn-outline-secondary">
+            Back to Post
+        </a>
     </div>
 
-    <!-- MAIN EDITOR -->
-    <div class="col-lg-6">
+    <div class="row g-4 align-items-start">
 
-        <!-- FINAL EDITOR -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-4">
+        <!-- LEFT: AI TOOLS -->
+        {% include "components/studio/ai_tools.html" %}
+            <!-- ORIGINAL -->
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+                    <h3 class="h5 fw-bold mb-3">Original Caption</h3>
 
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h2 class="h4 fw-bold mb-1">Final Caption</h2>
-                        <p class="text-muted small mb-0">
-                            Edit your final approved caption here.
-                        </p>
+                    <div class="caption-box small">
+                        {{ post.caption if post.caption else 'No original caption.' }}
                     </div>
-
-                    {% if post.status == 'draft' %}
-                    <span class="badge bg-secondary">Draft</span>
-                    {% elif post.status == 'scheduled' %}
-                    <span class="badge bg-warning text-dark">Scheduled</span>
-                    {% elif post.status == 'sent_to_make' %}
-                    <span class="badge bg-success">Sent</span>
-                    {% else %}
-                    <span class="badge bg-secondary">{{ post.status|title }}</span>
-                    {% endif %}
                 </div>
+            </div>
 
-                {% if post.platforms %}
-                <div class="mb-3">
-                    {% for platform in post.platforms.split(',') %}
-                    <span class="badge bg-primary me-1">
-                        {% if platform.strip() == 'x' %}
-                        X
+        </div>
+
+        <!-- CENTER: MAIN WORKSPACE -->
+        <div class="col-xl-6 col-lg-8">
+
+            <!-- EDITOR -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
+
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h2 class="h4 fw-bold mb-1">Caption Workspace</h2>
+                            <p class="text-muted small mb-0">
+                                This is your working draft. AI tools use whatever is currently written here.
+                            </p>
+                        </div>
+
+                        {% if post.status == 'draft' %}
+                            <span class="badge bg-secondary">Draft</span>
+                        {% elif post.status == 'scheduled' %}
+                            <span class="badge bg-warning text-dark">Scheduled</span>
+                        {% elif post.status == 'sent_to_make' %}
+                            <span class="badge bg-success">Sent</span>
                         {% else %}
-                        {{ platform.strip().title() }}
+                            <span class="badge bg-secondary">{{ post.status|title }}</span>
                         {% endif %}
-                    </span>
-                    {% endfor %}
-                </div>
-                {% endif %}
+                    </div>
 
-                <form method="POST">
-                    <textarea id="studio-editor" name="final_caption" class="form-control mb-3" rows="20"
-                        style="resize: vertical;">{{ post.improved_caption if post.improved_caption else post.caption }}</textarea>
-
-                    <button type="submit" class="btn btn-primary w-100">
-                        ✔ Save Final Caption
-                    </button>
-                </form>
-
-            </div>
-        </div>
-
-        <!-- POST GRADE -->
-        {% if post.grade_result %}
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body p-4">
-
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h5 fw-bold mb-0">Post Grade</h2>
-
-                    {% if post.grade_score %}
-                    <span class="badge bg-primary fs-6">
-                        {{ post.grade_score }}/10
-                    </span>
-                    {% endif %}
-                </div>
-
-                {% if post.graded_at %}
-                <p class="text-muted small mb-3">
-                    Graded {{ post.graded_at.strftime('%d %b %Y %H:%M') }}
-                </p>
-                {% endif %}
-
-                <pre style="white-space: pre-wrap; font-family: inherit;">{{ post.grade_result }}</pre>
-
-            </div>
-        </div>
-        {% endif %}
-
-    </div>
-
-    <!-- RIGHT SIDEBAR -->
-    <div class="col-lg-3">
-
-        <!-- ORIGINAL -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-4">
-                <h3 class="h5 fw-bold mb-3">Original Caption</h3>
-
-                <div class="caption-box">
-                    {{ post.caption if post.caption else 'No original caption.' }}
-                </div>
-            </div>
-        </div>
-
-        <!-- AI IMPROVED -->
-        {% if post.improved_caption %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="h5 fw-bold mb-0">AI Improved</h3>
-                    <span class="badge bg-success">Ready</span>
-                </div>
-
-                <div class="caption-box mb-3">
-                    {{ post.improved_caption }}
-                </div>
-
-                <form method="POST" action="{{ url_for('use_improved_caption', post_id=post.id) }}" class="mb-2">
-                    <button type="submit" class="btn btn-success w-100">
-                        ✔ Use Improved
-                    </button>
-                </form>
-
-                <form method="POST" action="{{ url_for('discard_improved_caption', post_id=post.id) }}">
-                    <button type="submit" class="btn btn-outline-danger w-100">
-                        🗑 Discard
-                    </button>
-                </form>
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- AI WRITING ASSISTANT -->
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-4">
-
-                <h3 class="h5 fw-bold mb-2">
-                    🤖 AI Writing Assistant
-                </h3>
-
-                <p class="text-muted small mb-4">
-                    Improve the caption currently inside the editor.
-                </p>
-
-                <div class="d-grid gap-2">
-
-                    <form method="POST" action="{{ url_for('studio_action', post_id=post.id, action='hook') }}"
-                        class="studio-action-form">
-                        <input type="hidden" name="final_caption">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            🚀 Improve Hook
-                        </button>
-                    </form>
-
-                    <form method="POST" action="{{ url_for('studio_action', post_id=post.id, action='cta') }}"
-                        class="studio-action-form">
-                        <input type="hidden" name="final_caption">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            👉 Improve CTA
-                        </button>
-                    </form>
-
-                    <form method="POST" action="{{ url_for('studio_action', post_id=post.id, action='shorten') }}"
-                        class="studio-action-form">
-                        <input type="hidden" name="final_caption">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            ✂️ Shorten
-                        </button>
-                    </form>
-
-                    <form method="POST" action="{{ url_for('studio_action', post_id=post.id, action='professional') }}"
-                        class="studio-action-form">
-                        <input type="hidden" name="final_caption">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            💼 More Professional
-                        </button>
-                    </form>
-
-                    <form method="POST" action="{{ url_for('studio_action', post_id=post.id, action='friendly') }}"
-                        class="studio-action-form">
-                        <input type="hidden" name="final_caption">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            😊 More Friendly
-                        </button>
-                    </form>
-
-                    <form method="POST" action="{{ url_for('studio_action', post_id=post.id, action='alternatives') }}"
-                        class="studio-action-form">
-                        <input type="hidden" name="final_caption">
-                        <button type="submit" class="btn btn-outline-success w-100">
-                            ✨ Generate 3 Alternatives
-                        </button>
-                    </form>
-
-                </div>
-
-            </div>
-        </div>
-
-        <!-- PUBLISHING -->
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body p-4">
-                <h3 class="h5 fw-bold mb-3">Publishing</h3>
-
-                <div class="d-grid gap-2">
-
-                    <form method="POST" action="{{ url_for('grade_post', post_id=post.id) }}">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            Regrade Post
-                        </button>
-                    </form>
-
-                    {% if post.status != 'scheduled' %}
-                    <form method="POST" action="{{ url_for('send_to_make', post_id=post.id) }}">
-                        <button type="submit" class="btn btn-success w-100">
-                            Send to Make
-                        </button>
-                    </form>
+                    {% if post.platforms %}
+                        <div class="mb-3">
+                            {% for platform in post.platforms.split(',') %}
+                                <span class="badge bg-primary me-1">
+                                    {% if platform.strip() == 'x' %}
+                                        X
+                                    {% else %}
+                                        {{ platform.strip().title() }}
+                                    {% endif %}
+                                </span>
+                            {% endfor %}
+                        </div>
                     {% endif %}
 
-                    <a href="{{ url_for('edit_post', post_id=post.id) }}" class="btn btn-outline-secondary">
-                        Edit Full Post
-                    </a>
+                    <form method="POST">
+                        <textarea
+                            id="studio-editor"
+                            name="final_caption"
+                            class="form-control mb-3"
+                            rows="22"
+                            style="resize: vertical; font-size: 1rem; line-height: 1.6;"
+                        >{{ post.improved_caption if post.improved_caption else post.caption }}</textarea>
 
-                    <a href="{{ url_for('view_post', post_id=post.id) }}" class="btn btn-outline-secondary">
-                        View Post
-                    </a>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    ✔ Save Draft
+                                </button>
+                            </div>
+
+                            <div class="col-md-6">
+                                <form method="POST"
+                                      action="{{ url_for('studio_regrade', post_id=post.id) }}"
+                                      class="studio-regrade-form">
+                                    <input type="hidden" name="final_caption">
+                                    <button type="submit" class="btn btn-outline-primary w-100">
+                                        Regrade Draft
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </form>
 
                 </div>
             </div>
+
+            <!-- GRADE -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h5 fw-bold mb-0">Latest Grade</h2>
+
+                        {% if post.grade_score %}
+                            <span class="badge bg-primary fs-6">
+                                {{ post.grade_score }}/10
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    {% if post.grade_result %}
+                        {% if post.graded_at %}
+                            <p class="text-muted small mb-3">
+                                Graded {{ post.graded_at.strftime('%d %b %Y %H:%M') }}
+                            </p>
+                        {% endif %}
+
+                        <pre style="white-space: pre-wrap; font-family: inherit;">{{ post.grade_result }}</pre>
+                    {% else %}
+                        <p class="text-muted mb-0">
+                            No grade yet. Use <strong>Regrade Draft</strong> to score this caption.
+                        </p>
+                    {% endif %}
+
+                </div>
+            </div>
+
+            <!-- REVISION HISTORY -->
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+
+                    <h2 class="h5 fw-bold mb-3">Revision Timeline</h2>
+
+                    {% if revisions %}
+                        {% for revision in revisions %}
+                            <div class="border rounded-4 p-3 mb-3 bg-light">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong>Version {{ revision.version_number }}</strong>
+
+                                    {% if revision.score %}
+                                        <span class="badge bg-primary">{{ revision.score }}/10</span>
+                                    {% endif %}
+                                </div>
+
+                                <small class="text-muted d-block mb-2">
+                                    {{ revision.source|replace('_', ' ')|title }}
+                                    · {{ revision.created_at.strftime('%d %b %Y %H:%M') }}
+                                </small>
+
+                                <p class="small text-muted mb-3">
+                                    {{ revision.caption[:180] }}{% if revision.caption|length > 180 %}...{% endif %}
+                                </p>
+
+                                <form method="POST"
+                                      action="{{ url_for('restore_revision', post_id=post.id, revision_id=revision.id) }}">
+                                    <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+                                        Restore This Version
+                                    </button>
+                                </form>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted mb-0">No revisions yet.</p>
+                    {% endif %}
+
+                </div>
+            </div>
+
+        </div>
+
+        <!-- RIGHT: BRAND + PUBLISHING -->
+        <div class="col-xl-3 col-lg-12">
+
+        {% include "components/studio/brand_coach.html" %}
+
+            <!-- PUBLISHING -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
+
+                    <h3 class="h5 fw-bold mb-3">Publishing</h3>
+
+                    <div class="d-grid gap-2">
+
+                        {% if post.status != 'scheduled' %}
+                            <form method="POST" action="{{ url_for('send_to_make', post_id=post.id) }}">
+                                <button type="submit" class="btn btn-success w-100">
+                                    Send to Make
+                                </button>
+                            </form>
+                        {% endif %}
+
+                        <a href="{{ url_for('edit_post', post_id=post.id) }}" class="btn btn-outline-secondary">
+                            Edit Full Post
+                        </a>
+
+                        <a href="{{ url_for('view_post', post_id=post.id) }}" class="btn btn-outline-secondary">
+                            View Post
+                        </a>
+
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- MEDIA PREVIEW -->
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4">
+
+                    <h3 class="h5 fw-bold mb-3">Media</h3>
+
+                    {% if post.file_type == 'image' %}
+                        <img src="{{ post.file_url }}"
+                             class="img-fluid rounded-4"
+                             alt="Post media">
+                    {% elif post.file_type == 'video' %}
+                        <video class="w-100 rounded-4" controls style="background:#000;">
+                            <source src="{{ post.file_url }}" type="video/mp4">
+                        </video>
+                    {% else %}
+                        <p class="text-muted mb-0">No media preview available.</p>
+                    {% endif %}
+
+                </div>
+            </div>
+
         </div>
 
     </div>
@@ -358,25 +243,26 @@
 </div>
 
 <script>
-    document.addEventListener("DOMContentLoaded", function () {
+document.addEventListener("DOMContentLoaded", function () {
+    function syncStudioCaption(event) {
+        const editor = document.getElementById("studio-editor");
 
-        function syncStudioCaption() {
-            const editor = document.getElementById("studio-editor");
-
-            if (!editor) return;
-
-            document.querySelectorAll("input[name='final_caption']")
-                .forEach(function (input) {
-                    input.value = editor.value;
-                });
+        if (!editor) {
+            return;
         }
 
-        document.querySelectorAll(".studio-action-form, .studio-regrade-form")
-            .forEach(function (form) {
-                form.addEventListener("submit", syncStudioCaption);
-            });
+        const form = event.target;
+        const hiddenInput = form.querySelector("input[name='final_caption']");
 
+        if (hiddenInput) {
+            hiddenInput.value = editor.value;
+        }
+    }
+
+    document.querySelectorAll(".studio-action-form, .studio-regrade-form").forEach(function (form) {
+        form.addEventListener("submit", syncStudioCaption);
     });
+});
 </script>
 
 {% endblock %}

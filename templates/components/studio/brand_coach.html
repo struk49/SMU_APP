@@ -1,0 +1,75 @@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+
+        <h3 class="h5 fw-bold mb-3">🎯 Brand Coach</h3>
+
+        {% if post.brand_feedback %}
+            {% set coach = post.brand_feedback|from_json %}
+            {% set score = post.brand_score or 0 %}
+
+            <div class="text-center mb-4">
+                <div class="rounded-circle mx-auto d-flex align-items-center justify-content-center border border-4 border-primary"
+                     style="width:120px;height:120px;">
+                    <div>
+                        <div class="h2 fw-bold mb-0">{{ "%.1f"|format(score) }}</div>
+                        <small class="text-muted">/10</small>
+                    </div>
+                </div>
+
+                <div class="fw-semibold mt-2">Brand Match</div>
+
+                {% if score >= 8 %}
+                    <span class="badge bg-success mt-2">Strong</span>
+                {% elif score >= 6 %}
+                    <span class="badge bg-warning text-dark mt-2">Needs Work</span>
+                {% else %}
+                    <span class="badge bg-danger mt-2">Weak</span>
+                {% endif %}
+            </div>
+
+            {% set items = {
+                "Tone": coach.get("tone", false),
+                "Audience": coach.get("audience", false),
+                "Offer": coach.get("offer", false),
+                "CTA": coach.get("cta", false),
+                "Brand Voice": coach.get("brand_voice", false)
+            } %}
+
+            {% for label, passed in items.items() %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="small fw-semibold">{{ label }}</span>
+
+                    {% if passed %}
+                        <span class="badge bg-success">✓ Match</span>
+                    {% else %}
+                        <span class="badge bg-warning text-dark">Needs work</span>
+                    {% endif %}
+                </div>
+
+                <div class="progress mb-3" style="height:8px;">
+                    <div class="progress-bar {% if passed %}bg-success{% else %}bg-warning{% endif %}"
+                         style="width:{% if passed %}100{% else %}45{% endif %}%;">
+                    </div>
+                </div>
+            {% endfor %}
+
+            {% if coach.get("recommendations") %}
+                <div class="bg-light rounded-4 p-3">
+                    <h6 class="fw-bold mb-2">Top Recommendations</h6>
+
+                    <ul class="small mb-0 ps-3">
+                        {% for recommendation in coach.get("recommendations", []) %}
+                            <li class="mb-1">{{ recommendation }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+
+        {% else %}
+            <p class="text-muted small mb-0">
+                No Brand Coach analysis yet. Use Regrade or an AI action to generate feedback.
+            </p>
+        {% endif %}
+
+    </div>
+</div>

@@ -9,36 +9,38 @@
         <div class="card border-0 shadow-sm rounded-4 overflow-hidden">
 
             {% if post.post_type == 'carousel' and carousel_posts %}
-            <div class="p-3 bg-light border-bottom">
-                <span class="badge bg-dark">
-                    Carousel · {{ carousel_posts|length }} images
-                </span>
-            </div>
-
-            <div class="p-3">
-                <div class="row g-3">
-                    {% for item in carousel_posts %}
-                    <div class="col-6 col-md-4 position-relative">
-                        {% if item.is_cover %}
-                        <span class="badge bg-warning text-dark position-absolute m-2">
-                            Cover
-                        </span>
-                        {% endif %}
-
-                        <img src="{{ item.file_url }}" class="img-fluid rounded-3" alt="Carousel image"
-                            style="height:180px;width:100%;object-fit:cover;">
-                    </div>
-                    {% endfor %}
+                <div class="p-3 bg-light border-bottom">
+                    <span class="badge bg-dark">
+                        Carousel · {{ carousel_posts|length }} images
+                    </span>
                 </div>
-            </div>
+
+                <div class="p-3">
+                    <div class="row g-3">
+                        {% for item in carousel_posts %}
+                            <div class="col-6 col-md-4 position-relative">
+                                {% if item.is_cover %}
+                                    <span class="badge bg-warning text-dark position-absolute m-2">
+                                        Cover
+                                    </span>
+                                {% endif %}
+
+                                <img src="{{ item.file_url }}"
+                                     class="img-fluid rounded-3"
+                                     alt="Carousel image"
+                                     style="height:180px;width:100%;object-fit:cover;">
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
             {% else %}
-            {% if post.file_type == 'image' %}
-            <img src="{{ post.file_url }}" class="img-fluid" alt="Post media">
-            {% elif post.file_type == 'video' %}
-            <video class="w-100" controls style="background:#000;">
-                <source src="{{ post.file_url }}" type="video/mp4">
-            </video>
-            {% endif %}
+                {% if post.file_type == 'image' %}
+                    <img src="{{ post.file_url }}" class="img-fluid" alt="Post media">
+                {% elif post.file_type == 'video' %}
+                    <video class="w-100" controls style="background:#000;">
+                        <source src="{{ post.file_url }}" type="video/mp4">
+                    </video>
+                {% endif %}
             {% endif %}
 
         </div>
@@ -54,51 +56,51 @@
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h1 class="h5 mb-0 fw-bold">
                         {% if post.post_type == 'carousel' %}
-                        Carousel Post
+                            Carousel Post
                         {% else %}
-                        Post #{{ post.id }}
+                            Post #{{ post.id }}
                         {% endif %}
                     </h1>
 
                     {% if post.status == 'draft' %}
-                    <span class="badge bg-secondary">Draft</span>
+                        <span class="badge bg-secondary">Draft</span>
                     {% elif post.status == 'scheduled' %}
-                    <span class="badge bg-warning text-dark">Scheduled</span>
+                        <span class="badge bg-warning text-dark">Scheduled</span>
                     {% elif post.status == 'sent_to_make' %}
-                    <span class="badge bg-success">Sent to Make</span>
+                        <span class="badge bg-success">Sent to Make</span>
                     {% elif post.status == 'generating' %}
-                    <span class="badge bg-info text-dark">Generating</span>
+                        <span class="badge bg-info text-dark">Generating</span>
                     {% elif post.status == 'generation_failed' %}
-                    <span class="badge bg-danger">Generation Failed</span>
+                        <span class="badge bg-danger">Generation Failed</span>
                     {% else %}
-                    <span class="badge bg-secondary">{{ post.status|title }}</span>
+                        <span class="badge bg-secondary">{{ post.status|title }}</span>
                     {% endif %}
                 </div>
 
                 <p class="mb-2">
                     <strong>Type:</strong>
                     {% if post.post_type == 'carousel' %}
-                    Carousel
+                        Carousel
                     {% else %}
-                    {{ post.file_type|title }}
+                        {{ post.file_type|title }}
                     {% endif %}
                 </p>
 
                 {% if post.platforms %}
-                <div class="mb-3">
-                    <strong class="d-block mb-2">Platforms:</strong>
-                    <div class="d-flex flex-wrap gap-2">
-                        {% for platform in post.platforms.split(',') %}
-                        <span class="badge bg-primary">
-                            {% if platform.strip() == 'x' %}
-                            X
-                            {% else %}
-                            {{ platform.strip().title() }}
-                            {% endif %}
-                        </span>
-                        {% endfor %}
+                    <div class="mb-3">
+                        <strong class="d-block mb-2">Platforms:</strong>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for platform in post.platforms.split(',') %}
+                                <span class="badge bg-primary">
+                                    {% if platform.strip() == 'x' %}
+                                        X
+                                    {% else %}
+                                        {{ platform.strip().title() }}
+                                    {% endif %}
+                                </span>
+                            {% endfor %}
+                        </div>
                     </div>
-                </div>
                 {% endif %}
 
                 <p class="mb-0 text-muted small">
@@ -108,12 +110,12 @@
                 <hr>
 
                 {% if post.prompt %}
-                <div class="mb-4">
-                    <h2 class="h6 fw-semibold text-muted">AI Prompt</h2>
-                    <div class="caption-box">
-                        {{ post.prompt }}
+                    <div class="mb-4">
+                        <h2 class="h6 fw-semibold text-muted">AI Prompt</h2>
+                        <div class="caption-box">
+                            {{ post.prompt }}
+                        </div>
                     </div>
-                </div>
                 {% endif %}
 
                 <div>
@@ -126,127 +128,47 @@
             </div>
         </div>
 
-        <!-- IMPROVED CAPTION -->
-        {% if post.improved_caption %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-4">
-
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h3 class="h5 fw-bold mb-1">✨ Improved Caption</h3>
-
-                        {% if post.improved_at %}
-                        <small class="text-muted">
-                            Improved {{ post.improved_at.strftime('%d %b %Y %H:%M') }}
-                        </small>
-                        {% endif %}
-                    </div>
-
-                    <span class="badge bg-success">AI Improved</span>
-                </div>
-
-                <div class="caption-box mb-3">
-                    {{ post.improved_caption }}
-                </div>
-
-                <div class="row g-2 mb-3">
-                    <div class="col-md-6">
-                        <form method="POST" action="{{ url_for('use_improved_caption', post_id=post.id) }}">
-                            <button type="submit" class="btn btn-success w-100">
-                                ✔ Use Improved Version
-                            </button>
-                        </form>
-                    </div>
-
-                    <div class="col-md-6">
-                        <form method="POST" action="{{ url_for('discard_improved_caption', post_id=post.id) }}">
-                            <button type="submit" class="btn btn-outline-danger w-100">
-                                🗑 Discard
-                            </button>
-                        </form>
-                    </div>
-                </div>
-
-                <div class="bg-light rounded-4 p-3">
-                    <h4 class="h6 fw-semibold mb-2">Edit before using</h4>
-
-                    <form method="POST" action="{{ url_for('use_custom_caption', post_id=post.id) }}">
-                        <a href="{{ url_for('ai_editor', post_id=post.id) }}" class="btn btn-primary w-100">
-                            ✏ Open AI Editor
-                        </a>
-                        ✏ Save Custom Version as Main Caption
-                        </button>
-                       
-                    </form>
-                </div>
-
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- POST GRADE -->
-        {% if post.grade_result %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-4">
-
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h3 class="h5 fw-bold mb-0">Post Grade</h3>
-
-                    {% if post.grade_score %}
-                    <span class="badge bg-primary fs-6">
-                        {{ post.grade_score }}/10
-                    </span>
-                    {% endif %}
-                </div>
-
-                {% if post.graded_at %}
-                <p class="text-muted small mb-3">
-                    Graded {{ post.graded_at.strftime('%d %b %Y %H:%M') }}
-                </p>
-                {% endif %}
-
-                <pre style="white-space: pre-wrap; font-family: inherit;">{{ post.grade_result }}</pre>
-
-            </div>
-        </div>
-        {% endif %}
-
-        <!-- AI TOOLS -->
+        <!-- AI STUDIO -->
         {% if post.post_type != 'carousel' %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-body p-4">
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
 
-                <h3 class="h5 fw-bold mb-3">AI Tools</h3>
+                    <h3 class="h5 fw-bold mb-2">AI Studio</h3>
+                    <p class="text-muted small mb-3">
+                        Edit, improve, regrade, use Brand Coach, and manage revisions.
+                    </p>
 
-                <div class="row g-2">
-                    <div class="col-md-6">
-                        <form method="POST" action="{{ url_for('grade_post', post_id=post.id) }}">
-                            <button type="submit" class="btn btn-outline-primary w-100">
-                                Grade Post
-                            </button>
-                        </form>
-                    </div>
+                    <a href="{{ url_for('post_studio', post_id=post.id) }}" class="btn btn-dark w-100">
+                        Open AI Studio
+                    </a>
 
-                    <div class="col-md-6">
-                        {% if not post.improved_caption %}
-                        <form method="POST" action="{{ url_for('improve_post', post_id=post.id) }}">
-                            <button type="submit" class="btn btn-outline-success w-100">
-                                ✨ Improve Post
-                            </button>
-                        </form>
-                        {% else %}
-                        <button type="button" class="btn btn-outline-secondary w-100" disabled>
-                            Improved Waiting
-                        </button>
-                        
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- POST GRADE SUMMARY -->
+        {% if post.grade_result %}
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h3 class="h5 fw-bold mb-0">Latest Grade</h3>
+
+                        {% if post.grade_score %}
+                            <span class="badge bg-primary fs-6">
+                                {{ post.grade_score }}/10
+                            </span>
                         {% endif %}
                     </div>
+
+                    {% if post.graded_at %}
+                        <p class="text-muted small mb-0">
+                            Graded {{ post.graded_at.strftime('%d %b %Y %H:%M') }}
+                        </p>
+                    {% endif %}
+
                 </div>
- <a href="{{ url_for('post_studio', post_id=post.id) }}" class="btn btn-dark w-100">
-    Open AI Studio
-</a>
             </div>
-        </div>
         {% endif %}
 
         <!-- PUBLISHING -->
@@ -259,43 +181,43 @@
 
                     {% if post.post_type == 'carousel' and post.group_id %}
 
-                    <a href="{{ url_for('edit_carousel', group_id=post.group_id) }}" class="btn btn-primary">
-                        Edit Carousel
-                    </a>
+                        <a href="{{ url_for('edit_carousel', group_id=post.group_id) }}" class="btn btn-primary">
+                            Edit Carousel
+                        </a>
 
-                    <form method="POST" action="{{ url_for('duplicate_carousel', group_id=post.group_id) }}">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            Duplicate Carousel
-                        </button>
-                    </form>
+                        <form method="POST" action="{{ url_for('duplicate_carousel', group_id=post.group_id) }}">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                Duplicate Carousel
+                            </button>
+                        </form>
 
-                    {% if post.status != 'scheduled' %}
-                    <form method="POST" action="{{ url_for('send_carousel_to_make', group_id=post.group_id) }}">
-                        <button type="submit" class="btn btn-success w-100">
-                            Send Carousel to Make
-                        </button>
-                    </form>
-                    {% endif %}
+                        {% if post.status != 'scheduled' %}
+                            <form method="POST" action="{{ url_for('send_carousel_to_make', group_id=post.group_id) }}">
+                                <button type="submit" class="btn btn-success w-100">
+                                    Send Carousel to Make
+                                </button>
+                            </form>
+                        {% endif %}
 
                     {% else %}
 
-                    <a href="{{ url_for('edit_post', post_id=post.id) }}" class="btn btn-primary">
-                        Edit Post
-                    </a>
+                        <a href="{{ url_for('edit_post', post_id=post.id) }}" class="btn btn-primary">
+                            Edit Post
+                        </a>
 
-                    <form method="POST" action="{{ url_for('duplicate_post', post_id=post.id) }}">
-                        <button type="submit" class="btn btn-outline-primary w-100">
-                            Duplicate Post
-                        </button>
-                    </form>
+                        <form method="POST" action="{{ url_for('duplicate_post', post_id=post.id) }}">
+                            <button type="submit" class="btn btn-outline-primary w-100">
+                                Duplicate Post
+                            </button>
+                        </form>
 
-                    {% if post.status != 'scheduled' %}
-                    <form method="POST" action="{{ url_for('send_to_make', post_id=post.id) }}">
-                        <button type="submit" class="btn btn-success w-100">
-                            Send to Make
-                        </button>
-                    </form>
-                    {% endif %}
+                        {% if post.status != 'scheduled' %}
+                            <form method="POST" action="{{ url_for('send_to_make', post_id=post.id) }}">
+                                <button type="submit" class="btn btn-success w-100">
+                                    Send to Make
+                                </button>
+                            </form>
+                        {% endif %}
 
                     {% endif %}
 
@@ -311,19 +233,19 @@
                 <h3 class="h5 fw-bold mb-3">Schedule</h3>
 
                 {% if post.status != 'scheduled' %}
-                <form method="POST" action="{{ url_for('schedule_post', post_id=post.id) }}">
-                    <div class="mb-2">
-                        <input type="datetime-local" name="scheduled_time" class="form-control" required>
-                    </div>
+                    <form method="POST" action="{{ url_for('schedule_post', post_id=post.id) }}">
+                        <div class="mb-2">
+                            <input type="datetime-local" name="scheduled_time" class="form-control" required>
+                        </div>
 
-                    <button type="submit" class="btn btn-warning w-100">
-                        Schedule Post
-                    </button>
-                </form>
+                        <button type="submit" class="btn btn-warning w-100">
+                            Schedule Post
+                        </button>
+                    </form>
                 {% else %}
-                <div class="alert alert-info mb-0">
-                    Scheduled for {{ post.scheduled_time.strftime('%d %b %Y %H:%M') }}
-                </div>
+                    <div class="alert alert-info mb-0">
+                        Scheduled for {{ post.scheduled_time.strftime('%d %b %Y %H:%M') }}
+                    </div>
                 {% endif %}
 
             </div>
