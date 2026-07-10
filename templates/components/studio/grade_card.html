@@ -1,0 +1,30 @@
+    <!-- LATEST GRADE -->
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2 class="h5 fw-bold mb-0">Latest Grade</h2>
+
+                        {% if post.grade_score %}
+                            <span class="badge bg-primary fs-6">
+                                {{ post.grade_score }}/10
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    {% if post.grade_result %}
+                        {% if post.graded_at %}
+                            <p class="text-muted small mb-3">
+                                Graded {{ post.graded_at.strftime('%d %b %Y %H:%M') }}
+                            </p>
+                        {% endif %}
+
+                        <pre style="white-space: pre-wrap; font-family: inherit;">{{ post.grade_result }}</pre>
+                    {% else %}
+                        <p class="text-muted mb-0">
+                            No grade yet. Use <strong>Regrade Draft</strong> to score this caption.
+                        </p>
+                    {% endif %}
+
+                </div>
+            </div>

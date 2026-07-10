@@ -4,7 +4,6 @@
 
 <div class="container-fluid px-4 py-3">
 
-    <!-- HEADER -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h3 fw-bold mb-1">AI Content Studio</h1>
@@ -20,123 +19,16 @@
 
     <div class="row g-4 align-items-start">
 
-        <!-- LEFT: AI TOOLS -->
-        {% include "components/studio/ai_tools.html" %}
-            <!-- ORIGINAL -->
-            <div class="card border-0 shadow-sm rounded-4">
-                <div class="card-body p-4">
-                    <h3 class="h5 fw-bold mb-3">Original Caption</h3>
-
-                    <div class="caption-box small">
-                        {{ post.caption if post.caption else 'No original caption.' }}
-                    </div>
-                </div>
-            </div>
-
+        <!-- LEFT COLUMN -->
+        <div class="col-xl-3 col-lg-4">
+            {% include "components/studio/ai_tools.html" %}
         </div>
 
-        <!-- CENTER: MAIN WORKSPACE -->
+        <!-- MIDDLE COLUMN -->
         <div class="col-xl-6 col-lg-8">
+            {% include "components/studio/editor.html" %}
 
-            <!-- EDITOR -->
-            <div class="card border-0 shadow-sm rounded-4 mb-4">
-                <div class="card-body p-4">
-
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <div>
-                            <h2 class="h4 fw-bold mb-1">Caption Workspace</h2>
-                            <p class="text-muted small mb-0">
-                                This is your working draft. AI tools use whatever is currently written here.
-                            </p>
-                        </div>
-
-                        {% if post.status == 'draft' %}
-                            <span class="badge bg-secondary">Draft</span>
-                        {% elif post.status == 'scheduled' %}
-                            <span class="badge bg-warning text-dark">Scheduled</span>
-                        {% elif post.status == 'sent_to_make' %}
-                            <span class="badge bg-success">Sent</span>
-                        {% else %}
-                            <span class="badge bg-secondary">{{ post.status|title }}</span>
-                        {% endif %}
-                    </div>
-
-                    {% if post.platforms %}
-                        <div class="mb-3">
-                            {% for platform in post.platforms.split(',') %}
-                                <span class="badge bg-primary me-1">
-                                    {% if platform.strip() == 'x' %}
-                                        X
-                                    {% else %}
-                                        {{ platform.strip().title() }}
-                                    {% endif %}
-                                </span>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-
-                    <form method="POST">
-                        <textarea
-                            id="studio-editor"
-                            name="final_caption"
-                            class="form-control mb-3"
-                            rows="22"
-                            style="resize: vertical; font-size: 1rem; line-height: 1.6;"
-                        >{{ post.improved_caption if post.improved_caption else post.caption }}</textarea>
-
-                        <div class="row g-2">
-                            <div class="col-md-6">
-                                <button type="submit" class="btn btn-primary w-100">
-                                    ✔ Save Draft
-                                </button>
-                            </div>
-
-                            <div class="col-md-6">
-                                <form method="POST"
-                                      action="{{ url_for('studio_regrade', post_id=post.id) }}"
-                                      class="studio-regrade-form">
-                                    <input type="hidden" name="final_caption">
-                                    <button type="submit" class="btn btn-outline-primary w-100">
-                                        Regrade Draft
-                                    </button>
-                                </form>
-                            </div>
-                        </div>
-                    </form>
-
-                </div>
-            </div>
-
-            <!-- GRADE -->
-            <div class="card border-0 shadow-sm rounded-4 mb-4">
-                <div class="card-body p-4">
-
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h2 class="h5 fw-bold mb-0">Latest Grade</h2>
-
-                        {% if post.grade_score %}
-                            <span class="badge bg-primary fs-6">
-                                {{ post.grade_score }}/10
-                            </span>
-                        {% endif %}
-                    </div>
-
-                    {% if post.grade_result %}
-                        {% if post.graded_at %}
-                            <p class="text-muted small mb-3">
-                                Graded {{ post.graded_at.strftime('%d %b %Y %H:%M') }}
-                            </p>
-                        {% endif %}
-
-                        <pre style="white-space: pre-wrap; font-family: inherit;">{{ post.grade_result }}</pre>
-                    {% else %}
-                        <p class="text-muted mb-0">
-                            No grade yet. Use <strong>Regrade Draft</strong> to score this caption.
-                        </p>
-                    {% endif %}
-
-                </div>
-            </div>
+        {% include "components/studio/grade_card.html" %}
 
             <!-- REVISION HISTORY -->
             <div class="card border-0 shadow-sm rounded-4">
@@ -178,13 +70,11 @@
 
                 </div>
             </div>
-
         </div>
 
-        <!-- RIGHT: BRAND + PUBLISHING -->
+        <!-- RIGHT COLUMN -->
         <div class="col-xl-3 col-lg-12">
-
-        {% include "components/studio/brand_coach.html" %}
+            {% include "components/studio/brand_coach.html" %}
 
             <!-- PUBLISHING -->
             <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -241,28 +131,5 @@
     </div>
 
 </div>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    function syncStudioCaption(event) {
-        const editor = document.getElementById("studio-editor");
-
-        if (!editor) {
-            return;
-        }
-
-        const form = event.target;
-        const hiddenInput = form.querySelector("input[name='final_caption']");
-
-        if (hiddenInput) {
-            hiddenInput.value = editor.value;
-        }
-    }
-
-    document.querySelectorAll(".studio-action-form, .studio-regrade-form").forEach(function (form) {
-        form.addEventListener("submit", syncStudioCaption);
-    });
-});
-</script>
 
 {% endblock %}

@@ -1,0 +1,65 @@
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <h2 class="h4 fw-bold mb-1">Caption Workspace</h2>
+                <p class="text-muted small mb-0">
+                    This is your working draft. AI tools use whatever is currently written here.
+                </p>
+            </div>
+
+            {% if post.status == 'draft' %}
+                <span class="badge bg-secondary">Draft</span>
+            {% elif post.status == 'scheduled' %}
+                <span class="badge bg-warning text-dark">Scheduled</span>
+            {% elif post.status == 'sent_to_make' %}
+                <span class="badge bg-success">Sent</span>
+            {% else %}
+                <span class="badge bg-secondary">{{ post.status|title }}</span>
+            {% endif %}
+        </div>
+
+        {% if post.platforms %}
+            <div class="mb-3">
+                {% for platform in post.platforms.split(',') %}
+                    <span class="badge bg-primary me-1">
+                        {% if platform.strip() == 'x' %}
+                            X
+                        {% else %}
+                            {{ platform.strip().title() }}
+                        {% endif %}
+                    </span>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <form method="POST">
+            <textarea
+                id="studio-editor"
+                name="final_caption"
+                class="form-control mb-3"
+                rows="22"
+                style="resize: vertical; font-size: 1rem; line-height: 1.6;"
+            >{{ post.improved_caption if post.improved_caption else post.caption }}</textarea>
+
+            <div class="row g-2">
+                <div class="col-md-6">
+                    <button type="submit" class="btn btn-primary w-100">
+                        ✔ Save Draft
+                    </button>
+                </div>
+
+                <div class="col-md-6">
+                    <button
+                        type="submit"
+                        formaction="{{ url_for('studio_regrade', post_id=post.id) }}"
+                        class="btn btn-outline-primary w-100 studio-regrade-button">
+                        Regrade Draft
+                    </button>
+                </div>
+            </div>
+        </form>
+
+    </div>
+</div>
