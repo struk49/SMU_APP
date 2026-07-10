@@ -117,7 +117,7 @@ class Post(db.Model):
     prompt = db.Column(db.Text)
     caption = db.Column(db.Text)
     status = db.Column(db.String(50), default="draft")
-    created_at = db.Column(db.DateTime, default=utc_now)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow())
     sent_at = db.Column(db.DateTime)
     scheduled_time = db.Column(db.DateTime, nullable=True)
     group_id = db.Column(db.String(100), nullable=True)
@@ -158,8 +158,8 @@ class BrandBrief(db.Model):
     cta_style = db.Column(db.String(200))
     words_to_avoid = db.Column(db.Text)
 
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow())
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
 
 
 class ConnectedAccount(db.Model):
@@ -177,8 +177,8 @@ class ConnectedAccount(db.Model):
     make_webhook_single = db.Column(db.String(500))
     make_webhook_carousel = db.Column(db.String(500))
 
-    created_at = db.Column(db.DateTime, default=utc_now)
-    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow())
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
 
 
 @login_manager.user_loader
@@ -1553,7 +1553,7 @@ def send_to_make(post_id):
 
             for group_post in group_posts:
                 group_post.status = "sent_to_make"
-                group_post.sent_at = utc_now()
+                group_post.sent_at = datetime.utcnow()
 
             db.session.commit()
 
@@ -1572,7 +1572,7 @@ def send_to_make(post_id):
         send_payload_to_make(payload, webhook_url)
 
         post.status = "sent_to_make"
-        post.sent_at = utc_now()
+        post.sent_at = datetime.utcnow()
 
         db.session.commit()
 
@@ -1629,7 +1629,8 @@ def studio_action(post_id, action):
         )
 
         post.improved_caption = rewritten_caption
-        post.improved_at = datetime.utc_now()
+        post.improved_at = datetime.utcnow()
+
 
         brand_context = build_brand_context(current_user.id)
 
@@ -1687,7 +1688,7 @@ def send_carousel_to_make(group_id):
 
         for post in posts:
             post.status = "sent_to_make"
-            post.sent_at = utc_now()
+            post.sent_at = datetime.utcnow()
 
         db.session.commit()
 
@@ -2360,7 +2361,7 @@ def improve_post(post_id):
         improved_caption = improve_post_with_ai(post, brand_context)
 
         post.improved_caption = improved_caption
-        post.improved_at = utc_now()
+        post.improved_at = datetime.utcnow()
 
         brand_context = build_brand_context(current_user.id)
 
@@ -2487,7 +2488,7 @@ def grade_post(post_id):
 
         post.grade_result = grade_result
         post.grade_score = overall_score
-        post.graded_at = utc_now()
+        post.graded_at = datetime.utcnow()
 
         db.session.commit()
 
@@ -2671,7 +2672,7 @@ def studio_regrade(post_id):
 
         post.grade_result = grade_result
         post.grade_score = overall_score
-        post.graded_at = utc_now()
+        post.graded_at = datetime.utcnow()
 
         update_brand_coach(post, brand_context)
 
