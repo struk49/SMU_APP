@@ -2658,30 +2658,29 @@ def studio_regrade(post_id):
         user_id=current_user.id
     ).first_or_404()
 
-    final_caption = request.form.get("final_caption", "").strip()
-
-    if final_caption:
-        post.caption = final_caption
-
     try:
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if final_caption:
+            post.caption = final_caption
+
         brand_context = build_brand_context(current_user.id)
+
         grade_result = grade_post_with_ai(post, brand_context)
         overall_score = extract_overall_score(grade_result)
 
         post.grade_result = grade_result
         post.grade_score = overall_score
-        post.graded_at = datetime.utcnow
-
-        brand_context = build_brand_context(current_user.id)
+        post.graded_at = datetime.utcnow()
 
         update_brand_coach(post, brand_context)
-        
 
         db.session.commit()
 
         flash("Studio caption regraded successfully.", "success")
 
     except Exception as e:
+        db.session.rollback()
         print("Studio regrade error:", e)
         flash(f"Failed to regrade caption: {e}", "danger")
 
