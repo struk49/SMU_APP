@@ -1,0 +1,89 @@
+<!-- ==========================================
+     Revision History Component
+========================================== -->
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-4">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h2 class="h5 fw-bold mb-1">Revision Timeline</h2>
+                <p class="text-muted small mb-0">
+                    Review and restore earlier versions of this caption.
+                </p>
+            </div>
+
+            {% if revisions %}
+                <span class="badge bg-secondary">
+                    {{ revisions|length }} version{% if revisions|length != 1 %}s{% endif %}
+                </span>
+            {% endif %}
+        </div>
+
+        {% if revisions %}
+
+            {% for revision in revisions %}
+                <div class="border rounded-4 p-3 mb-3 bg-light">
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <strong>Version {{ revision.version_number }}</strong>
+
+                            <small class="text-muted d-block">
+                                {{ revision.source|replace('_', ' ')|title }}
+                            </small>
+                        </div>
+
+                        {% if revision.score is not none %}
+                            <span class="badge bg-primary">
+                                {{ "%.1f"|format(revision.score) }}/10
+                            </span>
+                        {% endif %}
+                    </div>
+
+                    {% if revision.created_at %}
+                        <p class="text-muted small mb-2">
+                            {{ revision.created_at.strftime('%d %b %Y at %H:%M') }}
+                        </p>
+                    {% endif %}
+
+                    <p class="small text-muted mb-3">
+                        {{ revision.caption[:180] }}
+                        {% if revision.caption|length > 180 %}...{% endif %}
+                    </p>
+
+                    <form
+                        method="POST"
+                        action="{{ url_for(
+                            'restore_revision',
+                            post_id=post.id,
+                            revision_id=revision.id
+                        ) }}"
+                    >
+                        <button
+                            type="submit"
+                            class="btn btn-outline-primary btn-sm w-100"
+                        >
+                            Restore This Version
+                        </button>
+                    </form>
+
+                </div>
+            {% endfor %}
+
+        {% else %}
+
+            <div class="text-center py-4">
+                <div class="fs-2 mb-2">🕘</div>
+
+                <p class="text-muted mb-0">
+                    No revisions have been saved yet.
+                </p>
+            </div>
+
+        {% endif %}
+
+    </div>
+</div>
+
+<!-- End Revision History Component -->

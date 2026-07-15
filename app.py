@@ -53,8 +53,6 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
 
 db = SQLAlchemy(app)
 
-import json
-
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -72,6 +70,15 @@ cloudinary.config(
     api_key=os.getenv("CLOUDINARY_API_KEY"),
     api_secret=os.getenv("CLOUDINARY_API_SECRET"),
 )
+
+
+@app.template_filter("uk_time")
+def uk_time_filter(value, format_string="%d/%m/%Y %H:%M"):
+    if not value:
+        return ""
+
+    uk_datetime = convert_utc_to_uk(value)
+    return uk_datetime.strftime(format_string)
 
 
 class User(UserMixin, db.Model):
@@ -255,13 +262,6 @@ def parse_platforms(platforms_string):
     ]
 
 
-def convert_uk_time_to_utc(scheduled_time_str):
-    uk = pytz.timezone("Europe/London")
-    local_time = datetime.fromisoformat(scheduled_time_str)
-    local_time = uk.localize(local_time)
-    utc_time = local_time.astimezone(pytz.utc)
-    return utc_time.replace(tzinfo=None)
-
 
 def upload_to_cloudinary(file_or_url):
     return cloudinary.uploader.upload(
@@ -271,6 +271,42 @@ def upload_to_cloudinary(file_or_url):
 
 def get_placeholder_image_url():
     return "https://res.cloudinary.com/demo/image/upload/w_1080,h_1080,c_fill,b_rgb:111111/l_text:Arial_60_bold:Generating%20Image,co_rgb:ffffff/sample.jpg"
+
+
+UK_TIMEZONE = pytz.timezone("Europe/London")
+UTC_TIMEZONE = pytz.UTC
+
+
+def convert_uk_time_to_utc(datetime_string):
+    """
+    Convert a datetime-local value entered in UK time into naive UTC
+    for storage in the existing database.
+    """
+    local_naive = datetime.strptime(
+        datetime_string,
+        "%Y-%m-%dT%H:%M",
+    )
+
+    local_aware = UK_TIMEZONE.localize(
+        local_naive,
+        is_dst=None,
+    )
+
+    utc_aware = local_aware.astimezone(UTC_TIMEZONE)
+
+    return utc_aware.replace(tzinfo=None)
+
+
+def convert_utc_to_uk(utc_datetime):
+    """
+    Convert a naive UTC database datetime into UK local time.
+    """
+    if not utc_datetime:
+        return None
+
+    utc_aware = UTC_TIMEZONE.localize(utc_datetime)
+
+    return utc_aware.astimezone(UK_TIMEZONE)
 
 
 def make_instagram_safe_url(url):
@@ -406,9 +442,6 @@ Rules:
     return response.output_text.strip()
 
 
-import json
-
-
 def parse_brand_feedback(feedback):
     """
     Safely parses the JSON returned by evaluate_brand_match().
@@ -502,20 +535,37 @@ def generate_multiple_openai_images(prompt, count=1):
 def send_payload_to_make(payload, webhook_url=None):
     if not webhook_url:
         if payload.get("post_type") == "carousel":
-            webhook_url = os.getenv("MAKE_WEBHOOK_CAROUSEL")
+            webhook_url = MAKE_WEBHOOK_CAROUSEL
         else:
-            webhook_url = os.getenv("MAKE_WEBHOOK_SINGLE")
+            webhook_url = MAKE_WEBHOOK_SINGLE
 
     if not webhook_url:
-        raise Exception("No Make webhook configured.")
+        raise Exception(
+            f"No Make webhook configured for "
+            f"{payload.get('post_type', 'unknown')} posts."
+        )
 
-    response = requests.post(webhook_url, json=payload, timeout=30)
+    print("\n========== MAKE REQUEST ==========")
+    print("Post type:", payload.get("post_type"))
+    print("Webhook configured:", bool(webhook_url))
+    print("Platforms:", payload.get("platforms"))
+    print("File URL:", payload.get("file_url"))
+    print("Payload:")
+    print(json.dumps(payload, indent=2))
+    print("==================================")
 
-    if response.status_code >= 400:
-        raise Exception(f"Make webhook failed: {response.status_code} {response.text}")
+    response = requests.post(
+        webhook_url,
+        json=payload,
+        timeout=30,
+    )
+
+    print("Make status:", response.status_code)
+    print("Make response:", response.text)
+
+    response.raise_for_status()
 
     return response
-
 
 def build_single_payload(post):
     return {
@@ -661,57 +711,166 @@ Transcript:
 
 def check_scheduled_posts():
     with app.app_context():
-        now = datetime.utcnow()
+        try:
+            now_utc = datetime.utcnow()
 
-        posts = (
-            Post.query.filter(
-                Post.scheduled_time != None,
-                Post.status == "scheduled",
-                Post.scheduled_time <= now,
+            print(
+                "Scheduler check:",
+                now_utc.strftime("%Y-%m-%d %H:%M:%S"),
+                "UTC",
             )
-            .order_by(Post.sort_order.asc(), Post.id.asc())
-            .all()
-        )
 
-        processed_groups = set()
+            due_posts = (
+                Post.query.filter(
+                    Post.scheduled_time.isnot(None),
+                    Post.status == "scheduled",
+                    Post.scheduled_time <= now_utc,
+                )
+                .order_by(
+                    Post.scheduled_time.asc(),
+                    Post.sort_order.asc(),
+                    Post.id.asc(),
+                )
+                .all()
+            )
 
-        for post in posts:
-            try:
-                if post.post_type == "carousel" and post.group_id:
-                    if post.group_id in processed_groups:
-                        continue
+            print(
+                f"Scheduler found {len(due_posts)} due post(s)"
+            )
 
-                    payload = build_carousel_payload(post.group_id)
+            processed_groups = set()
 
-                    if not payload:
-                        continue
+            for post in due_posts:
+                try:
+                    print(
+                        f"Processing scheduled post {post.id}: "
+                        f"scheduled={post.scheduled_time}, "
+                        f"status={post.status}, "
+                        f"user_id={post.user_id}"
+                    )
 
-                    send_payload_to_make(payload)
+                    selected_platforms = [
+                        platform.strip().lower()
+                        for platform in (post.platforms or "").split(",")
+                        if platform.strip()
+                    ]
 
-                    group_posts = Post.query.filter_by(group_id=post.group_id).all()
+                    enabled_platforms = get_enabled_platforms_for_user(
+                        selected_platforms,
+                        user_id=post.user_id,
+                    )
 
-                    for group_post in group_posts:
-                        group_post.status = "sent_to_make"
-                        group_post.sent_at = datetime.utcnow()
+                    print(
+                        f"Post {post.id} enabled platforms:",
+                        enabled_platforms,
+                    )
 
-                    processed_groups.add(post.group_id)
+                    if not enabled_platforms:
+                        raise Exception(
+                            "No selected platforms are enabled "
+                            "in Connected Accounts."
+                        )
 
-                    print(f"✅ Sent scheduled carousel {post.group_id}")
+                    # CAROUSEL
+                    if post.group_id:
+                        if post.group_id in processed_groups:
+                            continue
 
-                else:
-                    payload = build_single_payload(post)
-                    send_payload_to_make(payload)
+                        payload = build_carousel_payload(
+                            post.group_id
+                        )
 
-                    post.status = "sent_to_make"
-                    post.sent_at = datetime.utcnow()
+                        if not payload:
+                            raise Exception(
+                                "Carousel payload could not be built."
+                            )
 
-                    print(f"✅ Sent scheduled post {post.id}")
+                        webhook_url = get_user_make_webhook(
+                            "carousel",
+                            user_id=post.user_id,
+                        )
 
-                db.session.commit()
+                        if not webhook_url:
+                            raise Exception(
+                                "No carousel webhook is configured."
+                            )
 
-            except Exception as e:
-                print("Scheduler error:", e)
+                        payload["platforms"] = enabled_platforms
 
+                        send_payload_to_make(
+                            payload,
+                            webhook_url,
+                        )
+
+                        group_posts = get_ordered_carousel_posts(
+                            post.group_id
+                        )
+
+                        for group_post in group_posts:
+                            group_post.status = "sent_to_make"
+                            group_post.sent_at = datetime.utcnow()
+
+                        processed_groups.add(post.group_id)
+
+                        print(
+                            f"✅ Sent scheduled carousel "
+                            f"{post.group_id}"
+                        )
+
+                    # SINGLE POST
+                    else:
+                        payload = build_single_payload(post)
+                        payload["platforms"] = enabled_platforms
+
+                        webhook_url = get_user_make_webhook(
+                            "single",
+                            user_id=post.user_id,
+                        )
+
+                        if not webhook_url:
+                            raise Exception(
+                                "No single-post webhook is configured."
+                            )
+
+                        print(
+                            f"Sending scheduled post {post.id} "
+                            "to its single-post webhook"
+                        )
+
+                        send_payload_to_make(
+                            payload,
+                            webhook_url,
+                        )
+
+                        post.status = "sent_to_make"
+                        post.sent_at = datetime.utcnow()
+
+                        print(
+                            f"✅ Sent scheduled post {post.id}"
+                        )
+
+                    db.session.commit()
+
+                except Exception as post_error:
+                    db.session.rollback()
+
+                    print(
+                        f"❌ Scheduled post {post.id} failed:",
+                        repr(post_error),
+                    )
+
+                    post.status = "schedule_failed"
+                    db.session.commit()
+
+        except Exception as worker_error:
+            db.session.rollback()
+
+            print(
+                "❌ Scheduled-post worker error:",
+                repr(worker_error),
+            )
+
+                        
 
 def generate_pending_carousel_images():
     with app.app_context():
@@ -988,18 +1147,30 @@ IMPROVEMENTS:
     return response.output_text.strip()
 
 
+import re
+
+
 def extract_overall_score(grade_result):
+    """
+    Extracts the OVERALL_SCORE from the AI grading response.
+    """
+
     if not grade_result:
         return None
 
-    match = re.search(r"OVERALL_SCORE:\s*([0-9]+(?:\.[0-9]+)?)\/10", grade_result)
-    if match:
-        try:
-            return float(match.group(1))
-        except ValueError:
-            return None
+    match = re.search(
+        r"OVERALL_SCORE:\s*([0-9]+(?:\.[0-9]+)?)\/10",
+        grade_result,
+    )
 
-    return None
+    if not match:
+        return None
+
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
 
 
 def save_post_revision(post, source="manual"):
@@ -1487,12 +1658,24 @@ def duplicate_carousel(group_id):
         flash(f"Failed to duplicate carousel: {e}", "danger")
         return redirect(url_for("index"))
 
-def get_user_connected_accounts():
-    return ConnectedAccount.query.filter_by(user_id=current_user.id).first()
+
+def get_user_connected_accounts(user_id=None):
+    if user_id is None:
+        if not current_user.is_authenticated:
+            return None
+
+        user_id = current_user.id
+
+    return ConnectedAccount.query.filter_by(
+        user_id=user_id
+    ).first()
 
 
-def get_enabled_platforms_for_user(selected_platforms):
-    accounts = get_user_connected_accounts()
+def get_enabled_platforms_for_user(
+    selected_platforms,
+    user_id=None,
+):
+    accounts = get_user_connected_accounts(user_id)
 
     if not accounts:
         return []
@@ -1506,50 +1689,97 @@ def get_enabled_platforms_for_user(selected_platforms):
         "x": accounts.x_connected,
     }
 
-    return [
-        platform for platform in selected_platforms
-        if platform_map.get(platform, False)
-    ]
+    enabled_platforms = []
+
+    for platform in selected_platforms:
+        clean_platform = platform.strip().lower()
+
+        if platform_map.get(clean_platform, False):
+            enabled_platforms.append(clean_platform)
+
+    return enabled_platforms
 
 
-def get_user_make_webhook(post_type):
-    accounts = get_user_connected_accounts()
-
-    if not accounts:
-        return None
+def get_user_make_webhook(post_type, user_id=None):
+    accounts = get_user_connected_accounts(user_id)
 
     if post_type == "carousel":
-        return accounts.make_webhook_carousel or None
+        if accounts and accounts.make_webhook_carousel:
+            return accounts.make_webhook_carousel
 
-    return accounts.make_webhook_single or None
+        return MAKE_WEBHOOK_CAROUSEL or None
+
+    if accounts and accounts.make_webhook_single:
+        return accounts.make_webhook_single
+
+    return MAKE_WEBHOOK_SINGLE or None
+
 
 
 @app.route("/send/<int:post_id>", methods=["POST"])
 @login_required
 def send_to_make(post_id):
-    post = Post.query.get_or_404(post_id)
-
-    if post.user_id != current_user.id:
-        flash("You do not have access to this post.", "danger")
-        return redirect(url_for("index"))
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
 
     try:
+        selected_platforms = [
+            platform.strip().lower()
+            for platform in (post.platforms or "").split(",")
+            if platform.strip()
+        ]
+
+        enabled_platforms = get_enabled_platforms_for_user(
+            selected_platforms
+        )
+
+        if not enabled_platforms:
+            flash(
+                "No connected platforms are enabled for this post. "
+                "Check Connected Accounts.",
+                "danger",
+            )
+            return redirect(
+                url_for("view_post", post_id=post.id)
+            )
+
+        # CAROUSEL
         if post.group_id:
             payload = build_carousel_payload(post.group_id)
 
             if not payload:
-                flash("Carousel payload could not be built.", "danger")
-                return redirect(url_for("index"))
-            selected_platforms = post.platforms.split(",") if post.platforms else []
-            enabled_platforms = get_enabled_platforms_for_user(selected_platforms)
+                flash(
+                    "Carousel payload could not be built.",
+                    "danger",
+                )
+                return redirect(
+                    url_for("view_post", post_id=post.id)
+                )
 
-            if not enabled_platforms:
-                flash("No connected platforms enabled for this post. Check Connected Accounts.", "danger")
-                return redirect(url_for("view_post", post_id=post.id))
+            webhook_url = get_user_make_webhook("carousel")
 
-            send_payload_to_make(payload, webhook_url)
+            if not webhook_url:
+                flash(
+                    "No carousel webhook is configured. "
+                    "Add it in Connected Accounts.",
+                    "danger",
+                )
+                return redirect(
+                    url_for("view_post", post_id=post.id)
+                )
 
-            group_posts = get_ordered_carousel_posts(post.group_id)
+            payload["platforms"] = enabled_platforms
+
+            send_payload_to_make(
+                payload,
+                webhook_url
+            )
+
+            group_posts = get_ordered_carousel_posts(
+                post.group_id
+            )
 
             for group_post in group_posts:
                 group_post.status = "sent_to_make"
@@ -1557,32 +1787,51 @@ def send_to_make(post_id):
 
             db.session.commit()
 
-            flash("Carousel sent to Make.com successfully.", "success")
+            flash(
+                "Carousel sent to Make.com successfully.",
+                "success",
+            )
             return redirect(url_for("index"))
 
+        # SINGLE POST
         payload = build_single_payload(post)
-        send_payload_to_make(payload)
         payload["platforms"] = enabled_platforms
+
         webhook_url = get_user_make_webhook("single")
 
         if not webhook_url:
-            flash("No single post webhook configured. Add it in Connected Accounts.", "danger")
-            return redirect(url_for("view_post", post_id=post.id))
+            flash(
+                "No single-post webhook is configured. "
+                "Add it in Connected Accounts.",
+                "danger",
+            )
+            return redirect(
+                url_for("view_post", post_id=post.id)
+            )
 
-        send_payload_to_make(payload, webhook_url)
+        send_payload_to_make(
+            payload,
+            webhook_url
+        )
 
         post.status = "sent_to_make"
         post.sent_at = datetime.utcnow()
 
         db.session.commit()
 
-        flash("Sent to Make.com successfully.", "success")
+        flash(
+            "Post sent to Make.com successfully.",
+            "success",
+        )
 
     except Exception as e:
+        db.session.rollback()
         print("Send to Make error:", e)
-        flash(f"Failed: {e}", "danger")
+        flash(f"Failed to send post: {e}", "danger")
 
-    return redirect(url_for("view_post", post_id=post.id))
+    return redirect(
+        url_for("view_post", post_id=post.id)
+    )
 
 
 @app.template_filter("from_json")
@@ -1753,23 +2002,40 @@ def edit_carousel(group_id):
 @app.route("/schedule/<int:post_id>", methods=["POST"])
 @login_required
 def schedule_post(post_id):
-    post = Post.query.get_or_404(post_id)
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
 
-    if post.user_id != current_user.id:
-        flash("You do not have access to this post.", "danger")
-        return redirect(url_for("index"))
-
-    scheduled_time_str = request.form.get("scheduled_time")
+    scheduled_time_str = request.form.get(
+        "scheduled_time",
+        ""
+    ).strip()
 
     if not scheduled_time_str:
         flash("Please select a date and time.", "danger")
-        return redirect(url_for("view_post", post_id=post.id))
+        return redirect(
+            url_for("view_post", post_id=post.id)
+        )
 
     try:
-        scheduled_time = convert_uk_time_to_utc(scheduled_time_str)
+        scheduled_time = convert_uk_time_to_utc(
+            scheduled_time_str
+        )
 
         if post.group_id:
-            group_posts = get_ordered_carousel_posts(post.group_id)
+            group_posts = get_ordered_carousel_posts(
+                post.group_id
+            )
+
+            if not group_posts:
+                flash(
+                    "No carousel posts were found.",
+                    "danger"
+                )
+                return redirect(
+                    url_for("view_post", post_id=post.id)
+                )
 
             for group_post in group_posts:
                 group_post.scheduled_time = scheduled_time
@@ -1777,21 +2043,36 @@ def schedule_post(post_id):
 
             db.session.commit()
 
-            flash("Carousel scheduled successfully.", "success")
-            return redirect(url_for("index"))
+            flash(
+                "Carousel scheduled successfully.",
+                "success"
+            )
+
+            return redirect(
+                url_for("view_post", post_id=post.id)
+            )
 
         post.scheduled_time = scheduled_time
         post.status = "scheduled"
 
         db.session.commit()
 
-        flash("Post scheduled successfully.", "success")
+        flash(
+            "Post scheduled successfully.",
+            "success"
+        )
 
     except Exception as e:
+        db.session.rollback()
         print("Schedule error:", e)
-        flash(f"Error scheduling post: {e}", "danger")
+        flash(
+            f"Error scheduling post: {e}",
+            "danger"
+        )
 
-    return redirect(url_for("view_post", post_id=post.id))
+    return redirect(
+        url_for("view_post", post_id=post.id)
+    )
 
 
 @app.route("/delete/<int:post_id>", methods=["POST"])
@@ -2417,90 +2698,6 @@ Rules:
 
 
 
-
-
-def grade_post_with_ai(post, brand_context=""):
-    prompt = f"""
-You are an expert social media strategist and content reviewer.
-
-Brand Brief:
-{brand_context}
-
-Post Caption:
-{post.caption or ""}
-
-Platform:
-{post.platforms or ""}
-
-Post Type:
-{post.post_type or "single"}
-
-Score the post out of 10 for:
-1. Hook
-2. Clarity
-3. Engagement
-4. Call To Action
-5. Platform Fit
-6. Brand Fit
-
-Return exactly:
-
-HOOK_SCORE: X/10
-CLARITY_SCORE: X/10
-ENGAGEMENT_SCORE: X/10
-CTA_SCORE: X/10
-PLATFORM_FIT_SCORE: X/10
-BRAND_FIT_SCORE: X/10
-OVERALL_SCORE: X/10
-
-STRENGTHS:
-- ...
-
-IMPROVEMENTS:
-- ...
-"""
-
-    response = openai_client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt,
-    )
-
-    return response.output_text.strip()
-
-
-def extract_overall_score(grade_result):
-    match = re.search(r"OVERALL_SCORE:\s*([0-9]+(?:\.[0-9]+)?)\/10", grade_result or "")
-    return float(match.group(1)) if match else None
-
-
-@app.route("/post/<int:post_id>/grade", methods=["POST"])
-@login_required
-def grade_post(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    try:
-        brand_context = build_brand_context(current_user.id)
-        grade_result = grade_post_with_ai(post, brand_context)
-        overall_score = extract_overall_score(grade_result)
-
-        post.grade_result = grade_result
-        post.grade_score = overall_score
-        post.graded_at = datetime.utcnow()
-
-        db.session.commit()
-
-        flash("Post graded successfully.", "success")
-
-    except Exception as e:
-        print("Post grading error:", e)
-        flash(f"Failed to grade post: {e}", "danger")
-
-    return redirect(url_for("view_post", post_id=post.id))
-
-
 @app.route("/post/<int:post_id>/use-improved", methods=["POST"])
 @login_required
 def use_improved_caption(post_id):
@@ -2788,47 +2985,59 @@ def logout():
     return redirect(url_for("login"))
 
 
-
-
-print("Starting background scheduler...")
-
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    generate_pending_carousel_images,
-    "interval",
-    seconds=20,
-    max_instances=1
-)
-scheduler.start()
-
-print("Background scheduler started.")
-
-
 @app.route("/settings/accounts", methods=["GET", "POST"])
 @login_required
 def connected_accounts():
-    accounts = ConnectedAccount.query.filter_by(user_id=current_user.id).first()
+    accounts = ConnectedAccount.query.filter_by(
+        user_id=current_user.id
+    ).first()
 
     if not accounts:
-        accounts = ConnectedAccount(user_id=current_user.id)
+        accounts = ConnectedAccount(
+            user_id=current_user.id
+        )
         db.session.add(accounts)
         db.session.commit()
 
     if request.method == "POST":
-        accounts.instagram_connected = request.form.get("instagram_connected") == "on"
-        accounts.facebook_connected = request.form.get("facebook_connected") == "on"
-        accounts.linkedin_connected = request.form.get("linkedin_connected") == "on"
-        accounts.pinterest_connected = request.form.get("pinterest_connected") == "on"
-        accounts.reddit_connected = request.form.get("reddit_connected") == "on"
-        accounts.x_connected = request.form.get("x_connected") == "on"
+        accounts.instagram_connected = (
+            request.form.get("instagram_connected") == "on"
+        )
+        accounts.facebook_connected = (
+            request.form.get("facebook_connected") == "on"
+        )
+        accounts.linkedin_connected = (
+            request.form.get("linkedin_connected") == "on"
+        )
+        accounts.pinterest_connected = (
+            request.form.get("pinterest_connected") == "on"
+        )
+        accounts.reddit_connected = (
+            request.form.get("reddit_connected") == "on"
+        )
+        accounts.x_connected = (
+            request.form.get("x_connected") == "on"
+        )
 
-        accounts.make_webhook_single = request.form.get("make_webhook_single", "").strip()
-        accounts.make_webhook_carousel = request.form.get("make_webhook_carousel", "").strip()
+        accounts.make_webhook_single = request.form.get(
+            "make_webhook_single",
+            "",
+        ).strip()
+
+        accounts.make_webhook_carousel = request.form.get(
+            "make_webhook_carousel",
+            "",
+        ).strip()
 
         db.session.commit()
 
-        flash("Connected accounts updated.", "success")
-        return redirect(url_for("connected_accounts"))
+        flash(
+            "Connected accounts updated.",
+            "success",
+        )
+        return redirect(
+            url_for("connected_accounts")
+        )
 
     enabled_count = sum([
         bool(accounts.instagram_connected),
@@ -2852,9 +3061,38 @@ def connected_accounts():
     )
 
 
+print("Starting background scheduler...")
 
+scheduler = BackgroundScheduler(
+    timezone="UTC"
+)
 
+scheduler.add_job(
+    generate_pending_carousel_images,
+    trigger="interval",
+    seconds=20,
+    id="generate_pending_images",
+    max_instances=1,
+    replace_existing=True,
+)
+
+scheduler.add_job(
+    check_scheduled_posts,
+    trigger="interval",
+    seconds=30,
+    id="check_scheduled_posts",
+    max_instances=1,
+    replace_existing=True,
+)
+
+scheduler.start()
+
+print("Background scheduler started.")
+print("Registered jobs:", scheduler.get_jobs())
 
 
 if __name__ == "__main__":
-    app.run(debug=True, use_reloader=False)
+    app.run(
+        debug=True,
+        use_reloader=False,
+    )

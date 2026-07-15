@@ -34,7 +34,7 @@
 
                                 <div class="col-md-2">
                                     <div class="fw-bold">
-                                        {{ post.scheduled_time.strftime('%H:%M') }}
+                                        {{ post.scheduled_time|uk_time }}
                                     </div>
                                     <div class="small text-muted">
                                         {{ post.post_type|title }}

@@ -25,3 +25,16 @@ uploads/
 
 # Logs
 *.log
+
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+instance/
+*.db
+.pytest_cache/
+.coverage
+htmlcov/

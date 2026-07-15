@@ -1,0 +1,72 @@
+<!-- ==========================================
+     Publishing Component
+========================================== -->
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h3 class="h5 fw-bold mb-1">Publishing</h3>
+                <p class="text-muted small mb-0">
+                    Review, edit or send this post.
+                </p>
+            </div>
+
+            {% if post.status == 'draft' %}
+                <span class="badge bg-secondary">Draft</span>
+            {% elif post.status == 'scheduled' %}
+                <span class="badge bg-warning text-dark">Scheduled</span>
+            {% elif post.status == 'sent_to_make' %}
+                <span class="badge bg-success">Sent</span>
+            {% else %}
+                <span class="badge bg-secondary">
+                    {{ post.status|replace('_', ' ')|title }}
+                </span>
+            {% endif %}
+        </div>
+
+        <div class="d-grid gap-2">
+
+            {% if post.status != 'scheduled' %}
+                <form method="POST"
+                      action="{{ url_for('send_to_make', post_id=post.id) }}">
+
+                    <button type="submit"
+                            class="btn btn-success w-100">
+
+                        Send to Make
+
+                    </button>
+
+                </form>
+            {% else %}
+                <button type="button"
+                        class="btn btn-outline-secondary w-100"
+                        disabled>
+
+                    Post is Scheduled
+
+                </button>
+            {% endif %}
+
+            <a href="{{ url_for('edit_post', post_id=post.id) }}"
+               class="btn btn-outline-primary">
+
+                Edit Full Post
+
+            </a>
+
+            <a href="{{ url_for('view_post', post_id=post.id) }}"
+               class="btn btn-outline-secondary">
+
+                View Post
+
+            </a>
+
+        </div>
+
+    </div>
+</div>
+
+<!-- End Publishing Component -->
