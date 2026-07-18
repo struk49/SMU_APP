@@ -4,7 +4,9 @@ import json
 import uuid
 import re
 import base64
+from io import BytesIO
 from datetime import datetime
+from urllib.parse import urlparse
 
 import pytz
 import requests
@@ -21,6 +23,7 @@ from flask_login import (
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
+from PIL import Image
 
 import cloudinary
 import cloudinary.uploader
@@ -262,8 +265,89 @@ def parse_platforms(platforms_string):
     ]
 
 
+def is_instagram_selected(platforms):
+    return "instagram" in {
+        platform.strip().lower()
+        for platform in platforms
+        if platform and platform.strip()
+    }
 
-def upload_to_cloudinary(file_or_url):
+
+def normalize_image_to_jpeg(file_or_bytes):
+    if isinstance(file_or_bytes, bytes):
+        source = BytesIO(file_or_bytes)
+    else:
+        source = file_or_bytes
+
+    if hasattr(source, "seek"):
+        source.seek(0)
+
+    with Image.open(source) as image:
+        source_format = image.format or "unknown"
+
+        if image.mode in {"RGBA", "LA"} or (
+            image.mode == "P" and "transparency" in image.info
+        ):
+            rgba_image = image.convert("RGBA")
+            background = Image.new("RGBA", rgba_image.size, (255, 255, 255, 255))
+            background.alpha_composite(rgba_image)
+            final_image = background.convert("RGB")
+        else:
+            final_image = image.convert("RGB")
+
+        output = BytesIO()
+        final_image.save(
+            output,
+            format="JPEG",
+            quality=92,
+            progressive=False,
+            optimize=True,
+        )
+
+    return {
+        "bytes": output.getvalue(),
+        "source_format": source_format,
+        "final_format": "JPEG",
+        "final_mode": "RGB",
+    }
+
+
+def log_image_normalization_diagnostics(result, upload_url=None):
+    print(
+        "Image normalization diagnostics:",
+        {
+            "source_format": result.get("source_format"),
+            "final_format": result.get("final_format"),
+            "final_color_mode": result.get("final_mode"),
+            "final_url_extension": get_url_path_extension(upload_url),
+        },
+    )
+
+
+def upload_jpeg_to_cloudinary(file_or_bytes):
+    normalized = normalize_image_to_jpeg(file_or_bytes)
+    upload_buffer = BytesIO(normalized["bytes"])
+    upload_buffer.name = "instagram-safe.jpg"
+
+    upload_result = cloudinary.uploader.upload(
+        upload_buffer,
+        folder="social_posts",
+        resource_type="image",
+        format="jpg",
+    )
+
+    log_image_normalization_diagnostics(
+        normalized,
+        upload_url=upload_result.get("secure_url"),
+    )
+
+    return upload_result
+
+
+def upload_to_cloudinary(file_or_url, force_jpeg=False):
+    if force_jpeg:
+        return upload_jpeg_to_cloudinary(file_or_url)
+
     return cloudinary.uploader.upload(
         file_or_url, folder="social_posts", resource_type="auto"
     )
@@ -311,6 +395,39 @@ def convert_utc_to_uk(utc_datetime):
 
 def make_instagram_safe_url(url):
     return url.replace("/upload/", "/upload/c_fill,w_1080,h_1080,q_auto,f_jpg/")
+
+
+def get_url_path_extension(url):
+    path = urlparse(url or "").path
+    _, extension = os.path.splitext(path)
+    return extension.lower().lstrip(".")
+
+
+def log_scheduled_post_diagnostics(post, input_local_time=None):
+    print(
+        "Scheduled post saved:",
+        {
+            "post_id": post.id,
+            "post_type": post.post_type,
+            "group_id_present": bool(post.group_id),
+            "user_id": post.user_id,
+            "status": post.status,
+            "stored_utc_scheduled_time": post.scheduled_time,
+            "input_local_time_present": bool(input_local_time),
+        },
+    )
+
+
+def log_single_image_diagnostics(post, enabled_platforms):
+    print(
+        "Single image publish diagnostics:",
+        {
+            "instagram_selected": "instagram" in enabled_platforms,
+            "file_url_configured": bool(post.file_url),
+            "file_type": post.file_type,
+            "url_path_extension": get_url_path_extension(post.file_url),
+        },
+    )
 
 
 def apply_image_style(prompt, style):
@@ -515,9 +632,7 @@ def generate_openai_image(prompt):
     image_base64 = result.data[0].b64_json
     image_bytes = base64.b64decode(image_base64)
 
-    upload_result = cloudinary.uploader.upload(
-        image_bytes, folder="social_posts", resource_type="image"
-    )
+    upload_result = upload_jpeg_to_cloudinary(image_bytes)
 
     return upload_result["secure_url"]
 
@@ -549,9 +664,7 @@ def send_payload_to_make(payload, webhook_url=None):
     print("Post type:", payload.get("post_type"))
     print("Webhook configured:", bool(webhook_url))
     print("Platforms:", payload.get("platforms"))
-    print("File URL:", payload.get("file_url"))
-    print("Payload:")
-    print(json.dumps(payload, indent=2))
+    print("Media count:", len(payload.get("media", [])))
     print("==================================")
 
     response = requests.post(
@@ -561,7 +674,6 @@ def send_payload_to_make(payload, webhook_url=None):
     )
 
     print("Make status:", response.status_code)
-    print("Make response:", response.text)
 
     response.raise_for_status()
 
@@ -579,16 +691,21 @@ def build_single_payload(post):
     }
 
 
-def get_ordered_carousel_posts(group_id):
-    return (
-        Post.query.filter_by(group_id=group_id)
-        .order_by(Post.is_cover.desc(), Post.sort_order.asc(), Post.id.asc())
-        .all()
-    )
+def get_ordered_carousel_posts(group_id, user_id=None):
+    query = Post.query.filter_by(group_id=group_id)
+
+    if user_id is not None:
+        query = query.filter_by(user_id=user_id)
+
+    return query.order_by(
+        Post.is_cover.desc(),
+        Post.sort_order.asc(),
+        Post.id.asc(),
+    ).all()
 
 
-def build_carousel_payload(group_id):
-    posts = get_ordered_carousel_posts(group_id)
+def build_carousel_payload(group_id, user_id=None):
+    posts = get_ordered_carousel_posts(group_id, user_id=user_id)
 
     if not posts:
         return None
@@ -720,6 +837,17 @@ def check_scheduled_posts():
                 "UTC",
             )
 
+            scheduled_query = Post.query.filter(
+                Post.scheduled_time.isnot(None),
+                Post.status == "scheduled",
+            )
+            scheduled_count = scheduled_query.count()
+            earliest_scheduled = (
+                scheduled_query.order_by(Post.scheduled_time.asc())
+                .with_entities(Post.scheduled_time)
+                .first()
+            )
+
             due_posts = (
                 Post.query.filter(
                     Post.scheduled_time.isnot(None),
@@ -735,7 +863,15 @@ def check_scheduled_posts():
             )
 
             print(
-                f"Scheduler found {len(due_posts)} due post(s)"
+                "Scheduler diagnostics:",
+                {
+                    "current_utc_time": now_utc,
+                    "scheduled_row_count": scheduled_count,
+                    "earliest_scheduled_time": (
+                        earliest_scheduled[0] if earliest_scheduled else None
+                    ),
+                    "due_row_count": len(due_posts),
+                },
             )
 
             processed_groups = set()
@@ -749,67 +885,13 @@ def check_scheduled_posts():
                         f"user_id={post.user_id}"
                     )
 
-                    selected_platforms = [
-                        platform.strip().lower()
-                        for platform in (post.platforms or "").split(",")
-                        if platform.strip()
-                    ]
-
-                    enabled_platforms = get_enabled_platforms_for_user(
-                        selected_platforms,
-                        user_id=post.user_id,
-                    )
-
-                    print(
-                        f"Post {post.id} enabled platforms:",
-                        enabled_platforms,
-                    )
-
-                    if not enabled_platforms:
-                        raise Exception(
-                            "No selected platforms are enabled "
-                            "in Connected Accounts."
-                        )
-
-                    # CAROUSEL
                     if post.group_id:
                         if post.group_id in processed_groups:
                             continue
 
-                        payload = build_carousel_payload(
-                            post.group_id
-                        )
+                    publish_post_to_make(post, post.user_id)
 
-                        if not payload:
-                            raise Exception(
-                                "Carousel payload could not be built."
-                            )
-
-                        webhook_url = get_user_make_webhook(
-                            "carousel",
-                            user_id=post.user_id,
-                        )
-
-                        if not webhook_url:
-                            raise Exception(
-                                "No carousel webhook is configured."
-                            )
-
-                        payload["platforms"] = enabled_platforms
-
-                        send_payload_to_make(
-                            payload,
-                            webhook_url,
-                        )
-
-                        group_posts = get_ordered_carousel_posts(
-                            post.group_id
-                        )
-
-                        for group_post in group_posts:
-                            group_post.status = "sent_to_make"
-                            group_post.sent_at = datetime.utcnow()
-
+                    if post.group_id:
                         processed_groups.add(post.group_id)
 
                         print(
@@ -817,34 +899,7 @@ def check_scheduled_posts():
                             f"{post.group_id}"
                         )
 
-                    # SINGLE POST
                     else:
-                        payload = build_single_payload(post)
-                        payload["platforms"] = enabled_platforms
-
-                        webhook_url = get_user_make_webhook(
-                            "single",
-                            user_id=post.user_id,
-                        )
-
-                        if not webhook_url:
-                            raise Exception(
-                                "No single-post webhook is configured."
-                            )
-
-                        print(
-                            f"Sending scheduled post {post.id} "
-                            "to its single-post webhook"
-                        )
-
-                        send_payload_to_make(
-                            payload,
-                            webhook_url,
-                        )
-
-                        post.status = "sent_to_make"
-                        post.sent_at = datetime.utcnow()
-
                         print(
                             f"✅ Sent scheduled post {post.id}"
                         )
@@ -859,8 +914,16 @@ def check_scheduled_posts():
                         repr(post_error),
                     )
 
-                    post.status = "schedule_failed"
-                    db.session.commit()
+                    try:
+                        post.status = "schedule_failed"
+                        db.session.commit()
+                    except Exception as status_error:
+                        db.session.rollback()
+                        print(
+                            f"Failed to mark scheduled post {post.id} "
+                            "as failed:",
+                            repr(status_error),
+                        )
 
         except Exception as worker_error:
             db.session.rollback()
@@ -1405,7 +1468,13 @@ User Request:
                     if make_carousel and file_type != "image":
                         raise Exception("Carousel posts currently support images only.")
 
-                    upload_result = upload_to_cloudinary(file)
+                    upload_result = upload_to_cloudinary(
+                        file,
+                        force_jpeg=(
+                            file_type == "image"
+                            and is_instagram_selected(platforms)
+                        ),
+                    )
 
                     post = Post(
                         file_url=upload_result["secure_url"],
@@ -1453,7 +1522,10 @@ def view_post(post_id):
     carousel_posts = []
 
     if post.group_id:
-        carousel_posts = get_ordered_carousel_posts(post.group_id)
+        carousel_posts = get_ordered_carousel_posts(
+            post.group_id,
+            user_id=current_user.id,
+        )
 
     return render_template("view_post.html", post=post, carousel_posts=carousel_posts)
 
@@ -1541,7 +1613,10 @@ def rewrite_caption(post_id):
 @app.route("/rewrite-carousel-caption/<group_id>", methods=["POST"])
 @login_required
 def rewrite_carousel_caption(group_id):
-    posts = get_ordered_carousel_posts(group_id)
+    posts = get_ordered_carousel_posts(
+        group_id,
+        user_id=current_user.id,
+    )
 
     if not posts:
         flash("Carousel not found.", "danger")
@@ -1616,7 +1691,10 @@ def duplicate_post(post_id):
 @app.route("/duplicate-carousel/<group_id>", methods=["POST"])
 @login_required
 def duplicate_carousel(group_id):
-    original_posts = get_ordered_carousel_posts(group_id)
+    original_posts = get_ordered_carousel_posts(
+        group_id,
+        user_id=current_user.id,
+    )
 
     if not original_posts:
         flash("Carousel not found.", "danger")
@@ -1715,6 +1793,87 @@ def get_user_make_webhook(post_type, user_id=None):
     return MAKE_WEBHOOK_SINGLE or None
 
 
+def publish_post_to_make(post, user_id):
+    if user_id is None:
+        raise ValueError("user_id is required for publishing")
+
+    selected_platforms = [
+        platform.strip().lower()
+        for platform in (post.platforms or "").split(",")
+        if platform.strip()
+    ]
+
+    enabled_platforms = get_enabled_platforms_for_user(
+        selected_platforms,
+        user_id=user_id,
+    )
+
+    if not enabled_platforms:
+        raise Exception(
+            "No connected platforms are enabled for this post. "
+            "Check Connected Accounts."
+        )
+
+    if post.group_id:
+        payload = build_carousel_payload(
+            post.group_id,
+            user_id=user_id,
+        )
+
+        if not payload:
+            raise Exception("Carousel payload could not be built.")
+
+        webhook_url = get_user_make_webhook(
+            "carousel",
+            user_id=user_id,
+        )
+
+        if not webhook_url:
+            raise Exception(
+                "No carousel webhook is configured. "
+                "Add it in Connected Accounts."
+            )
+
+        payload["platforms"] = enabled_platforms
+        response = send_payload_to_make(payload, webhook_url)
+
+        group_posts = get_ordered_carousel_posts(
+            post.group_id,
+            user_id=user_id,
+        )
+
+        for group_post in group_posts:
+            group_post.status = "sent_to_make"
+            group_post.sent_at = datetime.utcnow()
+
+        return response
+
+    payload = build_single_payload(post)
+    payload["platforms"] = enabled_platforms
+    log_single_image_diagnostics(post, enabled_platforms)
+
+    if "instagram" in enabled_platforms and not post.file_url:
+        raise Exception("Instagram single-image posts require an image URL.")
+
+    webhook_url = get_user_make_webhook(
+        "single",
+        user_id=user_id,
+    )
+
+    if not webhook_url:
+        raise Exception(
+            "No single-post webhook is configured. "
+            "Add it in Connected Accounts."
+        )
+
+    response = send_payload_to_make(payload, webhook_url)
+
+    post.status = "sent_to_make"
+    post.sent_at = datetime.utcnow()
+
+    return response
+
+
 
 @app.route("/send/<int:post_id>", methods=["POST"])
 @login_required
@@ -1724,98 +1883,14 @@ def send_to_make(post_id):
         user_id=current_user.id
     ).first_or_404()
 
+    if post.status in {"publishing", "sent_to_make"}:
+        flash("This post has already been sent to Make.")
+        return redirect(
+            url_for("view_post", post_id=post.id)
+        )
+
     try:
-        selected_platforms = [
-            platform.strip().lower()
-            for platform in (post.platforms or "").split(",")
-            if platform.strip()
-        ]
-
-        enabled_platforms = get_enabled_platforms_for_user(
-            selected_platforms
-        )
-
-        if not enabled_platforms:
-            flash(
-                "No connected platforms are enabled for this post. "
-                "Check Connected Accounts.",
-                "danger",
-            )
-            return redirect(
-                url_for("view_post", post_id=post.id)
-            )
-
-        # CAROUSEL
-        if post.group_id:
-            payload = build_carousel_payload(post.group_id)
-
-            if not payload:
-                flash(
-                    "Carousel payload could not be built.",
-                    "danger",
-                )
-                return redirect(
-                    url_for("view_post", post_id=post.id)
-                )
-
-            webhook_url = get_user_make_webhook("carousel")
-
-            if not webhook_url:
-                flash(
-                    "No carousel webhook is configured. "
-                    "Add it in Connected Accounts.",
-                    "danger",
-                )
-                return redirect(
-                    url_for("view_post", post_id=post.id)
-                )
-
-            payload["platforms"] = enabled_platforms
-
-            send_payload_to_make(
-                payload,
-                webhook_url
-            )
-
-            group_posts = get_ordered_carousel_posts(
-                post.group_id
-            )
-
-            for group_post in group_posts:
-                group_post.status = "sent_to_make"
-                group_post.sent_at = datetime.utcnow()
-
-            db.session.commit()
-
-            flash(
-                "Carousel sent to Make.com successfully.",
-                "success",
-            )
-            return redirect(url_for("index"))
-
-        # SINGLE POST
-        payload = build_single_payload(post)
-        payload["platforms"] = enabled_platforms
-
-        webhook_url = get_user_make_webhook("single")
-
-        if not webhook_url:
-            flash(
-                "No single-post webhook is configured. "
-                "Add it in Connected Accounts.",
-                "danger",
-            )
-            return redirect(
-                url_for("view_post", post_id=post.id)
-            )
-
-        send_payload_to_make(
-            payload,
-            webhook_url
-        )
-
-        post.status = "sent_to_make"
-        post.sent_at = datetime.utcnow()
+        publish_post_to_make(post, current_user.id)
 
         db.session.commit()
 
@@ -1899,45 +1974,20 @@ def studio_action(post_id, action):
 @app.route("/send-carousel/<group_id>", methods=["POST"])
 @login_required
 def send_carousel_to_make(group_id):
-    posts = get_ordered_carousel_posts(group_id)
-
+    posts = get_ordered_carousel_posts(
+        group_id,
+        user_id=current_user.id,
+    )
     if not posts:
         flash("Carousel not found.", "danger")
         return redirect(url_for("index"))
 
+    if all(post.status == "sent_to_make" for post in posts):
+        flash("This post has already been sent to Make.")
+        return redirect(url_for("view_post", post_id=posts[0].id))
+
     try:
-        selected_platforms = posts[0].platforms.split(",") if posts[0].platforms else []
-        enabled_platforms = get_enabled_platforms_for_user(selected_platforms)
-
-        if not enabled_platforms:
-            flash(
-                "No connected platforms enabled for this carousel. Check Connected Accounts.",
-                "danger",
-            )
-            return redirect(url_for("view_post", post_id=posts[0].id))
-
-        webhook_url = get_user_make_webhook("carousel")
-
-        if not webhook_url:
-            flash(
-                "No carousel webhook configured. Add it in Connected Accounts.",
-                "danger",
-            )
-            return redirect(url_for("view_post", post_id=posts[0].id))
-
-        payload = build_carousel_payload(group_id)
-
-        if not payload:
-            flash("Carousel payload could not be built.", "danger")
-            return redirect(url_for("index"))
-
-        payload["platforms"] = enabled_platforms
-
-        send_payload_to_make(payload, webhook_url)
-
-        for post in posts:
-            post.status = "sent_to_make"
-            post.sent_at = datetime.utcnow()
+        publish_post_to_make(posts[0], current_user.id)
 
         db.session.commit()
 
@@ -1945,6 +1995,7 @@ def send_carousel_to_make(group_id):
         return redirect(url_for("index"))
 
     except Exception as e:
+        db.session.rollback()
         print("Send carousel error:", e)
         flash(f"Failed: {e}", "danger")
         return redirect(url_for("view_post", post_id=posts[0].id))
@@ -1953,7 +2004,10 @@ def send_carousel_to_make(group_id):
 @app.route("/edit-carousel/<group_id>", methods=["GET", "POST"])
 @login_required
 def edit_carousel(group_id):
-    posts = get_ordered_carousel_posts(group_id)
+    posts = get_ordered_carousel_posts(
+        group_id,
+        user_id=current_user.id,
+    )
 
     if not posts:
         flash("Carousel not found.", "danger")
@@ -2025,7 +2079,8 @@ def schedule_post(post_id):
 
         if post.group_id:
             group_posts = get_ordered_carousel_posts(
-                post.group_id
+                post.group_id,
+                user_id=current_user.id,
             )
 
             if not group_posts:
@@ -2043,6 +2098,12 @@ def schedule_post(post_id):
 
             db.session.commit()
 
+            for group_post in group_posts:
+                log_scheduled_post_diagnostics(
+                    group_post,
+                    input_local_time=scheduled_time_str,
+                )
+
             flash(
                 "Carousel scheduled successfully.",
                 "success"
@@ -2056,6 +2117,11 @@ def schedule_post(post_id):
         post.status = "scheduled"
 
         db.session.commit()
+
+        log_scheduled_post_diagnostics(
+            post,
+            input_local_time=scheduled_time_str,
+        )
 
         flash(
             "Post scheduled successfully.",
@@ -2085,7 +2151,10 @@ def delete_post(post_id):
         return redirect(url_for("index"))
 
     if post.group_id:
-        group_posts = get_ordered_carousel_posts(post.group_id)
+        group_posts = get_ordered_carousel_posts(
+            post.group_id,
+            user_id=current_user.id,
+        )
 
         for group_post in group_posts:
             db.session.delete(group_post)
@@ -2105,7 +2174,10 @@ def delete_post(post_id):
 @app.route("/delete-carousel/<group_id>", methods=["POST"])
 @login_required
 def delete_carousel(group_id):
-    posts = get_ordered_carousel_posts(group_id)
+    posts = get_ordered_carousel_posts(
+        group_id,
+        user_id=current_user.id,
+    )
 
     if not posts:
         flash("Carousel not found.", "danger")
