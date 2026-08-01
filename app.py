@@ -30,6 +30,7 @@ import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 from smu_core.extensions import db, login_manager
+from smu_core.models.feedback import Feedback
 
 load_dotenv()
 
@@ -227,14 +228,6 @@ class ConnectedAccount(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow())
     updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
-
-
-class Feedback(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    message = db.Column(db.Text, nullable=False)
-    page_url = db.Column(db.String(500), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
 
 
 class BetaApplication(db.Model):
