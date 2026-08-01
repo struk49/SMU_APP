@@ -30,6 +30,7 @@ import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 from smu_core.extensions import db, login_manager
+from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
 
 load_dotenv()
@@ -239,14 +240,6 @@ class BetaApplication(db.Model):
     challenge = db.Column(db.Text, nullable=False)
     consent = db.Column(db.Boolean, default=False, nullable=False)
     status = db.Column(db.String(50), default="new", nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
-
-
-class ContactMessage(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False)
-    email = db.Column(db.String(150), nullable=False)
-    message = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow())
 
 
