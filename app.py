@@ -3571,7 +3571,7 @@ def post_studio(post_id):
 
 
         brand_context = build_brand_context(current_user.id)
-        update_brand_coach(requests.post, brand_context)
+        update_brand_coach(post, brand_context)
 
         db.session.commit()
 
