@@ -4,6 +4,8 @@ import json
 import uuid
 import re
 import base64
+import logging
+from logging.handlers import RotatingFileHandler
 from io import BytesIO
 from datetime import datetime
 from urllib.parse import urlparse
@@ -11,9 +13,8 @@ from urllib.parse import urlparse
 import pytz
 import requests
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort
 from flask_login import (
-    LoginManager,
     UserMixin,
     login_user,
     logout_user,
@@ -21,7 +22,6 @@ from flask_login import (
     current_user,
 )
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
 from PIL import Image
 
@@ -29,6 +29,7 @@ import cloudinary
 import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
+from smu_core.extensions import db, login_manager
 
 load_dotenv()
 
@@ -46,6 +47,11 @@ app.config["SQLALCHEMY_DATABASE_URI"] = (
 )
 print("DATABASE:", app.config["SQLALCHEMY_DATABASE_URI"][:50])
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SMU_ADMIN_EMAILS"] = {
+    email.strip().lower()
+    for email in os.getenv("SMU_ADMIN_EMAILS", "").split(",")
+    if email.strip()
+}
 
 app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
@@ -54,10 +60,42 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "max_overflow": 2,
 }
 
-db = SQLAlchemy(app)
+db.init_app(app)
 
 
-login_manager = LoginManager()
+def configure_logging():
+    log_dir = os.path.join(BASE_DIR, "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    logger = logging.getLogger("smu")
+    logger.setLevel(logging.INFO)
+
+    if not logger.handlers:
+        handler = RotatingFileHandler(
+            os.path.join(log_dir, "smu.log"),
+            maxBytes=1024 * 1024,
+            backupCount=3,
+        )
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        logger.addHandler(handler)
+
+    return logger
+
+
+smu_logger = configure_logging()
+
+
+def log_event(event_name, **fields):
+    safe_fields = {
+        key: value
+        for key, value in fields.items()
+        if key not in {"password", "token", "api_key", "webhook_url", "caption", "payload"}
+    }
+    safe_fields["event"] = event_name
+    safe_fields["timestamp"] = datetime.utcnow().isoformat() + "Z"
+    smu_logger.info(json.dumps(safe_fields, default=str, sort_keys=True))
+
+
 login_manager.init_app(app)
 login_manager.login_view = "login"
 login_manager.login_message_category = "warning"
@@ -189,6 +227,34 @@ class ConnectedAccount(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow())
     updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
+
+
+class Feedback(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
+    message = db.Column(db.Text, nullable=False)
+    page_url = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow())
+
+
+class BetaApplication(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(150), nullable=False, unique=True)
+    primary_platform = db.Column(db.String(50), nullable=False)
+    posting_frequency = db.Column(db.String(80), nullable=False)
+    challenge = db.Column(db.Text, nullable=False)
+    consent = db.Column(db.Boolean, default=False, nullable=False)
+    status = db.Column(db.String(50), default="new", nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow())
+
+
+class ContactMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(150), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow())
 
 
 @login_manager.user_loader
@@ -898,16 +964,38 @@ def check_scheduled_posts():
                             f"✅ Sent scheduled carousel "
                             f"{post.group_id}"
                         )
+                        log_event(
+                            "publishing_success",
+                            post_id=post.id,
+                            post_type="carousel",
+                            user_id=post.user_id,
+                            source="scheduler",
+                        )
 
                     else:
                         print(
                             f"✅ Sent scheduled post {post.id}"
+                        )
+                        log_event(
+                            "publishing_success",
+                            post_id=post.id,
+                            post_type="single",
+                            user_id=post.user_id,
+                            source="scheduler",
                         )
 
                     db.session.commit()
 
                 except Exception as post_error:
                     db.session.rollback()
+                    log_event(
+                        "publishing_failure",
+                        post_id=post.id,
+                        post_type=post.post_type,
+                        user_id=post.user_id,
+                        source="scheduler",
+                        error_type=type(post_error).__name__,
+                    )
 
                     print(
                         f"❌ Scheduled post {post.id} failed:",
@@ -1260,6 +1348,230 @@ def save_post_revision(post, source="manual"):
     return revision
 
 
+def build_connected_platform_cards(user_id):
+    accounts = ConnectedAccount.query.filter_by(user_id=user_id).first()
+
+    return [
+        {
+            "name": "Instagram",
+            "connected": bool(accounts and accounts.instagram_connected),
+        },
+        {
+            "name": "Facebook",
+            "connected": bool(accounts and accounts.facebook_connected),
+        },
+        {
+            "name": "Pinterest",
+            "connected": bool(accounts and accounts.pinterest_connected),
+        },
+        {
+            "name": "LinkedIn",
+            "connected": bool(accounts and accounts.linkedin_connected),
+        },
+    ]
+
+
+def build_onboarding_progress(user_id):
+    brief = BrandBrief.query.filter_by(user_id=user_id).first()
+    has_brand_brief = bool(
+        brief
+        and (
+            brief.business_name
+            or brief.niche
+            or brief.target_audience
+            or brief.offer
+        )
+    )
+    has_first_post = Post.query.filter_by(user_id=user_id).first() is not None
+    has_scheduled_post = (
+        Post.query.filter(
+            Post.user_id == user_id,
+            Post.scheduled_time.isnot(None),
+        ).first()
+        is not None
+    )
+    has_published_post = (
+        Post.query.filter_by(user_id=user_id, status="sent_to_make").first()
+        is not None
+    )
+
+    items = [
+        {
+            "label": "Brand Brief",
+            "complete": has_brand_brief,
+            "url": url_for("brand_brief"),
+        },
+        {
+            "label": "Content Pack",
+            "complete": bool(session.get("content_pack_started")),
+            "url": url_for("content_pack"),
+        },
+        {
+            "label": "First Post",
+            "complete": has_first_post,
+            "url": url_for("create_post"),
+        },
+        {
+            "label": "Scheduled Post",
+            "complete": has_scheduled_post,
+            "url": url_for("calendar_view"),
+        },
+        {
+            "label": "Calendar Viewed",
+            "complete": bool(session.get("calendar_viewed")),
+            "url": url_for("calendar_view"),
+        },
+        {
+            "label": "First Published Post",
+            "complete": has_published_post,
+            "url": url_for("index", status="sent_to_make"),
+        },
+    ]
+    completed_count = sum(1 for item in items if item["complete"])
+
+    return {
+        "items": items,
+        "completed_count": completed_count,
+        "total_count": len(items),
+        "percentage": int(round((completed_count / len(items)) * 100)),
+        "complete": completed_count == len(items),
+    }
+
+
+def is_valid_email(email):
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
+
+
+def field_too_long(value, max_length):
+    return len(value or "") > max_length
+
+
+def is_current_user_admin():
+    admin_emails = app.config.get("SMU_ADMIN_EMAILS", set())
+    return (
+        current_user.is_authenticated
+        and current_user.email.lower() in admin_emails
+    )
+
+
+@app.route("/landing")
+def landing_page():
+    return render_template("landing.html")
+
+
+@app.route("/beta/apply", methods=["GET", "POST"])
+def beta_apply():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        primary_platform = request.form.get("primary_platform", "").strip()
+        posting_frequency = request.form.get("posting_frequency", "").strip()
+        challenge = request.form.get("challenge", "").strip()
+        consent = request.form.get("consent") == "on"
+
+        errors = []
+        if not name:
+            errors.append("Name is required.")
+        if not is_valid_email(email):
+            errors.append("A valid email is required.")
+        if not primary_platform:
+            errors.append("Primary platform is required.")
+        if not posting_frequency:
+            errors.append("Posting frequency is required.")
+        if not challenge:
+            errors.append("Tell us your biggest content challenge.")
+        if not consent:
+            errors.append("Consent is required for beta-related emails.")
+        if field_too_long(name, 120) or field_too_long(email, 150):
+            errors.append("Name or email is too long.")
+        if field_too_long(primary_platform, 50) or field_too_long(posting_frequency, 80):
+            errors.append("Platform or posting frequency is too long.")
+        if field_too_long(challenge, 1000):
+            errors.append("Challenge must be 1000 characters or fewer.")
+        if BetaApplication.query.filter_by(email=email).first():
+            errors.append("A beta application already exists for that email.")
+
+        if errors:
+            for error in errors:
+                flash(error, "danger")
+            return render_template("beta_apply.html"), 400
+
+        application = BetaApplication(
+            name=name,
+            email=email,
+            primary_platform=primary_platform,
+            posting_frequency=posting_frequency,
+            challenge=challenge,
+            consent=consent,
+        )
+        db.session.add(application)
+        db.session.commit()
+        log_event(
+            "beta_application_submission",
+            beta_application_id=application.id,
+            primary_platform=primary_platform,
+        )
+
+        flash("Thanks. Your private beta application has been received.", "success")
+        return redirect(url_for("beta_apply"))
+
+    return render_template("beta_apply.html")
+
+
+@app.route("/privacy")
+def privacy_policy():
+    return render_template("privacy.html")
+
+
+@app.route("/terms")
+def terms_of_service():
+    return render_template("terms.html")
+
+
+@app.route("/contact", methods=["GET", "POST"])
+def contact():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        message = request.form.get("message", "").strip()
+
+        errors = []
+        if not name:
+            errors.append("Name is required.")
+        if not is_valid_email(email):
+            errors.append("A valid email is required.")
+        if not message:
+            errors.append("Message is required.")
+        if field_too_long(name, 120) or field_too_long(email, 150):
+            errors.append("Name or email is too long.")
+        if field_too_long(message, 2000):
+            errors.append("Message must be 2000 characters or fewer.")
+
+        if errors:
+            for error in errors:
+                flash(error, "danger")
+            return render_template("contact.html"), 400
+
+        contact_message = ContactMessage(
+            name=name,
+            email=email,
+            message=message,
+        )
+        db.session.add(contact_message)
+        db.session.commit()
+        log_event("contact_submission", contact_message_id=contact_message.id)
+
+        flash("Thanks. Your message has been received.", "success")
+        return redirect(url_for("contact"))
+
+    return render_template("contact.html")
+
+
+@app.route("/maintenance")
+def maintenance():
+    return render_template("maintenance.html"), 503
+
+
 @app.route("/")
 @login_required
 def index():
@@ -1320,12 +1632,26 @@ def index():
         platform_filter=platform_filter,
         search_query=search_query,
         stats=stats,
+        onboarding=build_onboarding_progress(current_user.id),
+        connected_platforms=build_connected_platform_cards(current_user.id),
     )
 
 
 @app.route("/create", methods=["GET", "POST"])
 @login_required
 def create_post():
+    default_scheduled_time = ""
+
+    if request.method == "GET":
+        scheduled_date = request.args.get("scheduled_date", "").strip()
+
+        if scheduled_date:
+            try:
+                parsed_date = datetime.strptime(scheduled_date, "%Y-%m-%d")
+                default_scheduled_time = parsed_date.strftime("%Y-%m-%dT09:00")
+            except ValueError:
+                default_scheduled_time = ""
+
     if request.method == "POST":
         files = request.files.getlist("media")
 
@@ -1508,7 +1834,10 @@ User Request:
             flash(f"Failed: {e}", "danger")
             return redirect(url_for("create_post"))
 
-    return render_template("create_post.html")
+    return render_template(
+        "create_post.html",
+        default_scheduled_time=default_scheduled_time,
+    )
 
 @app.route("/post/<int:post_id>")
 @login_required
@@ -1893,6 +2222,13 @@ def send_to_make(post_id):
         publish_post_to_make(post, current_user.id)
 
         db.session.commit()
+        log_event(
+            "publishing_success",
+            post_id=post.id,
+            post_type="single",
+            user_id=current_user.id,
+            source="manual",
+        )
 
         flash(
             "Post sent to Make.com successfully.",
@@ -1901,6 +2237,14 @@ def send_to_make(post_id):
 
     except Exception as e:
         db.session.rollback()
+        log_event(
+            "publishing_failure",
+            post_id=post.id,
+            post_type="single",
+            user_id=current_user.id,
+            source="manual",
+            error_type=type(e).__name__,
+        )
         print("Send to Make error:", e)
         flash(f"Failed to send post: {e}", "danger")
 
@@ -1990,12 +2334,27 @@ def send_carousel_to_make(group_id):
         publish_post_to_make(posts[0], current_user.id)
 
         db.session.commit()
+        log_event(
+            "publishing_success",
+            post_id=posts[0].id,
+            post_type="carousel",
+            user_id=current_user.id,
+            source="manual",
+        )
 
         flash("Carousel sent to Make.com successfully.", "success")
         return redirect(url_for("index"))
 
     except Exception as e:
         db.session.rollback()
+        log_event(
+            "publishing_failure",
+            post_id=posts[0].id,
+            post_type="carousel",
+            user_id=current_user.id,
+            source="manual",
+            error_type=type(e).__name__,
+        )
         print("Send carousel error:", e)
         flash(f"Failed: {e}", "danger")
         return redirect(url_for("view_post", post_id=posts[0].id))
@@ -2407,6 +2766,7 @@ Design style:
 def content_pack():
     source_text = ""
     content_pack_result = None
+    session["content_pack_started"] = True
 
     if request.method == "POST":
         source_type = request.form.get("source_type", "text")
@@ -2467,23 +2827,354 @@ def brand_brief():
 @app.route("/calendar")
 @login_required
 def calendar_view():
-    scheduled_posts = (
+    session["calendar_viewed"] = True
+    return render_template("calendar.html")
+
+
+def parse_calendar_range_datetime(value):
+    if not value:
+        raise ValueError("Missing date")
+
+    normalized = value.strip().replace("Z", "+00:00")
+    normalized = re.sub(r" ([0-9]{2}:[0-9]{2})$", r"+\1", normalized)
+    parsed = datetime.fromisoformat(normalized)
+
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC_TIMEZONE).replace(tzinfo=None)
+
+    local_aware = UK_TIMEZONE.localize(parsed, is_dst=None)
+    return local_aware.astimezone(UTC_TIMEZONE).replace(tzinfo=None)
+
+
+CALENDAR_STATUS_COLORS = {
+    "draft": "#6c757d",
+    "scheduled": "#0d6efd",
+    "published": "#198754",
+    "failed": "#dc3545",
+}
+
+
+def calendar_status_key(status):
+    normalized_status = (status or "").strip().lower()
+
+    if normalized_status in {"sent_to_make", "published"}:
+        return "published"
+
+    if "failed" in normalized_status:
+        return "failed"
+
+    if normalized_status == "scheduled":
+        return "scheduled"
+
+    return "draft"
+
+
+def calendar_status_label(status):
+    return calendar_status_key(status).title()
+
+
+def calendar_post_title(post):
+    caption = (post.caption or "").strip()
+
+    if not caption:
+        return "Untitled post"
+
+    first_line = caption.splitlines()[0].strip()
+    return first_line[:80] if first_line else "Untitled post"
+
+
+def calendar_posts_for_range(start_utc, end_utc):
+    posts = (
         Post.query.filter(
             Post.user_id == current_user.id,
-            Post.scheduled_time != None,
-            Post.status == "scheduled",
+            Post.scheduled_time.isnot(None),
+            Post.scheduled_time >= start_utc,
+            Post.scheduled_time < end_utc,
         )
-        .order_by(Post.scheduled_time.asc(), Post.created_at.asc())
+        .order_by(
+            Post.scheduled_time.asc(),
+            Post.is_cover.desc(),
+            Post.sort_order.asc(),
+            Post.id.asc(),
+        )
         .all()
     )
 
-    grouped_posts = {}
+    calendar_posts = []
+    seen_groups = set()
 
-    for post in scheduled_posts:
-        date_key = post.scheduled_time.strftime("%A %d %B %Y")
-        grouped_posts.setdefault(date_key, []).append(post)
+    for post in posts:
+        if post.group_id:
+            if post.group_id in seen_groups:
+                continue
 
-    return render_template("calendar.html", grouped_posts=grouped_posts)
+            seen_groups.add(post.group_id)
+
+        calendar_posts.append(post)
+
+    return calendar_posts
+
+
+def filter_calendar_posts(posts, platform_filter=None, status_filter=None):
+    platform_filter = (platform_filter or "all").strip().lower()
+    status_filter = (status_filter or "all").strip().lower()
+    filtered_posts = []
+
+    for post in posts:
+        platforms = [
+            platform.lower() for platform in parse_platforms(post.platforms)
+        ]
+
+        if platform_filter != "all" and platform_filter not in platforms:
+            continue
+
+        if status_filter != "all" and calendar_status_key(post.status) != status_filter:
+            continue
+
+        filtered_posts.append(post)
+
+    return filtered_posts
+
+
+def build_calendar_summary(posts):
+    summary = {
+        "scheduled": 0,
+        "published": 0,
+        "draft": 0,
+        "failed": 0,
+    }
+
+    for post in posts:
+        summary[calendar_status_key(post.status)] += 1
+
+    return summary
+
+
+def reschedule_calendar_post(post, new_date):
+    if not post.scheduled_time:
+        raise ValueError("Post does not have a scheduled time.")
+
+    local_start = convert_utc_to_uk(post.scheduled_time)
+    local_rescheduled = UK_TIMEZONE.localize(
+        datetime.combine(new_date, local_start.time().replace(tzinfo=None)),
+        is_dst=None,
+    )
+    utc_rescheduled = local_rescheduled.astimezone(UTC_TIMEZONE).replace(
+        tzinfo=None
+    )
+
+    if post.group_id:
+        group_posts = get_ordered_carousel_posts(
+            post.group_id,
+            user_id=current_user.id,
+        )
+
+        if not group_posts:
+            raise ValueError("Carousel not found.")
+
+        for group_post in group_posts:
+            group_post.scheduled_time = utc_rescheduled
+
+        return group_posts[0]
+
+    post.scheduled_time = utc_rescheduled
+    return post
+
+
+def duplicate_calendar_post_as_draft(post):
+    if post.group_id:
+        original_posts = get_ordered_carousel_posts(
+            post.group_id,
+            user_id=current_user.id,
+        )
+
+        if not original_posts:
+            raise ValueError("Carousel not found.")
+
+        new_group_id = str(uuid.uuid4())
+        first_new_post = None
+
+        for original_post in original_posts:
+            new_post = Post(
+                file_url=original_post.file_url,
+                file_type=original_post.file_type,
+                prompt=original_post.prompt,
+                caption=original_post.caption,
+                status="draft",
+                platforms=original_post.platforms,
+                post_type="carousel",
+                group_id=new_group_id,
+                sort_order=original_post.sort_order,
+                is_cover=original_post.is_cover,
+                scheduled_time=None,
+                sent_at=None,
+                user_id=current_user.id,
+                brand_score=original_post.brand_score,
+                brand_feedback=original_post.brand_feedback,
+            )
+
+            db.session.add(new_post)
+
+            if first_new_post is None:
+                first_new_post = new_post
+
+        return first_new_post
+
+    new_post = Post(
+        file_url=post.file_url,
+        file_type=post.file_type,
+        prompt=post.prompt,
+        caption=post.caption,
+        status="draft",
+        platforms=post.platforms,
+        post_type="single",
+        sort_order=0,
+        is_cover=False,
+        group_id=None,
+        scheduled_time=None,
+        sent_at=None,
+        user_id=current_user.id,
+        brand_score=post.brand_score,
+        brand_feedback=post.brand_feedback,
+    )
+
+    db.session.add(new_post)
+    return new_post
+
+
+def build_calendar_event(post):
+    local_start = convert_utc_to_uk(post.scheduled_time)
+    platforms = parse_platforms(post.platforms)
+    first_platform = platforms[0].title() if platforms else "Post"
+    post_type_label = "Carousel" if post.group_id else "Single"
+    status_key = calendar_status_key(post.status)
+    event_color = CALENDAR_STATUS_COLORS[status_key]
+
+    return {
+        "id": post.id,
+        "title": f"{local_start.strftime('%H:%M')} {first_platform} · {post_type_label}",
+        "start": local_start.isoformat(),
+        "status": status_key,
+        "status_label": calendar_status_label(post.status),
+        "post_type": "carousel" if post.group_id else "single",
+        "post_type_label": post_type_label,
+        "platforms": platforms,
+        "platform_label": first_platform,
+        "detail_url": url_for("view_post", post_id=post.id),
+        "backgroundColor": event_color,
+        "borderColor": event_color,
+        "textColor": "#ffffff",
+        "tooltip": {
+            "title": calendar_post_title(post),
+            "platform": first_platform,
+            "post_type": post_type_label,
+            "status": calendar_status_label(post.status),
+            "scheduled_time": local_start.strftime("%d %b %Y %H:%M"),
+        },
+    }
+
+
+@app.route("/calendar/events")
+@login_required
+def calendar_events():
+    try:
+        start_utc = parse_calendar_range_datetime(
+            request.args.get("start", "")
+        )
+        end_utc = parse_calendar_range_datetime(
+            request.args.get("end", "")
+        )
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid start or end date."}), 400
+
+    if end_utc <= start_utc:
+        return jsonify({"error": "Invalid start or end date."}), 400
+
+    posts = calendar_posts_for_range(start_utc, end_utc)
+    posts = filter_calendar_posts(
+        posts,
+        platform_filter=request.args.get("platform"),
+        status_filter=request.args.get("status"),
+    )
+    events = [build_calendar_event(post) for post in posts]
+
+    return jsonify(events)
+
+
+@app.route("/calendar/summary")
+@login_required
+def calendar_summary():
+    try:
+        start_utc = parse_calendar_range_datetime(
+            request.args.get("start", "")
+        )
+        end_utc = parse_calendar_range_datetime(
+            request.args.get("end", "")
+        )
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid start or end date."}), 400
+
+    if end_utc <= start_utc:
+        return jsonify({"error": "Invalid start or end date."}), 400
+
+    posts = calendar_posts_for_range(start_utc, end_utc)
+    return jsonify(build_calendar_summary(posts))
+
+
+@app.route("/calendar/events/<int:post_id>/reschedule", methods=["POST"])
+@login_required
+def calendar_reschedule_event(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id,
+    ).first()
+
+    if not post:
+        return jsonify({"error": "Post not found."}), 404
+
+    data = request.get_json(silent=True) or {}
+    new_date_raw = (data.get("date") or "").strip()
+
+    try:
+        new_date = datetime.strptime(new_date_raw, "%Y-%m-%d").date()
+        updated_post = reschedule_calendar_post(post, new_date)
+        db.session.commit()
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Post could not be rescheduled."}), 500
+
+    return jsonify({
+        "success": True,
+        "event": build_calendar_event(updated_post),
+    })
+
+
+@app.route("/calendar/events/<int:post_id>/duplicate", methods=["POST"])
+@login_required
+def calendar_duplicate_event(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id,
+    ).first()
+
+    if not post:
+        return jsonify({"error": "Post not found."}), 404
+
+    try:
+        new_post = duplicate_calendar_post_as_draft(post)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify({"error": "Post could not be duplicated."}), 500
+
+    return jsonify({
+        "success": True,
+        "post_id": new_post.id,
+        "detail_url": url_for("view_post", post_id=new_post.id),
+    })
 
 
 @app.route("/content-pack/create-carousel", methods=["POST"])
@@ -3038,10 +3729,19 @@ def login():
         user = User.query.filter_by(email=email).first()
 
         if not user or not check_password_hash(user.password_hash, password):
+            log_event(
+                "login_failure",
+                email_present=bool(email),
+                reason="invalid_credentials",
+            )
             flash("Invalid email or password.", "danger")
             return redirect(url_for("login"))
 
         login_user(user)
+        log_event(
+            "login_success",
+            user_id=user.id,
+        )
 
         flash("Logged in successfully.", "success")
         return redirect(url_for("index"))
@@ -3133,7 +3833,91 @@ def connected_accounts():
     )
 
 
+@app.route("/help")
+@login_required
+def help_centre():
+    return render_template("help.html")
+
+
+@app.route("/admin/beta")
+@login_required
+def admin_beta():
+    if not is_current_user_admin():
+        abort(404)
+
+    applications = BetaApplication.query.order_by(
+        BetaApplication.created_at.desc()
+    ).all()
+    feedback_items = Feedback.query.order_by(
+        Feedback.created_at.desc()
+    ).all()
+
+    return render_template(
+        "admin_beta.html",
+        applications=applications,
+        feedback_items=feedback_items,
+    )
+
+
+@app.route("/feedback", methods=["POST"])
+@login_required
+def submit_feedback():
+    data = request.get_json(silent=True) or {}
+    message = (
+        data.get("message")
+        or request.form.get("message", "")
+    ).strip()
+    page_url = (
+        data.get("page_url")
+        or request.form.get("page_url", "")
+    ).strip()
+
+    if not message:
+        if request.is_json:
+            return jsonify({"error": "Feedback message is required."}), 400
+
+        flash("Please enter feedback before sending.", "danger")
+        return redirect(request.referrer or url_for("index"))
+
+    feedback = Feedback(
+        user_id=current_user.id,
+        message=message,
+        page_url=page_url[:500],
+    )
+
+    db.session.add(feedback)
+    db.session.commit()
+    log_event(
+        "feedback_submission",
+        feedback_id=feedback.id,
+        user_id=current_user.id,
+    )
+
+    if request.is_json:
+        return jsonify({"success": True})
+
+    flash("Thanks for the feedback.", "success")
+    return redirect(request.referrer or url_for("index"))
+
+
+@app.errorhandler(404)
+def not_found_error(error):
+    return render_template("404.html"), 404
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    db.session.rollback()
+    return render_template("500.html"), 500
+
+
+log_event(
+    "application_startup",
+    database_configured=bool(DATABASE_URL),
+)
+
 print("Starting background scheduler...")
+log_event("scheduler_startup", status="starting")
 
 scheduler = BackgroundScheduler(
     timezone="UTC"
@@ -3161,6 +3945,11 @@ scheduler.start()
 
 print("Background scheduler started.")
 print("Registered jobs:", scheduler.get_jobs())
+log_event(
+    "scheduler_startup",
+    status="started",
+    job_count=len(scheduler.get_jobs()),
+)
 
 
 if __name__ == "__main__":
