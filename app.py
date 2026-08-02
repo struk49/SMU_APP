@@ -30,6 +30,7 @@ import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 from smu_core.extensions import db, login_manager
+from smu_core.models.user import User
 from smu_core.models.beta_application import BetaApplication
 from smu_core.models.brand_brief import BrandBrief
 from smu_core.models.connected_account import ConnectedAccount
@@ -126,28 +127,6 @@ def uk_time_filter(value, format_string="%d/%m/%Y %H:%M"):
 
     uk_datetime = convert_utc_to_uk(value)
     return uk_datetime.strftime(format_string)
-
-
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(150), unique=True, nullable=False)
-    password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    brand_brief = db.relationship(
-        "BrandBrief",
-        backref="user",
-        uselist=False,
-        lazy=True
-    )
-    connected_account = db.relationship(
-    "ConnectedAccount",
-    backref="user",
-    uselist=False,
-    lazy=True
-)
-
-    posts = db.relationship("Post", backref="user", lazy=True)
 
 
 class Post(db.Model):
