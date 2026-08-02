@@ -3,6 +3,7 @@ from smu_core.models.brand_brief import BrandBrief
 from smu_core.models.connected_account import ConnectedAccount
 from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
+from smu_core.models.post_revision import PostRevision
 
 __all__ = [
     "BetaApplication",
@@ -10,4 +11,5 @@ __all__ = [
     "ConnectedAccount",
     "ContactMessage",
     "Feedback",
+    "PostRevision",
 ]

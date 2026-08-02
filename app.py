@@ -35,6 +35,7 @@ from smu_core.models.brand_brief import BrandBrief
 from smu_core.models.connected_account import ConnectedAccount
 from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
+from smu_core.models.post_revision import PostRevision
 
 load_dotenv()
 
@@ -147,20 +148,6 @@ class User(UserMixin, db.Model):
 )
 
     posts = db.relationship("Post", backref="user", lazy=True)
-
-
-class PostRevision(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-
-    post_id = db.Column(db.Integer, db.ForeignKey("post.id"), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-
-    version_number = db.Column(db.Integer, nullable=False)
-    caption = db.Column(db.Text, nullable=False)
-    score = db.Column(db.Float, nullable=True)
-    source = db.Column(db.String(50), default="manual")
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Post(db.Model):
