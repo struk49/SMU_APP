@@ -36,6 +36,7 @@ from smu_core.models.brand_brief import BrandBrief
 from smu_core.models.connected_account import ConnectedAccount
 from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
+from smu_core.models.post import Post
 from smu_core.models.post_revision import PostRevision
 
 load_dotenv()
@@ -128,39 +129,6 @@ def uk_time_filter(value, format_string="%d/%m/%Y %H:%M"):
     uk_datetime = convert_utc_to_uk(value)
     return uk_datetime.strftime(format_string)
 
-
-class Post(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    file_url = db.Column(db.String(500), nullable=False)
-    file_type = db.Column(db.String(20), nullable=False)
-    prompt = db.Column(db.Text)
-    caption = db.Column(db.Text)
-    status = db.Column(db.String(50), default="draft")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
-    sent_at = db.Column(db.DateTime)
-    scheduled_time = db.Column(db.DateTime, nullable=True)
-    group_id = db.Column(db.String(100), nullable=True)
-    post_type = db.Column(db.String(50), default="single")
-    platforms = db.Column(db.String(200), default="instagram,facebook")
-    sort_order = db.Column(db.Integer, default=0)
-    is_cover = db.Column(db.Boolean, default=False)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)
-    grade_result = db.Column(db.Text, nullable=True)
-    grade_score = db.Column(db.Float, nullable=True)
-    graded_at = db.Column(db.DateTime, nullable=True)
-    # AI Improved Version
-    improved_caption = db.Column(db.Text, nullable=True)
-    improved_at = db.Column(db.DateTime, nullable=True)
-    # Brand Coach
-    brand_score = db.Column(db.Float, nullable=True)
-    brand_feedback = db.Column(db.Text, nullable=True)
-
-    revisions = db.relationship(
-    "PostRevision",
-    backref="post",
-    lazy=True,
-    cascade="all, delete-orphan"
-)
 
 @login_manager.user_loader
 def load_user(user_id):
