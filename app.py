@@ -31,6 +31,8 @@ from openai import OpenAI
 from yt_dlp import YoutubeDL
 from smu_core.extensions import db, login_manager
 from smu_core.models.beta_application import BetaApplication
+from smu_core.models.brand_brief import BrandBrief
+from smu_core.models.connected_account import ConnectedAccount
 from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
 
@@ -193,44 +195,6 @@ class Post(db.Model):
     lazy=True,
     cascade="all, delete-orphan"
 )
-
-class BrandBrief(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, unique=True)
-
-    business_name = db.Column(db.String(200))
-    niche = db.Column(db.String(200))
-    target_audience = db.Column(db.Text)
-    offer = db.Column(db.Text)
-    tone_of_voice = db.Column(db.String(200))
-    content_goals = db.Column(db.Text)
-    main_platforms = db.Column(db.String(300))
-    cta_style = db.Column(db.String(200))
-    words_to_avoid = db.Column(db.Text)
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
-
-
-class ConnectedAccount(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False, unique=True)
-
-    instagram_connected = db.Column(db.Boolean, default=False)
-    facebook_connected = db.Column(db.Boolean, default=False)
-    linkedin_connected = db.Column(db.Boolean, default=False)
-    pinterest_connected = db.Column(db.Boolean, default=False)
-    reddit_connected = db.Column(db.Boolean, default=False)
-    x_connected = db.Column(db.Boolean, default=False)
-
-    make_webhook_single = db.Column(db.String(500))
-    make_webhook_carousel = db.Column(db.String(500))
-
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
-
 
 @login_manager.user_loader
 def load_user(user_id):
