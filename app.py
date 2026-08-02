@@ -29,6 +29,7 @@ import cloudinary
 import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
+from smu_core import create_app
 from smu_core.extensions import db, login_manager
 from smu_core.models.user import User
 from smu_core.models.beta_application import BetaApplication
@@ -43,32 +44,9 @@ load_dotenv()
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-app = Flask(__name__)
-app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-secret-key")
-DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
-
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-
-app.config["SQLALCHEMY_DATABASE_URI"] = (
-    DATABASE_URL or f"sqlite:///{os.path.join(BASE_DIR, 'posts.db')}"
-)
+app = create_app()
+DATABASE_URL = app.config.get("DATABASE_URL", "")
 print("DATABASE:", app.config["SQLALCHEMY_DATABASE_URI"][:50])
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.config["SMU_ADMIN_EMAILS"] = {
-    email.strip().lower()
-    for email in os.getenv("SMU_ADMIN_EMAILS", "").split(",")
-    if email.strip()
-}
-
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
-    "pool_pre_ping": True,
-    "pool_recycle": 280,
-    "pool_size": 5,
-    "max_overflow": 2,
-}
-
-db.init_app(app)
 
 
 def configure_logging():
@@ -103,10 +81,6 @@ def log_event(event_name, **fields):
     safe_fields["timestamp"] = datetime.utcnow().isoformat() + "Z"
     smu_logger.info(json.dumps(safe_fields, default=str, sort_keys=True))
 
-
-login_manager.init_app(app)
-login_manager.login_view = "login"
-login_manager.login_message_category = "warning"
 
 MAKE_WEBHOOK_SINGLE = os.getenv("MAKE_WEBHOOK_SINGLE", "").strip()
 MAKE_WEBHOOK_CAROUSEL = os.getenv("MAKE_WEBHOOK_CAROUSEL", "").strip()
