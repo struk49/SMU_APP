@@ -1301,11 +1301,6 @@ def is_current_user_admin():
     )
 
 
-@app.route("/landing")
-def landing_page():
-    return render_template("landing.html")
-
-
 @app.route("/beta/apply", methods=["GET", "POST"])
 def beta_apply():
     if request.method == "POST":
@@ -1365,16 +1360,6 @@ def beta_apply():
     return render_template("beta_apply.html")
 
 
-@app.route("/privacy")
-def privacy_policy():
-    return render_template("privacy.html")
-
-
-@app.route("/terms")
-def terms_of_service():
-    return render_template("terms.html")
-
-
 @app.route("/contact", methods=["GET", "POST"])
 def contact():
     if request.method == "POST":
@@ -1412,11 +1397,6 @@ def contact():
         return redirect(url_for("contact"))
 
     return render_template("contact.html")
-
-
-@app.route("/maintenance")
-def maintenance():
-    return render_template("maintenance.html"), 503
 
 
 @app.route("/")
@@ -3678,12 +3658,6 @@ def connected_accounts():
         enabled_count=enabled_count,
         webhooks_ready=webhooks_ready,
     )
-
-
-@app.route("/help")
-@login_required
-def help_centre():
-    return render_template("help.html")
 
 
 @app.route("/admin/beta")
