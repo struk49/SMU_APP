@@ -1,0 +1,927 @@
+app.py:5: trailing whitespace.
+[32m+[m[32mimport re[m[41m[m
+app.py:6: trailing whitespace.
+[32m+[m[32mimport base64[m[41m[m
+app.py:7: trailing whitespace.
+[32m+[m[32mimport logging[m[41m[m
+app.py:8: trailing whitespace.
+[32m+[m[32mfrom logging.handlers import RotatingFileHandler[m[41m[m
+app.py:9: trailing whitespace.
+[32m+[m[32mfrom io import BytesIO[m[41m[m
+app.py:10: trailing whitespace.
+[32m+[m[32mfrom datetime import datetime[m[41m[m
+app.py:11: trailing whitespace.
+[32m+[m[32mfrom urllib.parse import urlparse[m[41m[m
+app.py:12: trailing whitespace.
+[32m+[m[41m[m
+app.py:14: trailing whitespace.
+[32m+[m[32mimport requests[m[41m[m
+app.py:15: trailing whitespace.
+[32m+[m[32mfrom dotenv import load_dotenv[m[41m[m
+app.py:16: trailing whitespace.
+[32m+[m[32mfrom flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort[m[41m[m
+app.py:27: trailing whitespace.
+[32m+[m[32mfrom apscheduler.schedulers.background import BackgroundScheduler[m[41m[m
+app.py:28: trailing whitespace.
+[32m+[m[32mfrom PIL import Image[m[41m[m
+app.py:29: trailing whitespace.
+[32m+[m[41m[m
+app.py:30: trailing whitespace.
+[32m+[m[32mimport cloudinary[m[41m[m
+app.py:51: trailing whitespace.
+[32m+[m[32mapp.config["SMU_ADMIN_EMAILS"] = {[m[41m[m
+app.py:52: trailing whitespace.
+[32m+[m[32m    email.strip().lower()[m[41m[m
+app.py:53: trailing whitespace.
+[32m+[m[32m    for email in os.getenv("SMU_ADMIN_EMAILS", "").split(",")[m[41m[m
+app.py:54: trailing whitespace.
+[32m+[m[32m    if email.strip()[m[41m[m
+app.py:55: trailing whitespace.
+[32m+[m[32m}[m[41m[m
+app.py:67: trailing whitespace.
+[32m+[m[32mdef configure_logging():[m[41m[m
+app.py:68: trailing whitespace.
+[32m+[m[32m    log_dir = os.path.join(BASE_DIR, "logs")[m[41m[m
+app.py:69: trailing whitespace.
+[32m+[m[32m    os.makedirs(log_dir, exist_ok=True)[m[41m[m
+app.py:70: trailing whitespace.
+[32m+[m[41m[m
+app.py:71: trailing whitespace.
+[32m+[m[32m    logger = logging.getLogger("smu")[m[41m[m
+app.py:72: trailing whitespace.
+[32m+[m[32m    logger.setLevel(logging.INFO)[m[41m[m
+app.py:73: trailing whitespace.
+[32m+[m[41m[m
+app.py:74: trailing whitespace.
+[32m+[m[32m    if not logger.handlers:[m[41m[m
+app.py:75: trailing whitespace.
+[32m+[m[32m        handler = RotatingFileHandler([m[41m[m
+app.py:76: trailing whitespace.
+[32m+[m[32m            os.path.join(log_dir, "smu.log"),[m[41m[m
+app.py:77: trailing whitespace.
+[32m+[m[32m            maxBytes=1024 * 1024,[m[41m[m
+app.py:78: trailing whitespace.
+[32m+[m[32m            backupCount=3,[m[41m[m
+app.py:79: trailing whitespace.
+[32m+[m[32m        )[m[41m[m
+app.py:80: trailing whitespace.
+[32m+[m[32m        handler.setFormatter(logging.Formatter("%(message)s"))[m[41m[m
+app.py:81: trailing whitespace.
+[32m+[m[32m        logger.addHandler(handler)[m[41m[m
+app.py:82: trailing whitespace.
+[32m+[m[41m[m
+app.py:83: trailing whitespace.
+[32m+[m[32m    return logger[m[41m[m
+app.py:84: trailing whitespace.
+[32m+[m[41m[m
+app.py:85: trailing whitespace.
+[32m+[m[41m[m
+app.py:86: trailing whitespace.
+[32m+[m[32msmu_logger = configure_logging()[m[41m[m
+app.py:87: trailing whitespace.
+[32m+[m[41m[m
+app.py:88: trailing whitespace.
+[32m+[m[41m[m
+app.py:89: trailing whitespace.
+[32m+[m[32mdef log_event(event_name, **fields):[m[41m[m
+app.py:90: trailing whitespace.
+[32m+[m[32m    safe_fields = {[m[41m[m
+app.py:91: trailing whitespace.
+[32m+[m[32m        key: value[m[41m[m
+app.py:92: trailing whitespace.
+[32m+[m[32m        for key, value in fields.items()[m[41m[m
+app.py:93: trailing whitespace.
+[32m+[m[32m        if key not in {"password", "token", "api_key", "webhook_url", "caption", "payload"}[m[41m[m
+app.py:94: trailing whitespace.
+[32m+[m[32m    }[m[41m[m
+app.py:95: trailing whitespace.
+[32m+[m[32m    safe_fields["event"] = event_name[m[41m[m
+app.py:96: trailing whitespace.
+[32m+[m[32m    safe_fields["timestamp"] = datetime.utcnow().isoformat() + "Z"[m[41m[m
+app.py:97: trailing whitespace.
+[32m+[m[32m    smu_logger.info(json.dumps(safe_fields, default=str, sort_keys=True))[m[41m[m
+app.py:98: trailing whitespace.
+[32m+[m[41m[m
+app.py:99: trailing whitespace.
+[32m+[m[41m[m
+app.py:234: trailing whitespace.
+[32m+[m[32mclass Feedback(db.Model):[m[41m[m
+app.py:235: trailing whitespace.
+[32m+[m[32m    id = db.Column(db.Integer, primary_key=True)[m[41m[m
+app.py:236: trailing whitespace.
+[32m+[m[32m    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)[m[41m[m
+app.py:237: trailing whitespace.
+[32m+[m[32m    message = db.Column(db.Text, nullable=False)[m[41m[m
+app.py:238: trailing whitespace.
+[32m+[m[32m    page_url = db.Column(db.String(500), nullable=True)[m[41m[m
+app.py:239: trailing whitespace.
+[32m+[m[32m    created_at = db.Column(db.DateTime, default=datetime.utcnow())[m[41m[m
+app.py:240: trailing whitespace.
+[32m+[m[41m[m
+app.py:241: trailing whitespace.
+[32m+[m[41m[m
+app.py:242: trailing whitespace.
+[32m+[m[32mclass BetaApplication(db.Model):[m[41m[m
+app.py:243: trailing whitespace.
+[32m+[m[32m    id = db.Column(db.Integer, primary_key=True)[m[41m[m
+app.py:244: trailing whitespace.
+[32m+[m[32m    name = db.Column(db.String(120), nullable=False)[m[41m[m
+app.py:245: trailing whitespace.
+[32m+[m[32m    email = db.Column(db.String(150), nullable=False, unique=True)[m[41m[m
+app.py:246: trailing whitespace.
+[32m+[m[32m    primary_platform = db.Column(db.String(50), nullable=False)[m[41m[m
+app.py:247: trailing whitespace.
+[32m+[m[32m    posting_frequency = db.Column(db.String(80), nullable=False)[m[41m[m
+app.py:248: trailing whitespace.
+[32m+[m[32m    challenge = db.Column(db.Text, nullable=False)[m[41m[m
+app.py:249: trailing whitespace.
+[32m+[m[32m    consent = db.Column(db.Boolean, default=False, nullable=False)[m[41m[m
+app.py:250: trailing whitespace.
+[32m+[m[32m    status = db.Column(db.String(50), default="new", nullable=False)[m[41m[m
+app.py:251: trailing whitespace.
+[32m+[m[32m    created_at = db.Column(db.DateTime, default=datetime.utcnow())[m[41m[m
+app.py:252: trailing whitespace.
+[32m+[m[41m[m
+app.py:253: trailing whitespace.
+[32m+[m[41m[m
+app.py:254: trailing whitespace.
+[32m+[m[32mclass ContactMessage(db.Model):[m[41m[m
+app.py:255: trailing whitespace.
+[32m+[m[32m    id = db.Column(db.Integer, primary_key=True)[m[41m[m
+app.py:256: trailing whitespace.
+[32m+[m[32m    name = db.Column(db.String(120), nullable=False)[m[41m[m
+app.py:257: trailing whitespace.
+[32m+[m[32m    email = db.Column(db.String(150), nullable=False)[m[41m[m
+app.py:258: trailing whitespace.
+[32m+[m[32m    message = db.Column(db.Text, nullable=False)[m[41m[m
+app.py:259: trailing whitespace.
+[32m+[m[32m    created_at = db.Column(db.DateTime, default=datetime.utcnow())[m[41m[m
+app.py:260: trailing whitespace.
+[32m+[m[41m[m
+app.py:261: trailing whitespace.
+[32m+[m[41m[m
+app.py:327: trailing whitespace.
+[32m+[m[32mdef parse_platforms(platforms_string):[m[41m[m
+app.py:328: trailing whitespace.
+[32m+[m[32m    if not platforms_string:[m[41m[m
+app.py:329: trailing whitespace.
+[32m+[m[32m        return [][m[41m[m
+app.py:330: trailing whitespace.
+[32m+[m[41m[m
+app.py:331: trailing whitespace.
+[32m+[m[32m    return [[m[41m[m
+app.py:332: trailing whitespace.
+[32m+[m[32m        platform.strip() for platform in platforms_string.split(",") if platform.strip()[m[41m[m
+app.py:333: trailing whitespace.
+[32m+[m[32m    ][m[41m[m
+app.py:334: trailing whitespace.
+[32m+[m[41m[m
+app.py:335: trailing whitespace.
+[32m+[m[41m[m
+app.py:336: trailing whitespace.
+[32m+[m[32mdef is_instagram_selected(platforms):[m[41m[m
+app.py:337: trailing whitespace.
+[32m+[m[32m    return "instagram" in {[m[41m[m
+app.py:338: trailing whitespace.
+[32m+[m[32m        platform.strip().lower()[m[41m[m
+app.py:339: trailing whitespace.
+[32m+[m[32m        for platform in platforms[m[41m[m
+app.py:340: trailing whitespace.
+[32m+[m[32m        if platform and platform.strip()[m[41m[m
+app.py:341: trailing whitespace.
+[32m+[m[32m    }[m[41m[m
+app.py:342: trailing whitespace.
+[32m+[m[41m[m
+app.py:343: trailing whitespace.
+[32m+[m[41m[m
+app.py:344: trailing whitespace.
+[32m+[m[32mdef normalize_image_to_jpeg(file_or_bytes):[m[41m[m
+app.py:345: trailing whitespace.
+[32m+[m[32m    if isinstance(file_or_bytes, bytes):[m[41m[m
+app.py:346: trailing whitespace.
+[32m+[m[32m        source = BytesIO(file_or_bytes)[m[41m[m
+app.py:347: trailing whitespace.
+[32m+[m[32m    else:[m[41m[m
+app.py:348: trailing whitespace.
+[32m+[m[32m        source = file_or_bytes[m[41m[m
+app.py:349: trailing whitespace.
+[32m+[m[41m[m
+app.py:350: trailing whitespace.
+[32m+[m[32m    if hasattr(source, "seek"):[m[41m[m
+app.py:351: trailing whitespace.
+[32m+[m[32m        source.seek(0)[m[41m[m
+app.py:352: trailing whitespace.
+[32m+[m[41m[m
+app.py:353: trailing whitespace.
+[32m+[m[32m    with Image.open(source) as image:[m[41m[m
+app.py:354: trailing whitespace.
+[32m+[m[32m        source_format = image.format or "unknown"[m[41m[m
+app.py:355: trailing whitespace.
+[32m+[m[41m[m
+app.py:356: trailing whitespace.
+[32m+[m[32m        if image.mode in {"RGBA", "LA"} or ([m[41m[m
+app.py:357: trailing whitespace.
+[32m+[m[32m            image.mode == "P" and "transparency" in image.info[m[41m[m
+app.py:358: trailing whitespace.
+[32m+[m[32m        ):[m[41m[m
+app.py:359: trailing whitespace.
+[32m+[m[32m            rgba_image = image.convert("RGBA")[m[41m[m
+app.py:360: trailing whitespace.
+[32m+[m[32m            background = Image.new("RGBA", rgba_image.size, (255, 255, 255, 255))[m[41m[m
+app.py:361: trailing whitespace.
+[32m+[m[32m            background.alpha_composite(rgba_image)[m[41m[m
+app.py:362: trailing whitespace.
+[32m+[m[32m            final_image = background.convert("RGB")[m[41m[m
+app.py:363: trailing whitespace.
+[32m+[m[32m        else:[m[41m[m
+app.py:364: trailing whitespace.
+[32m+[m[32m            final_image = image.convert("RGB")[m[41m[m
+app.py:365: trailing whitespace.
+[32m+[m[41m[m
+app.py:366: trailing whitespace.
+[32m+[m[32m        output = BytesIO()[m[41m[m
+app.py:367: trailing whitespace.
+[32m+[m[32m        final_image.save([m[41m[m
+app.py:368: trailing whitespace.
+[32m+[m[32m            output,[m[41m[m
+app.py:369: trailing whitespace.
+[32m+[m[32m            format="JPEG",[m[41m[m
+app.py:370: trailing whitespace.
+[32m+[m[32m            quality=92,[m[41m[m
+app.py:371: trailing whitespace.
+[32m+[m[32m            progressive=False,[m[41m[m
+app.py:372: trailing whitespace.
+[32m+[m[32m            optimize=True,[m[41m[m
+app.py:373: trailing whitespace.
+[32m+[m[32m        )[m[41m[m
+app.py:374: trailing whitespace.
+[32m+[m[41m[m
+app.py:375: trailing whitespace.
+[32m+[m[32m    return {[m[41m[m
+app.py:376: trailing whitespace.
+[32m+[m[32m        "bytes": output.getvalue(),[m[41m[m
+app.py:377: trailing whitespace.
+[32m+[m[32m        "source_format": source_format,[m[41m[m
+app.py:378: trailing whitespace.
+[32m+[m[32m        "final_format": "JPEG",[m[41m[m
+app.py:379: trailing whitespace.
+[32m+[m[32m        "final_mode": "RGB",[m[41m[m
+app.py:380: trailing whitespace.
+[32m+[m[32m    }[m[41m[m
+app.py:381: trailing whitespace.
+[32m+[m[41m[m
+app.py:382: trailing whitespace.
+[32m+[m[41m[m
+app.py:383: trailing whitespace.
+[32m+[m[32mdef log_image_normalization_diagnostics(result, upload_url=None):[m[41m[m
+app.py:384: trailing whitespace.
+[32m+[m[32m    print([m[41m[m
+app.py:385: trailing whitespace.
+[32m+[m[32m        "Image normalization diagnostics:",[m[41m[m
+app.py:386: trailing whitespace.
+[32m+[m[32m        {[m[41m[m
+app.py:387: trailing whitespace.
+[32m+[m[32m            "source_format": result.get("source_format"),[m[41m[m
+app.py:388: trailing whitespace.
+[32m+[m[32m            "final_format": result.get("final_format"),[m[41m[m
+app.py:389: trailing whitespace.
+[32m+[m[32m            "final_color_mode": result.get("final_mode"),[m[41m[m
+app.py:390: trailing whitespace.
+[32m+[m[32m            "final_url_extension": get_url_path_extension(upload_url),[m[41m[m
+app.py:391: trailing whitespace.
+[32m+[m[32m        },[m[41m[m
+app.py:392: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:393: trailing whitespace.
+[32m+[m[41m[m
+app.py:394: trailing whitespace.
+[32m+[m[41m[m
+app.py:395: trailing whitespace.
+[32m+[m[32mdef upload_jpeg_to_cloudinary(file_or_bytes):[m[41m[m
+app.py:396: trailing whitespace.
+[32m+[m[32m    normalized = normalize_image_to_jpeg(file_or_bytes)[m[41m[m
+app.py:397: trailing whitespace.
+[32m+[m[32m    upload_buffer = BytesIO(normalized["bytes"])[m[41m[m
+app.py:398: trailing whitespace.
+[32m+[m[32m    upload_buffer.name = "instagram-safe.jpg"[m[41m[m
+app.py:399: trailing whitespace.
+[32m+[m[41m[m
+app.py:400: trailing whitespace.
+[32m+[m[32m    upload_result = cloudinary.uploader.upload([m[41m[m
+app.py:401: trailing whitespace.
+[32m+[m[32m        upload_buffer,[m[41m[m
+app.py:402: trailing whitespace.
+[32m+[m[32m        folder="social_posts",[m[41m[m
+app.py:403: trailing whitespace.
+[32m+[m[32m        resource_type="image",[m[41m[m
+app.py:404: trailing whitespace.
+[32m+[m[32m        format="jpg",[m[41m[m
+app.py:405: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:406: trailing whitespace.
+[32m+[m[41m[m
+app.py:407: trailing whitespace.
+[32m+[m[32m    log_image_normalization_diagnostics([m[41m[m
+app.py:408: trailing whitespace.
+[32m+[m[32m        normalized,[m[41m[m
+app.py:409: trailing whitespace.
+[32m+[m[32m        upload_url=upload_result.get("secure_url"),[m[41m[m
+app.py:410: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:411: trailing whitespace.
+[32m+[m[41m[m
+app.py:412: trailing whitespace.
+[32m+[m[32m    return upload_result[m[41m[m
+app.py:413: trailing whitespace.
+[32m+[m[41m[m
+app.py:414: trailing whitespace.
+[32m+[m[41m[m
+app.py:415: trailing whitespace.
+[32m+[m[32mdef upload_to_cloudinary(file_or_url, force_jpeg=False):[m[41m[m
+app.py:416: trailing whitespace.
+[32m+[m[32m    if force_jpeg:[m[41m[m
+app.py:417: trailing whitespace.
+[32m+[m[32m        return upload_jpeg_to_cloudinary(file_or_url)[m[41m[m
+app.py:418: trailing whitespace.
+[32m+[m[41m[m
+app.py:419: trailing whitespace.
+[32m+[m[32m    return cloudinary.uploader.upload([m[41m[m
+app.py:420: trailing whitespace.
+[32m+[m[32m        file_or_url, folder="social_posts", resource_type="auto"[m[41m[m
+app.py:421: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:464: trailing whitespace.
+[32m+[m[32mdef make_instagram_safe_url(url):[m[41m[m
+app.py:465: trailing whitespace.
+[32m+[m[32m    return url.replace("/upload/", "/upload/c_fill,w_1080,h_1080,q_auto,f_jpg/")[m[41m[m
+app.py:466: trailing whitespace.
+[32m+[m[41m[m
+app.py:467: trailing whitespace.
+[32m+[m[41m[m
+app.py:468: trailing whitespace.
+[32m+[m[32mdef get_url_path_extension(url):[m[41m[m
+app.py:469: trailing whitespace.
+[32m+[m[32m    path = urlparse(url or "").path[m[41m[m
+app.py:470: trailing whitespace.
+[32m+[m[32m    _, extension = os.path.splitext(path)[m[41m[m
+app.py:471: trailing whitespace.
+[32m+[m[32m    return extension.lower().lstrip(".")[m[41m[m
+app.py:472: trailing whitespace.
+[32m+[m[41m[m
+app.py:473: trailing whitespace.
+[32m+[m[41m[m
+app.py:474: trailing whitespace.
+[32m+[m[32mdef log_scheduled_post_diagnostics(post, input_local_time=None):[m[41m[m
+app.py:475: trailing whitespace.
+[32m+[m[32m    print([m[41m[m
+app.py:476: trailing whitespace.
+[32m+[m[32m        "Scheduled post saved:",[m[41m[m
+app.py:477: trailing whitespace.
+[32m+[m[32m        {[m[41m[m
+app.py:478: trailing whitespace.
+[32m+[m[32m            "post_id": post.id,[m[41m[m
+app.py:479: trailing whitespace.
+[32m+[m[32m            "post_type": post.post_type,[m[41m[m
+app.py:480: trailing whitespace.
+[32m+[m[32m            "group_id_present": bool(post.group_id),[m[41m[m
+app.py:481: trailing whitespace.
+[32m+[m[32m            "user_id": post.user_id,[m[41m[m
+app.py:482: trailing whitespace.
+[32m+[m[32m            "status": post.status,[m[41m[m
+app.py:483: trailing whitespace.
+[32m+[m[32m            "stored_utc_scheduled_time": post.scheduled_time,[m[41m[m
+app.py:484: trailing whitespace.
+[32m+[m[32m            "input_local_time_present": bool(input_local_time),[m[41m[m
+app.py:485: trailing whitespace.
+[32m+[m[32m        },[m[41m[m
+app.py:486: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:487: trailing whitespace.
+[32m+[m[41m[m
+app.py:488: trailing whitespace.
+[32m+[m[41m[m
+app.py:489: trailing whitespace.
+[32m+[m[32mdef log_single_image_diagnostics(post, enabled_platforms):[m[41m[m
+app.py:490: trailing whitespace.
+[32m+[m[32m    print([m[41m[m
+app.py:491: trailing whitespace.
+[32m+[m[32m        "Single image publish diagnostics:",[m[41m[m
+app.py:492: trailing whitespace.
+[32m+[m[32m        {[m[41m[m
+app.py:493: trailing whitespace.
+[32m+[m[32m            "instagram_selected": "instagram" in enabled_platforms,[m[41m[m
+app.py:494: trailing whitespace.
+[32m+[m[32m            "file_url_configured": bool(post.file_url),[m[41m[m
+app.py:495: trailing whitespace.
+[32m+[m[32m            "file_type": post.file_type,[m[41m[m
+app.py:496: trailing whitespace.
+[32m+[m[32m            "url_path_extension": get_url_path_extension(post.file_url),[m[41m[m
+app.py:497: trailing whitespace.
+[32m+[m[32m        },[m[41m[m
+app.py:498: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:703: trailing whitespace.
+[32m+[m[32m    upload_result = upload_jpeg_to_cloudinary(image_bytes)[m[41m[m
+app.py:718: trailing whitespace.
+[32m+[m[32mdef send_payload_to_make(payload, webhook_url=None):[m[41m[m
+app.py:731: trailing whitespace.
+[32m+[m[32m    print("\n========== MAKE REQUEST ==========")[m[41m[m
+app.py:732: trailing whitespace.
+[32m+[m[32m    print("Post type:", payload.get("post_type"))[m[41m[m
+app.py:733: trailing whitespace.
+[32m+[m[32m    print("Webhook configured:", bool(webhook_url))[m[41m[m
+app.py:734: trailing whitespace.
+[32m+[m[32m    print("Platforms:", payload.get("platforms"))[m[41m[m
+app.py:735: trailing whitespace.
+[32m+[m[32m    print("Media count:", len(payload.get("media", [])))[m[41m[m
+app.py:736: trailing whitespace.
+[32m+[m[32m    print("==================================")[m[41m[m
+app.py:744: trailing whitespace.
+[32m+[m[32m    print("Make status:", response.status_code)[m[41m[m
+app.py:762: trailing whitespace.
+[32m+[m[32mdef get_ordered_carousel_posts(group_id, user_id=None):[m[41m[m
+app.py:763: trailing whitespace.
+[32m+[m[32m    query = Post.query.filter_by(group_id=group_id)[m[41m[m
+app.py:764: trailing whitespace.
+[32m+[m[41m[m
+app.py:765: trailing whitespace.
+[32m+[m[32m    if user_id is not None:[m[41m[m
+app.py:766: trailing whitespace.
+[32m+[m[32m        query = query.filter_by(user_id=user_id)[m[41m[m
+app.py:767: trailing whitespace.
+[32m+[m[41m[m
+app.py:768: trailing whitespace.
+[32m+[m[32m    return query.order_by([m[41m[m
+app.py:769: trailing whitespace.
+[32m+[m[32m        Post.is_cover.desc(),[m[41m[m
+app.py:770: trailing whitespace.
+[32m+[m[32m        Post.sort_order.asc(),[m[41m[m
+app.py:771: trailing whitespace.
+[32m+[m[32m        Post.id.asc(),[m[41m[m
+app.py:772: trailing whitespace.
+[32m+[m[32m    ).all()[m[41m[m
+app.py:775: trailing whitespace.
+[32m+[m[32mdef build_carousel_payapp.py:5: trailing whitespace.
+[32m+[m[32mimport re[m[41m[m
+app.py:6: trailing whitespace.
+[32m+[m[32mimport base64[m[41m[m
+app.py:7: trailing whitespace.
+[32m+[m[32mimport logging[m[41m[m
+app.py:8: trailing whitespace.
+[32m+[m[32mfrom logging.handlers import RotatingFileHandler[m[41m[m
+app.py:9: trailing whitespace.
+[32m+[m[32mfrom io import BytesIO[m[41m[m
+app.py:10: trailing whitespace.
+[32m+[m[32mfrom datetime import datetime[m[41m[m
+app.py:11: trailing whitespace.
+[32m+[m[32mfrom urllib.parse import urlparse[m[41m[m
+app.py:12: trailing whitespace.
+[32m+[m[41m[m
+app.py:14: trailing whitespace.
+[32m+[m[32mimport requests[m[41m[m
+app.py:15: trailing whitespace.
+[32m+[m[32mfrom dotenv import load_dotenv[m[41m[m
+app.py:16: trailing whitespace.
+[32m+[m[32mfrom flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort[m[41m[m
+app.py:27: trailing whitespace.
+[32m+[m[32mfrom apscheduler.schedulers.background import BackgroundScheduler[m[41m[m
+app.py:28: trailing whitespace.
+[32m+[m[32mfrom PIL import Image[m[41m[m
+app.py:29: trailing whitespace.
+[32m+[m[41m[m
+app.py:30: trailing whitespace.
+[32m+[m[32mimport cloudinary[m[41m[m
+app.py:51: trailing whitespace.
+[32m+[m[32mapp.config["SMU_ADMIN_EMAILS"] = {[m[41m[m
+app.py:52: trailing whitespace.
+[32m+[m[32m    email.strip().lower()[m[41m[m
+app.py:53: trailing whitespace.
+[32m+[m[32m    for email in os.getenv("SMU_ADMIN_EMAILS", "").split(",")[m[41m[m
+app.py:54: trailing whitespace.
+[32m+[m[32m    if email.strip()[m[41m[m
+app.py:55: trailing whitespace.
+[32m+[m[32m}[m[41m[m
+app.py:67: trailing whitespace.
+[32m+[m[32mdef configure_logging():[m[41m[m
+app.py:68: trailing whitespace.
+[32m+[m[32m    log_dir = os.path.join(BASE_DIR, "logs")[m[41m[m
+app.py:69: trailing whitespace.
+[32m+[m[32m    os.makedirs(log_dir, exist_ok=True)[m[41m[m
+app.py:70: trailing whitespace.
+[32m+[m[41m[m
+app.py:71: trailing whitespace.
+[32m+[m[32m    logger = logging.getLogger("smu")[m[41m[m
+app.py:72: trailing whitespace.
+[32m+[m[32m    logger.setLevel(logging.INFO)[m[41m[m
+app.py:73: trailing whitespace.
+[32m+[m[41m[m
+app.py:74: trailing whitespace.
+[32m+[m[32m    if not logger.handlers:[m[41m[m
+app.py:75: trailing whitespace.
+[32m+[m[32m        handler = RotatingFileHandler([m[41m[m
+app.py:76: trailing whitespace.
+[32m+[m[32m            os.path.join(log_dir, "smu.log"),[m[41m[m
+app.py:77: trailing whitespace.
+[32m+[m[32m            maxBytes=1024 * 1024,[m[41m[m
+app.py:78: trailing whitespace.
+[32m+[m[32m            backupCount=3,[m[41m[m
+app.py:79: trailing whitespace.
+[32m+[m[32m        )[m[41m[m
+app.py:80: trailing whitespace.
+[32m+[m[32m        handler.setFormatter(logging.Formatter("%(message)s"))[m[41m[m
+app.py:81: trailing whitespace.
+[32m+[m[32m        logger.addHandler(handler)[m[41m[m
+app.py:82: trailing whitespace.
+[32m+[m[41m[m
+app.py:83: trailing whitespace.
+[32m+[m[32m    return logger[m[41m[m
+app.py:84: trailing whitespace.
+[32m+[m[41m[m
+app.py:85: trailing whitespace.
+[32m+[m[41m[m
+app.py:86: trailing whitespace.
+[32m+[m[32msmu_logger = configure_logging()[m[41m[m
+app.py:87: trailing whitespace.
+[32m+[m[41m[m
+app.py:88: trailing whitespace.
+[32m+[m[41m[m
+app.py:89: trailing whitespace.
+[32m+[m[32mdef log_event(event_name, **fields):[m[41m[m
+app.py:90: trailing whitespace.
+[32m+[m[32m    safe_fields = {[m[41m[m
+app.py:91: trailing whitespace.
+[32m+[m[32m        key: value[m[41m[m
+app.py:92: trailing whitespace.
+[32m+[m[32m        for key, value in fields.items()[m[41m[m
+app.py:93: trailing whitespace.
+[32m+[m[32m        if key not in {"password", "token", "api_key", "webhook_url", "caption", "payload"}[m[41m[m
+app.py:94: trailing whitespace.
+[32m+[m[32m    }[m[41m[m
+app.py:95: trailing whitespace.
+[32m+[m[32m    safe_fields["event"] = event_name[m[41m[m
+app.py:96: trailing whitespace.
+[32m+[m[32m    safe_fields["timestamp"] = datetime.utcnow().isoformat() + "Z"[m[41m[m
+app.py:97: trailing whitespace.
+[32m+[m[32m    smu_logger.info(json.dumps(safe_fields, default=str, sort_keys=True))[m[41m[m
+app.py:98: trailing whitespace.
+[32m+[m[41m[m
+app.py:99: trailing whitespace.
+[32m+[m[41m[m
+app.py:234: trailing whitespace.
+[32m+[m[32mclass Feedback(db.Model):[m[41m[m
+app.py:235: trailing whitespace.
+[32m+[m[32m    id = db.Column(db.Integer, primary_key=True)[m[41m[m
+app.py:236: trailing whitespace.
+[32m+[m[32m    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)[m[41m[m
+app.py:237: trailing whitespace.
+[32m+[m[32m    message = db.Column(db.Text, nullable=False)[m[41m[m
+app.py:238: trailing whitespace.
+[32m+[m[32m    page_url = db.Column(db.String(500), nullable=True)[m[41m[m
+app.py:239: trailing whitespace.
+[32m+[m[32m    created_at = db.Column(db.DateTime, default=datetime.utcnow())[m[41m[m
+app.py:240: trailing whitespace.
+[32m+[m[41m[m
+app.py:241: trailing whitespace.
+[32m+[m[41m[m
+app.py:242: trailing whitespace.
+[32m+[m[32mclass BetaApplication(db.Model):[m[41m[m
+app.py:243: trailing whitespace.
+[32m+[m[32m    id = db.Column(db.Integer, primary_key=True)[m[41m[m
+app.py:244: trailing whitespace.
+[32m+[m[32m    name = db.Column(db.String(120), nullable=False)[m[41m[m
+app.py:245: trailing whitespace.
+[32m+[m[32m    email = db.Column(db.String(150), nullable=False, unique=True)[m[41m[m
+app.py:246: trailing whitespace.
+[32m+[m[32m    primary_platform = db.Column(db.String(50), nullable=False)[m[41m[m
+app.py:247: trailing whitespace.
+[32m+[m[32m    posting_frequency = db.Column(db.String(80), nullable=False)[m[41m[m
+app.py:248: trailing whitespace.
+[32m+[m[32m    challenge = db.Column(db.Text, nullable=False)[m[41m[m
+app.py:249: trailing whitespace.
+[32m+[m[32m    consent = db.Column(db.Boolean, default=False, nullable=False)[m[41m[m
+app.py:250: trailing whitespace.
+[32m+[m[32m    status = db.Column(db.String(50), default="new", nullable=False)[m[41m[m
+app.py:251: trailing whitespace.
+[32m+[m[32m    created_at = db.Column(db.DateTime, default=datetime.utcnow())[m[41m[m
+app.py:252: trailing whitespace.
+[32m+[m[41m[m
+app.py:253: trailing whitespace.
+[32m+[m[41m[m
+app.py:254: trailing whitespace.
+[32m+[m[32mclass ContactMessage(db.Model):[m[41m[m
+app.py:255: trailing whitespace.
+[32m+[m[32m    id = db.Column(db.Integer, primary_key=True)[m[41m[m
+app.py:256: trailing whitespace.
+[32m+[m[32m    name = db.Column(db.String(120), nullable=False)[m[41m[m
+app.py:257: trailing whitespace.
+[32m+[m[32m    email = db.Column(db.String(150), nullable=False)[m[41m[m
+app.py:258: trailing whitespace.
+[32m+[m[32m    message = db.Column(db.Text, nullable=False)[m[41m[m
+app.py:259: trailing whitespace.
+[32m+[m[32m    created_at = db.Column(db.DateTime, default=datetime.utcnow())[m[41m[m
+app.py:260: trailing whitespace.
+[32m+[m[41m[m
+app.py:261: trailing whitespace.
+[32m+[m[41m[m
+app.py:327: trailing whitespace.
+[32m+[m[32mdef parse_platforms(platforms_string):[m[41m[m
+app.py:328: trailing whitespace.
+[32m+[m[32m    if not platforms_string:[m[41m[m
+app.py:329: trailing whitespace.
+[32m+[m[32m        return [][m[41m[m
+app.py:330: trailing whitespace.
+[32m+[m[41m[m
+app.py:331: trailing whitespace.
+[32m+[m[32m    return [[m[41m[m
+app.py:332: trailing whitespace.
+[32m+[m[32m        platform.strip() for platform in platforms_string.split(",") if platform.strip()[m[41m[m
+app.py:333: trailing whitespace.
+[32m+[m[32m    ][m[41m[m
+app.py:334: trailing whitespace.
+[32m+[m[41m[m
+app.py:335: trailing whitespace.
+[32m+[m[41m[m
+app.py:336: trailing whitespace.
+[32m+[m[32mdef is_instagram_selected(platforms):[m[41m[m
+app.py:337: trailing whitespace.
+[32m+[m[32m    return "instagram" in {[m[41m[m
+app.py:338: trailing whitespace.
+[32m+[m[32m        platform.strip().lower()[m[41m[m
+app.py:339: trailing whitespace.
+[32m+[m[32m        for platform in platforms[m[41m[m
+app.py:340: trailing whitespace.
+[32m+[m[32m        if platform and platform.strip()[m[41m[m
+app.py:341: trailing whitespace.
+[32m+[m[32m    }[m[41m[m
+app.py:342: trailing whitespace.
+[32m+[m[41m[m
+app.py:343: trailing whitespace.
+[32m+[m[41m[m
+app.py:344: trailing whitespace.
+[32m+[m[32mdef normalize_image_to_jpeg(file_or_bytes):[m[41m[m
+app.py:345: trailing whitespace.
+[32m+[m[32m    if isinstance(file_or_bytes, bytes):[m[41m[m
+app.py:346: trailing whitespace.
+[32m+[m[32m        source = BytesIO(file_or_bytes)[m[41m[m
+app.py:347: trailing whitespace.
+[32m+[m[32m    else:[m[41m[m
+app.py:348: trailing whitespace.
+[32m+[m[32m        source = file_or_bytes[m[41m[m
+app.py:349: trailing whitespace.
+[32m+[m[41m[m
+app.py:350: trailing whitespace.
+[32m+[m[32m    if hasattr(source, "seek"):[m[41m[m
+app.py:351: trailing whitespace.
+[32m+[m[32m        source.seek(0)[m[41m[m
+app.py:352: trailing whitespace.
+[32m+[m[41m[m
+app.py:353: trailing whitespace.
+[32m+[m[32m    with Image.open(source) as image:[m[41m[m
+app.py:354: trailing whitespace.
+[32m+[m[32m        source_format = image.format or "unknown"[m[41m[m
+app.py:355: trailing whitespace.
+[32m+[m[41m[m
+app.py:356: trailing whitespace.
+[32m+[m[32m        if image.mode in {"RGBA", "LA"} or ([m[41m[m
+app.py:357: trailing whitespace.
+[32m+[m[32m            image.mode == "P" and "transparency" in image.info[m[41m[m
+app.py:358: trailing whitespace.
+[32m+[m[32m        ):[m[41m[m
+app.py:359: trailing whitespace.
+[32m+[m[32m            rgba_image = image.convert("RGBA")[m[41m[m
+app.py:360: trailing whitespace.
+[32m+[m[32m            background = Image.new("RGBA", rgba_image.size, (255, 255, 255, 255))[m[41m[m
+app.py:361: trailing whitespace.
+[32m+[m[32m            background.alpha_composite(rgba_image)[m[41m[m
+app.py:362: trailing whitespace.
+[32m+[m[32m            final_image = background.convert("RGB")[m[41m[m
+app.py:363: trailing whitespace.
+[32m+[m[32m        else:[m[41m[m
+app.py:364: trailing whitespace.
+[32m+[m[32m            final_image = image.convert("RGB")[m[41m[m
+app.py:365: trailing whitespace.
+[32m+[m[41m[m
+app.py:366: trailing whitespace.
+[32m+[m[32m        output = BytesIO()[m[41m[m
+app.py:367: trailing whitespace.
+[32m+[m[32m        final_image.save([m[41m[m
+app.py:368: trailing whitespace.
+[32m+[m[32m            output,[m[41m[m
+app.py:369: trailing whitespace.
+[32m+[m[32m            format="JPEG",[m[41m[m
+app.py:370: trailing whitespace.
+[32m+[m[32m            quality=92,[m[41m[m
+app.py:371: trailing whitespace.
+[32m+[m[32m            progressive=False,[m[41m[m
+app.py:372: trailing whitespace.
+[32m+[m[32m            optimize=True,[m[41m[m
+app.py:373: trailing whitespace.
+[32m+[m[32m        )[m[41m[m
+app.py:374: trailing whitespace.
+[32m+[m[41m[m
+app.py:375: trailing whitespace.
+[32m+[m[32m    return {[m[41m[m
+app.py:376: trailing whitespace.
+[32m+[m[32m        "bytes": output.getvalue(),[m[41m[m
+app.py:377: trailing whitespace.
+[32m+[m[32m        "source_format": source_format,[m[41m[m
+app.py:378: trailing whitespace.
+[32m+[m[32m        "final_format": "JPEG",[m[41m[m
+app.py:379: trailing whitespace.
+[32m+[m[32m        "final_mode": "RGB",[m[41m[m
+app.py:380: trailing whitespace.
+[32m+[m[32m    }[m[41m[m
+app.py:381: trailing whitespace.
+[32m+[m[41m[m
+app.py:382: trailing whitespace.
+[32m+[m[41m[m
+app.py:383: trailing whitespace.
+[32m+[m[32mdef log_image_normalization_diagnostics(result, upload_url=None):[m[41m[m
+app.py:384: trailing whitespace.
+[32m+[m[32m    print([m[41m[m
+app.py:385: trailing whitespace.
+[32m+[m[32m        "Image normalization diagnostics:",[m[41m[m
+app.py:386: trailing whitespace.
+[32m+[m[32m        {[m[41m[m
+app.py:387: trailing whitespace.
+[32m+[m[32m            "source_format": result.get("source_format"),[m[41m[m
+app.py:388: trailing whitespace.
+[32m+[m[32m            "final_format": result.get("final_format"),[m[41m[m
+app.py:389: trailing whitespace.
+[32m+[m[32m            "final_color_mode": result.get("final_mode"),[m[41m[m
+app.py:390: trailing whitespace.
+[32m+[m[32m            "final_url_extension": get_url_path_extension(upload_url),[m[41m[m
+app.py:391: trailing whitespace.
+[32m+[m[32m        },[m[41m[m
+app.py:392: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:393: trailing whitespace.
+[32m+[m[41m[m
+app.py:394: trailing whitespace.
+[32m+[m[41m[m
+app.py:395: trailing whitespace.
+[32m+[m[32mdef upload_jpeg_to_cloudinary(file_or_bytes):[m[41m[m
+app.py:396: trailing whitespace.
+[32m+[m[32m    normalized = normalize_image_to_jpeg(file_or_bytes)[m[41m[m
+app.py:397: trailing whitespace.
+[32m+[m[32m    upload_buffer = BytesIO(normalized["bytes"])[m[41m[m
+app.py:398: trailing whitespace.
+[32m+[m[32m    upload_buffer.name = "instagram-safe.jpg"[m[41m[m
+app.py:399: trailing whitespace.
+[32m+[m[41m[m
+app.py:400: trailing whitespace.
+[32m+[m[32m    upload_result = cloudinary.uploader.upload([m[41m[m
+app.py:401: trailing whitespace.
+[32m+[m[32m        upload_buffer,[m[41m[m
+app.py:402: trailing whitespace.
+[32m+[m[32m        folder="social_posts",[m[41m[m
+app.py:403: trailing whitespace.
+[32m+[m[32m        resource_type="image",[m[41m[m
+app.py:404: trailing whitespace.
+[32m+[m[32m        format="jpg",[m[41m[m
+app.py:405: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:406: trailing whitespace.
+[32m+[m[41m[m
+app.py:407: trailing whitespace.
+[32m+[m[32m    log_image_normalization_diagnostics([m[41m[m
+app.py:408: trailing whitespace.
+[32m+[m[32m        normalized,[m[41m[m
+app.py:409: trailing whitespace.
+[32m+[m[32m        upload_url=upload_result.get("secure_url"),[m[41m[m
+app.py:410: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:411: trailing whitespace.
+[32m+[m[41m[m
+app.py:412: trailing whitespace.
+[32m+[m[32m    return upload_result[m[41m[m
+app.py:413: trailing whitespace.
+[32m+[m[41m[m
+app.py:414: trailing whitespace.
+[32m+[m[41m[m
+app.py:415: trailing whitespace.
+[32m+[m[32mdef upload_to_cloudinary(file_or_url, force_jpeg=False):[m[41m[m
+app.py:416: trailing whitespace.
+[32m+[m[32m    if force_jpeg:[m[41m[m
+app.py:417: trailing whitespace.
+[32m+[m[32m        return upload_jpeg_to_cloudinary(file_or_url)[m[41m[m
+app.py:418: trailing whitespace.
+[32m+[m[41m[m
+app.py:419: trailing whitespace.
+[32m+[m[32m    return cloudinary.uploader.upload([m[41m[m
+app.py:420: trailing whitespace.
+[32m+[m[32m        file_or_url, folder="social_posts", resource_type="auto"[m[41m[m
+app.py:421: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:464: trailing whitespace.
+[32m+[m[32mdef make_instagram_safe_url(url):[m[41m[m
+app.py:465: trailing whitespace.
+[32m+[m[32m    return url.replace("/upload/", "/upload/c_fill,w_1080,h_1080,q_auto,f_jpg/")[m[41m[m
+app.py:466: trailing whitespace.
+[32m+[m[41m[m
+app.py:467: trailing whitespace.
+[32m+[m[41m[m
+app.py:468: trailing whitespace.
+[32m+[m[32mdef get_url_path_extension(url):[m[41m[m
+app.py:469: trailing whitespace.
+[32m+[m[32m    path = urlparse(url or "").path[m[41m[m
+app.py:470: trailing whitespace.
+[32m+[m[32m    _, extension = os.path.splitext(path)[m[41m[m
+app.py:471: trailing whitespace.
+[32m+[m[32m    return extension.lower().lstrip(".")[m[41m[m
+app.py:472: trailing whitespace.
+[32m+[m[41m[m
+app.py:473: trailing whitespace.
+[32m+[m[41m[m
+app.py:474: trailing whitespace.
+[32m+[m[32mdef log_scheduled_post_diagnostics(post, input_local_time=None):[m[41m[m
+app.py:475: trailing whitespace.
+[32m+[m[32m    print([m[41m[m
+app.py:476: trailing whitespace.
+[32m+[m[32m        "Scheduled post saved:",[m[41m[m
+app.py:477: trailing whitespace.
+[32m+[m[32m        {[m[41m[m
+app.py:478: trailing whitespace.
+[32m+[m[32m            "post_id": post.id,[m[41m[m
+app.py:479: trailing whitespace.
+[32m+[m[32m            "post_type": post.post_type,[m[41m[m
+app.py:480: trailing whitespace.
+[32m+[m[32m            "group_id_present": bool(post.group_id),[m[41m[m
+app.py:481: trailing whitespace.
+[32m+[m[32m            "user_id": post.user_id,[m[41m[m
+app.py:482: trailing whitespace.
+[32m+[m[32m            "status": post.status,[m[41m[m
+app.py:483: trailing whitespace.
+[32m+[m[32m            "stored_utc_scheduled_time": post.scheduled_time,[m[41m[m
+app.py:484: trailing whitespace.
+[32m+[m[32m            "input_local_time_present": bool(input_local_time),[m[41m[m
+app.py:485: trailing whitespace.
+[32m+[m[32m        },[m[41m[m
+app.py:486: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:487: trailing whitespace.
+[32m+[m[41m[m
+app.py:488: trailing whitespace.
+[32m+[m[41m[m
+app.py:489: trailing whitespace.
+[32m+[m[32mdef log_single_image_diagnostics(post, enabled_platforms):[m[41m[m
+app.py:490: trailing whitespace.
+[32m+[m[32m    print([m[41m[m
+app.py:491: trailing whitespace.
+[32m+[m[32m        "Single image publish diagnostics:",[m[41m[m
+app.py:492: trailing whitespace.
+[32m+[m[32m        {[m[41m[m
+app.py:493: trailing whitespace.
+[32m+[m[32m            "instagram_selected": "instagram" in enabled_platforms,[m[41m[m
+app.py:494: trailing whitespace.
+[32m+[m[32m            "file_url_configured": bool(post.file_url),[m[41m[m
+app.py:495: trailing whitespace.
+[32m+[m[32m            "file_type": post.file_type,[m[41m[m
+app.py:496: trailing whitespace.
+[32m+[m[32m            "url_path_extension": get_url_path_extension(post.file_url),[m[41m[m
+app.py:497: trailing whitespace.
+[32m+[m[32m        },[m[41m[m
+app.py:498: trailing whitespace.
+[32m+[m[32m    )[m[41m[m
+app.py:703: trailing whitespace.
+[32m+[m[32m    upload_result = upload_jpeg_to_cloudinary(image_bytes)[m[41m[m
+app.py:718: trailing whitespace.
+[32m+[m[32mdef send_payload_to_make(payload, webhook_url=None):[m[41m[m
+app.py:731: trailing whitespace.
+[32m+[m[32m    print("\n========== MAKE REQUEST ==========")[m[41m[m
+app.py:732: trailing whitespace.
+[32m+[m[32m    print("Post type:", payload.get("post_type"))[m[41m[m
+app.py:733: trailing whitespace.
+[32m+[m[32m    print("Webhook configured:", bool(webhook_url))[m[41m[m
+app.py:734: trailing whitespace.
+[32m+[m[32m    print("Platforms:", payload.get("platforms"))[m[41m[m
+app.py:735: trailing whitespace.
+[32m+[m[32m    print("Media count:", len(payload.get("media", [])))[m[41m[m
+app.py:736: trailing whitespace.
+[32m+[m[32m    print("==================================")[m[41m[m
+app.py:744: trailing whitespace.
+[32m+[m[32m    print("Make status:", response.status_code)[m[41m[m
+app.py:762: trailing whitespace.
+[32m+[m[32mdef get_ordered_carousel_posts(group_id, user_id=None):[m[41m[m
+app.py:763: trailing whitespace.
+[32m+[m[32m    query = Post.query.filter_by(group_id=group_id)[m[41m[m
+app.py:764: trailing whitespace.
+[32m+[m[41m[m
+app.py:765: trailing whitespace.
+[32m+[m[32m    if user_id is not None:[m[41m[m
+app.py:766: trailing whitespace.
+[32m+[m[32m        query = query.filter_by(user_id=user_id)[m[41m[m
+app.py:767: trailing whitespace.
+[32m+[m[41m[m
+app.py:768: trailing whitespace.
+[32m+[m[32m    return query.order_by([m[41m[m
+app.py:769: trailing whitespace.
+[32m+[m[32m        Post.is_cover.desc(),[m[41m[m
+app.py:770: trailing whitespace.
+[32m+[m[32m        Post.sort_order.asc(),[m[41m[m
+app.py:771: trailing whitespace.
+[32m+[m[32m        Post.id.asc(),[m[41m[m
+app.py:772: trailing whitespace.
+[32m+[m[32m    ).all()[m[41m[m
+app.py:775: trailing whitespace.
+[32m+[m[32mdef build_carousel_pay

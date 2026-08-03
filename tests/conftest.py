@@ -30,6 +30,7 @@ def app():
         TESTING=True,
         SQLALCHEMY_DATABASE_URI=TEST_DATABASE_URL,
         WTF_CSRF_ENABLED=False,
+        SMU_ADMIN_EMAILS=set(),
     )
 
     with smu_app.app.app_context():

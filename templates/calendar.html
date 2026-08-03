@@ -2,11 +2,13 @@
 
 {% block content %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet">
+
+<div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
     <div>
         <h1 class="h3 fw-bold mb-1">Content Calendar</h1>
         <p class="text-muted mb-0">
-            View your scheduled Instagram and Facebook posts by date.
+            View your scheduled posts by month.
         </p>
     </div>
 
@@ -15,100 +17,460 @@
     </a>
 </div>
 
-{% if grouped_posts %}
+<div id="calendarError" class="alert alert-danger d-none" role="alert">
+    Calendar events could not be loaded. Please refresh and try again.
+</div>
 
-    {% for date, posts in grouped_posts.items() %}
-        <div class="card border-0 shadow-sm rounded-4 mb-4">
-            <div class="card-header bg-white border-0 p-4">
-                <h2 class="h5 fw-bold mb-0">
-                    {{ date }}
-                </h2>
-            </div>
-
-            <div class="card-body p-0">
-                <div class="list-group list-group-flush">
-
-                    {% for post in posts %}
-                        <div class="list-group-item p-4">
-                            <div class="row align-items-center g-3">
-
-                                <div class="col-md-2">
-                                    <div class="fw-bold">
-                                        {{ post.scheduled_time|uk_time }}
-                                    </div>
-                                    <div class="small text-muted">
-                                        {{ post.post_type|title }}
-                                    </div>
-                                </div>
-
-                                <div class="col-md-2">
-                                    {% if post.file_type == 'image' %}
-                                        <img
-                                            src="{{ post.file_url }}"
-                                            class="rounded-3"
-                                            style="width: 90px; height: 90px; object-fit: cover;"
-                                            alt="Scheduled post"
-                                        >
-                                    {% elif post.file_type == 'video' %}
-                                        <div class="bg-dark text-white rounded-3 d-flex align-items-center justify-content-center"
-                                             style="width: 90px; height: 90px;">
-                                            Video
-                                        </div>
-                                    {% endif %}
-                                </div>
-
-                                <div class="col-md-5">
-                                    <div class="fw-semibold mb-1">
-                                        {% if post.post_type == 'carousel' %}
-                                            Carousel Post
-                                        {% else %}
-                                            Single Post
-                                        {% endif %}
-                                    </div>
-
-                                    <div class="text-muted small">
-                                        {{ post.caption[:140] if post.caption else 'No caption added.' }}
-                                        {% if post.caption and post.caption|length > 140 %}...{% endif %}
-                                    </div>
-                                </div>
-
-                                <div class="col-md-2">
-                                    <span class="badge bg-warning text-dark">
-                                        {{ post.status }}
-                                    </span>
-                                </div>
-
-                                <div class="col-md-1 text-md-end">
-                                    <a href="{{ url_for('view_post', post_id=post.id) }}"
-                                       class="btn btn-sm btn-outline-primary">
-                                        View
-                                    </a>
-                                </div>
-
-                            </div>
-                        </div>
-                    {% endfor %}
-
-                </div>
-            </div>
+<div id="calendarEmpty" class="alert alert-info d-none" role="status">
+    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div>
+            <strong>No scheduled posts in this month yet.</strong>
+            <div>Schedule a post or create a new draft for this month.</div>
         </div>
-    {% endfor %}
+        <a href="{{ url_for('create_post') }}" class="btn btn-primary">
+            Create Scheduled Post
+        </a>
+    </div>
+</div>
 
-{% else %}
+<div id="calendarActionPopover" class="calendar-action-popover d-none">
+    <div class="d-grid gap-2">
+        <button type="button" class="btn btn-sm btn-primary" data-calendar-action="view">View Post</button>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-calendar-action="duplicate">Duplicate</button>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-calendar-action="reschedule">Reschedule</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-calendar-action="cancel">Cancel</button>
+    </div>
+</div>
 
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-body p-5 text-center">
-            <h2 class="h4 fw-bold mb-2">No scheduled posts yet</h2>
-            <p class="text-muted mb-4">
-                Schedule a post and it will appear here.
-            </p>
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="calendarToast" class="toast align-items-center border-0 text-bg-success" role="status" aria-live="polite" aria-atomic="true">
+        <div class="d-flex">
+            <div id="calendarToastMessage" class="toast-body">
+                Calendar updated.
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    </div>
+</div>
 
-            <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
-                Create a Post
-            </a>
+<div class="row g-3 mb-4" aria-label="Calendar summary">
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Scheduled</div>
+                <div class="h3 fw-bold mb-0" data-summary-count="scheduled">0</div>
+            </div>
         </div>
     </div>
 
-{% endif %}
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Published</div>
+                <div class="h3 fw-bold mb-0" data-summary-count="published">0</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Drafts</div>
+                <div class="h3 fw-bold mb-0" data-summary-count="draft">0</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-lg-3">
+        <div class="card border-0 shadow-sm rounded-4 h-100">
+            <div class="card-body">
+                <div class="text-muted small">Failed</div>
+                <div class="h3 fw-bold mb-0" data-summary-count="failed">0</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-3 p-md-4">
+        <div class="d-flex flex-column flex-lg-row gap-3 justify-content-between">
+            <div>
+                <div class="text-muted small fw-semibold mb-2">Platform</div>
+                <div class="btn-group flex-wrap" role="group" aria-label="Platform filter">
+                    <button type="button" class="btn btn-outline-primary active" data-calendar-filter="platform" data-filter-value="all">All</button>
+                    <button type="button" class="btn btn-outline-primary" data-calendar-filter="platform" data-filter-value="instagram">Instagram</button>
+                    <button type="button" class="btn btn-outline-primary" data-calendar-filter="platform" data-filter-value="facebook">Facebook</button>
+                    <button type="button" class="btn btn-outline-primary" data-calendar-filter="platform" data-filter-value="pinterest">Pinterest</button>
+                </div>
+            </div>
+
+            <div>
+                <div class="text-muted small fw-semibold mb-2">Status</div>
+                <div class="btn-group flex-wrap" role="group" aria-label="Status filter">
+                    <button type="button" class="btn btn-outline-primary active" data-calendar-filter="status" data-filter-value="all">All</button>
+                    <button type="button" class="btn btn-outline-primary" data-calendar-filter="status" data-filter-value="draft">Draft</button>
+                    <button type="button" class="btn btn-outline-primary" data-calendar-filter="status" data-filter-value="scheduled">Scheduled</button>
+                    <button type="button" class="btn btn-outline-primary" data-calendar-filter="status" data-filter-value="published">Published</button>
+                    <button type="button" class="btn btn-outline-primary" data-calendar-filter="status" data-filter-value="failed">Failed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-3 p-md-4">
+        <div id="contentCalendar"></div>
+    </div>
+</div>
+
+<style>
+    #contentCalendar {
+        min-height: 620px;
+    }
+
+    .fc .fc-toolbar {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .fc .fc-toolbar-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+
+    .fc .fc-button {
+        border-radius: 999px;
+        font-weight: 600;
+        text-transform: capitalize;
+    }
+
+    .fc .fc-event {
+        border: 0;
+        border-radius: 0.5rem;
+        padding: 0.15rem 0.25rem;
+    }
+
+    [data-calendar-filter] {
+        min-width: 6rem;
+    }
+
+    .calendar-action-popover {
+        background: #ffffff;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 0.75rem;
+        box-shadow: 0 0.75rem 2rem rgba(0, 0, 0, 0.16);
+        min-width: 11rem;
+        padding: 0.75rem;
+        position: fixed;
+        z-index: 1080;
+    }
+
+    @media (max-width: 576px) {
+        #contentCalendar {
+            min-height: 540px;
+        }
+
+        .fc .fc-toolbar {
+            align-items: flex-start;
+            flex-direction: column;
+        }
+
+        .fc .fc-toolbar-chunk {
+            width: 100%;
+        }
+
+        .fc .fc-button-group {
+            width: 100%;
+        }
+
+        .fc .fc-button {
+            flex: 1;
+        }
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const calendarEl = document.getElementById("contentCalendar");
+        const errorEl = document.getElementById("calendarError");
+        const emptyEl = document.getElementById("calendarEmpty");
+        const actionPopover = document.getElementById("calendarActionPopover");
+        const toastEl = document.getElementById("calendarToast");
+        const toastMessageEl = document.getElementById("calendarToastMessage");
+        let selectedEvent = null;
+        const filters = {
+            platform: "all",
+            status: "all"
+        };
+
+        function showToast(message) {
+            toastMessageEl.textContent = message;
+
+            if (window.bootstrap && window.bootstrap.Toast) {
+                window.bootstrap.Toast.getOrCreateInstance(toastEl).show();
+            }
+        }
+
+        function hideActionPopover() {
+            actionPopover.classList.add("d-none");
+            selectedEvent = null;
+        }
+
+        function selectedEventDate() {
+            if (!selectedEvent || !selectedEvent.start) {
+                return "";
+            }
+
+            return formatDateForQuery(selectedEvent.start);
+        }
+
+        function formatDateForQuery(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, "0");
+            const day = String(date.getDate()).padStart(2, "0");
+
+            return `${year}-${month}-${day}`;
+        }
+
+        function rescheduleEvent(event, date, revertCallback) {
+            fetch(`/calendar/events/${event.id}/reschedule`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ date: date })
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Calendar reschedule request failed");
+                    }
+
+                    return response.json();
+                })
+                .then(function () {
+                    calendar.refetchEvents();
+                    updateSummary({ view: calendar.view });
+                    showToast("Post rescheduled.");
+                })
+                .catch(function () {
+                    if (revertCallback) {
+                        revertCallback();
+                    }
+
+                    errorEl.classList.remove("d-none");
+                });
+        }
+
+        function duplicateEvent(event) {
+            fetch(`/calendar/events/${event.id}/duplicate`, {
+                method: "POST"
+            })
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Calendar duplicate request failed");
+                    }
+
+                    return response.json();
+                })
+                .then(function () {
+                    hideActionPopover();
+                    updateSummary({ view: calendar.view });
+                    showToast("Draft duplicated.");
+                })
+                .catch(function () {
+                    errorEl.classList.remove("d-none");
+                });
+        }
+
+        function setFilterButtonState(filterName, selectedValue) {
+            document
+                .querySelectorAll(`[data-calendar-filter="${filterName}"]`)
+                .forEach(function (button) {
+                    button.classList.toggle(
+                        "active",
+                        button.dataset.filterValue === selectedValue
+                    );
+                });
+        }
+
+        function updateSummary(dateInfo) {
+            const params = new URLSearchParams({
+                start: dateInfo.view.currentStart.toISOString(),
+                end: dateInfo.view.currentEnd.toISOString()
+            });
+
+            fetch(`{{ url_for('calendar_summary') }}?${params.toString()}`)
+                .then(function (response) {
+                    if (!response.ok) {
+                        throw new Error("Calendar summary request failed");
+                    }
+
+                    return response.json();
+                })
+                .then(function (summary) {
+                    Object.keys(summary).forEach(function (status) {
+                        const summaryEl = document.querySelector(
+                            `[data-summary-count="${status}"]`
+                        );
+
+                        if (summaryEl) {
+                            summaryEl.textContent = summary[status];
+                        }
+                    });
+                })
+                .catch(function () {
+                    errorEl.classList.remove("d-none");
+                });
+        }
+
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: "dayGridMonth",
+            timeZone: "Europe/London",
+            height: "auto",
+            editable: true,
+            eventStartEditable: true,
+            eventDurationEditable: false,
+            headerToolbar: {
+                left: "prev,next today",
+                center: "title",
+                right: ""
+            },
+            events: function (info, successCallback, failureCallback) {
+                errorEl.classList.add("d-none");
+                emptyEl.classList.add("d-none");
+
+                const params = new URLSearchParams({
+                    start: info.startStr,
+                    end: info.endStr,
+                    platform: filters.platform,
+                    status: filters.status
+                });
+
+                fetch(`{{ url_for('calendar_events') }}?${params.toString()}`)
+                    .then(function (response) {
+                        if (!response.ok) {
+                            throw new Error("Calendar event request failed");
+                        }
+
+                        return response.json();
+                    })
+                    .then(function (events) {
+                        if (events.length === 0) {
+                            emptyEl.classList.remove("d-none");
+                        }
+
+                        successCallback(events);
+                    })
+                    .catch(function (error) {
+                        errorEl.classList.remove("d-none");
+                        failureCallback(error);
+                    });
+            },
+            eventClick: function (info) {
+                info.jsEvent.preventDefault();
+
+                selectedEvent = info.event;
+                actionPopover.style.left = `${info.jsEvent.clientX}px`;
+                actionPopover.style.top = `${info.jsEvent.clientY}px`;
+                actionPopover.classList.remove("d-none");
+            },
+            eventDidMount: function (info) {
+                const tooltip = info.event.extendedProps.tooltip;
+
+                if (tooltip) {
+                    info.el.title = [
+                        tooltip.title,
+                        tooltip.platform,
+                        tooltip.post_type,
+                        tooltip.status,
+                        tooltip.scheduled_time
+                    ].join("\n");
+                }
+            },
+            datesSet: function (dateInfo) {
+                hideActionPopover();
+                updateSummary(dateInfo);
+            },
+            eventDrop: function (info) {
+                hideActionPopover();
+                rescheduleEvent(
+                    info.event,
+                    formatDateForQuery(info.event.start),
+                    info.revert
+                );
+            },
+            dateClick: function (info) {
+                window.location.href = `{{ url_for('create_post') }}?scheduled_date=${encodeURIComponent(info.dateStr)}`;
+            }
+        });
+
+        actionPopover.addEventListener("click", function (event) {
+            const actionButton = event.target.closest("[data-calendar-action]");
+
+            if (!actionButton || !selectedEvent) {
+                return;
+            }
+
+            const action = actionButton.dataset.calendarAction;
+
+            if (action === "view") {
+                window.location.href = selectedEvent.extendedProps.detail_url;
+                return;
+            }
+
+            if (action === "duplicate") {
+                duplicateEvent(selectedEvent);
+                return;
+            }
+
+            if (action === "reschedule") {
+                const newDate = window.prompt(
+                    "Choose a new date",
+                    selectedEventDate()
+                );
+
+                if (newDate) {
+                    rescheduleEvent(selectedEvent, newDate, null);
+                }
+
+                hideActionPopover();
+                return;
+            }
+
+            hideActionPopover();
+        });
+
+        document.addEventListener("click", function (event) {
+            if (
+                actionPopover.classList.contains("d-none")
+                || actionPopover.contains(event.target)
+                || event.target.closest(".fc-event")
+            ) {
+                return;
+            }
+
+            hideActionPopover();
+        });
+
+        document.querySelectorAll("[data-calendar-filter]").forEach(function (button) {
+            button.addEventListener("click", function () {
+                const filterName = button.dataset.calendarFilter;
+                const filterValue = button.dataset.filterValue;
+
+                if (filters[filterName] === filterValue) {
+                    return;
+                }
+
+                filters[filterName] = filterValue;
+                setFilterButtonState(filterName, filterValue);
+                calendar.refetchEvents();
+            });
+        });
+
+        calendar.render();
+    });
+</script>
 
 {% endblock %}

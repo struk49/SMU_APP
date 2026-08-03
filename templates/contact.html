@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block title %}Contact · SMU{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h3 fw-bold mb-2">Contact SMU</h1>
+                <p class="text-muted mb-4">Send a private beta question or support note.</p>
+
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="name">Name</label>
+                        <input id="name" name="name" class="form-control" maxlength="120" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" for="email">Email</label>
+                        <input id="email" type="email" name="email" class="form-control" maxlength="150" required>
+                    </div>
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold" for="message">Message</label>
+                        <textarea id="message" name="message" class="form-control" rows="5" maxlength="2000" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg">Send Message</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

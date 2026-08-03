@@ -15,6 +15,58 @@
     </a>
 </div>
 
+{% if onboarding and not onboarding.complete %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 mb-3">
+            <div>
+                <h2 class="h5 fw-bold mb-1">Welcome checklist</h2>
+                <p class="text-muted mb-0">
+                    Complete the basics to get beta-ready.
+                </p>
+            </div>
+            <div class="text-lg-end">
+                <div class="h4 fw-bold mb-0">{{ onboarding.percentage }}%</div>
+                <div class="text-muted small">
+                    {{ onboarding.completed_count }} of {{ onboarding.total_count }} complete
+                </div>
+            </div>
+        </div>
+
+        <div class="progress mb-3" style="height: 10px;">
+            <div
+                class="progress-bar"
+                role="progressbar"
+                style="width: {{ onboarding.percentage }}%;"
+                aria-valuenow="{{ onboarding.percentage }}"
+                aria-valuemin="0"
+                aria-valuemax="100"
+            ></div>
+        </div>
+
+        <div class="row g-2">
+            {% for item in onboarding.get("items", []) %}
+                <div class="col-md-6 col-xl-4">
+                    <a
+                        href="{{ item.url }}"
+                        class="text-decoration-none d-flex align-items-center justify-content-between border rounded-3 px-3 py-2"
+                    >
+                        <span class="{% if item.complete %}text-muted{% else %}text-dark{% endif %}">
+                            {{ item.label }}
+                        </span>
+                        {% if item.complete %}
+                            <span class="badge bg-success">Done</span>
+                        {% else %}
+                            <span class="badge bg-light text-dark">Start</span>
+                        {% endif %}
+                    </a>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="row g-4 mb-4">
 
     {% for label, value, icon, color in [
@@ -37,6 +89,37 @@
 
     {% endfor %}
 
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-3">
+            <div>
+                <h2 class="h5 fw-bold mb-1">Connected Platforms</h2>
+                <p class="text-muted mb-0">
+                    Current account availability for publishing routes.
+                </p>
+            </div>
+            <a href="{{ url_for('connected_accounts') }}" class="btn btn-outline-primary align-self-md-start">
+                Manage Accounts
+            </a>
+        </div>
+
+        <div class="row g-3">
+            {% for platform in connected_platforms %}
+                <div class="col-6 col-lg-3">
+                    <div class="border rounded-3 p-3 h-100">
+                        <div class="fw-semibold">{{ platform.name }}</div>
+                        {% if platform.connected %}
+                            <span class="badge bg-success mt-2">Connected</span>
+                        {% else %}
+                            <span class="badge bg-secondary mt-2">Not connected</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
 </div>
 
 <div class="filter-panel mb-4">
@@ -251,11 +334,31 @@
 {% else %}
 
 <div class="empty-state">
-    <h2 class="h4 fw-bold mb-2">No posts found</h2>
-    <p class="text-muted mb-4">Create your first post or adjust your filters.</p>
-    <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
-        Create Your First Post
-    </a>
+    {% if search_query or status_filter != 'all' or type_filter != 'all' or platform_filter != 'all' %}
+        <h2 class="h4 fw-bold mb-2">No posts match these filters</h2>
+        <p class="text-muted mb-4">Clear the filters or create a fresh post for this view.</p>
+        <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
+            <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-lg">
+                Clear Filters
+            </a>
+            <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
+                Create Post
+            </a>
+        </div>
+    {% else %}
+        <h2 class="h4 fw-bold mb-2">No posts yet</h2>
+        <p class="text-muted mb-4">
+            Start with a draft, generate an image, or upload your first piece of media.
+        </p>
+        <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
+            <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
+                Create Your First Post
+            </a>
+            <a href="{{ url_for('content_pack') }}" class="btn btn-outline-primary btn-lg">
+                Generate Content Pack
+            </a>
+        </div>
+    {% endif %}
 </div>
 
 {% endif %}

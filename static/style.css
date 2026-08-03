@@ -274,3 +274,10 @@ body {
         width: 100%;
     }
 }
+
+.brand-logo {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: inline-block;
+}

@@ -2,9 +2,9 @@
 
 {% block content %}
 
-<div class="container-fluid px-4 py-3">
+<div class="studio-shell">
 
-    <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="studio-header">
         <div>
             <h1 class="h3 fw-bold mb-1">AI Content Studio</h1>
             <p class="text-muted mb-0">
@@ -12,58 +12,154 @@
             </p>
         </div>
 
-        <a href="{{ url_for('view_post', post_id=post.id) }}" class="btn btn-outline-secondary">
+        <a href="{{ url_for('view_post', post_id=post.id) }}" class="btn btn-outline-primary studio-back-button">
             Back to Post
         </a>
     </div>
 
-    <div class="row g-4 align-items-start">
-
-        <!-- LEFT COLUMN -->
-        <div class="col-xl-3 col-lg-4">
+    <div class="studio-main-grid">
+        <aside class="studio-panel studio-tools-panel">
             {% include "components/studio/ai_tools.html" %}
-        </div>
+        </aside>
 
-        <!-- MIDDLE COLUMN -->
-        <div class="col-xl-6 col-lg-8">
-        {% include "components/studio/editor.html" %}
+        <main class="studio-panel studio-editor-panel">
+            {% include "components/studio/editor.html" %}
+        </main>
 
-        {% include "components/studio/grade_card.html" %}
-
-        {% include "components/studio/revision_history.html" %}
-
-        <!-- RIGHT COLUMN -->
-        <div class="col-xl-3 col-lg-12">
+        <aside class="studio-panel studio-coach-panel">
             {% include "components/studio/brand_coach.html" %}
+            {% include "components/studio/publishing.html" %}
 
-            <!-- PUBLISHING -->
-        {% include "components/studio/publishing.html" %}
-
-            <!-- MEDIA PREVIEW -->
-            <div class="card border-0 shadow-sm rounded-4">
+            <div class="card border-0 shadow-sm rounded-4 studio-card">
                 <div class="card-body p-4">
-
-                    <h3 class="h5 fw-bold mb-3">Media</h3>
+                    <h2 class="h5 fw-bold mb-3">Media</h2>
 
                     {% if post.file_type == 'image' %}
-                        <img src="{{ post.file_url }}"
-                             class="img-fluid rounded-4"
-                             alt="Post media">
+                        <img
+                            src="{{ post.file_url }}"
+                            class="img-fluid rounded-4 studio-media"
+                            alt="Post media"
+                        >
                     {% elif post.file_type == 'video' %}
-                        <video class="w-100 rounded-4" controls style="background:#000;">
+                        <video class="w-100 rounded-4 studio-media" controls style="background:#000;">
                             <source src="{{ post.file_url }}" type="video/mp4">
                         </video>
                     {% else %}
                         <p class="text-muted mb-0">No media preview available.</p>
                     {% endif %}
-
                 </div>
             </div>
+        </aside>
+    </div>
 
-        </div>
+    <div class="studio-lower-grid">
+        <section class="studio-panel">
+            {% include "components/studio/grade_card.html" %}
+        </section>
 
+        <section class="studio-panel">
+            {% include "components/studio/revision_history.html" %}
+        </section>
     </div>
 
 </div>
+
+<style>
+    .studio-shell {
+        margin-inline: auto;
+        max-width: 1600px;
+        padding-inline: clamp(0rem, 2vw, 2rem);
+        width: 100%;
+    }
+
+    .studio-header {
+        align-items: flex-start;
+        display: flex;
+        gap: 1rem;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+    }
+
+    .studio-back-button {
+        min-width: 8.5rem;
+    }
+
+    .studio-main-grid {
+        align-items: start;
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns:
+            minmax(220px, 250px)
+            minmax(420px, 1fr)
+            minmax(280px, 320px);
+        margin-bottom: 1.5rem;
+    }
+
+    .studio-lower-grid {
+        display: grid;
+        gap: 1.5rem;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+
+    .studio-panel {
+        min-width: 0;
+    }
+
+    .studio-card {
+        margin-bottom: 1.5rem;
+    }
+
+    .studio-card:last-child {
+        margin-bottom: 0;
+    }
+
+    .studio-media {
+        max-height: 360px;
+        object-fit: contain;
+        width: 100%;
+    }
+
+    .studio-main-grid .btn,
+    .studio-lower-grid .btn {
+        min-height: 2.75rem;
+        white-space: normal;
+    }
+
+    .studio-main-grid .card,
+    .studio-lower-grid .card {
+        border-radius: 1rem !important;
+    }
+
+    @media (max-width: 1199.98px) {
+        .studio-main-grid {
+            grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+        }
+
+        .studio-coach-panel {
+            grid-column: 1 / -1;
+        }
+    }
+
+    @media (max-width: 991.98px) {
+        .studio-shell {
+            padding-inline: 0;
+        }
+    }
+
+    @media (max-width: 767.98px) {
+        .studio-header {
+            flex-direction: column;
+        }
+
+        .studio-back-button {
+            width: 100%;
+        }
+
+        .studio-main-grid,
+        .studio-lower-grid {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+</style>
 
 {% endblock %}

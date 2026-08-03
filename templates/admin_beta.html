@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block title %}Beta Admin · SMU{% endblock %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Beta Admin</h1>
+        <p class="text-muted mb-0">Private beta applications and feedback submissions.</p>
+    </div>
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">Back to Dashboard</a>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+    <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Beta Applications</h2>
+        {% if applications %}
+            <div class="table-responsive">
+                <table class="table align-middle">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Platform</th>
+                            <th>Frequency</th>
+                            <th>Status</th>
+                            <th>Challenge</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for application in applications %}
+                            <tr>
+                                <td>{{ application.created_at|uk_time }}</td>
+                                <td>{{ application.name }}</td>
+                                <td>{{ application.email }}</td>
+                                <td>{{ application.primary_platform }}</td>
+                                <td>{{ application.posting_frequency }}</td>
+                                <td><span class="badge bg-secondary">{{ application.status }}</span></td>
+                                <td>{{ application.challenge }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">No beta applications yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4">
+    <div class="card-body p-4">
+        <h2 class="h5 fw-bold mb-3">Feedback</h2>
+        {% if feedback_items %}
+            <div class="list-group">
+                {% for feedback in feedback_items %}
+                    <div class="list-group-item">
+                        <div class="d-flex justify-content-between gap-3">
+                            <strong>User {{ feedback.user_id }}</strong>
+                            <span class="text-muted small">{{ feedback.created_at|uk_time }}</span>
+                        </div>
+                        <p class="mb-1">{{ feedback.message }}</p>
+                        {% if feedback.page_url %}
+                            <small class="text-muted">{{ feedback.page_url }}</small>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-muted mb-0">No feedback submissions yet.</p>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}

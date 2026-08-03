@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Join the SMU Beta{% endblock %}
+
+{% block content %}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h3 fw-bold mb-2">Join the SMU private beta</h1>
+                <p class="text-muted mb-4">
+                    Tell us a little about your content workflow. Applying does not create an account automatically.
+                </p>
+
+                <form method="POST">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="name">Name</label>
+                            <input id="name" name="name" class="form-control" maxlength="120" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="email">Email</label>
+                            <input id="email" type="email" name="email" class="form-control" maxlength="150" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="primary_platform">Primary social platform</label>
+                            <select id="primary_platform" name="primary_platform" class="form-select" required>
+                                <option value="">Choose one</option>
+                                <option value="Instagram">Instagram</option>
+                                <option value="Facebook">Facebook</option>
+                                <option value="Pinterest">Pinterest</option>
+                                <option value="LinkedIn">LinkedIn</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold" for="posting_frequency">Approximate monthly posting frequency</label>
+                            <select id="posting_frequency" name="posting_frequency" class="form-select" required>
+                                <option value="">Choose one</option>
+                                <option value="1-5 posts">1-5 posts</option>
+                                <option value="6-15 posts">6-15 posts</option>
+                                <option value="16-30 posts">16-30 posts</option>
+                                <option value="30+ posts">30+ posts</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold" for="challenge">Biggest content creation challenge</label>
+                            <textarea id="challenge" name="challenge" class="form-control" rows="5" maxlength="1000" required></textarea>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input id="consent" name="consent" type="checkbox" class="form-check-input" required>
+                                <label class="form-check-label" for="consent">
+                                    I agree to receive beta-related emails about SMU.
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-primary btn-lg">Submit Application</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

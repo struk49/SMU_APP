@@ -15,10 +15,22 @@
     </a>
 </div>
 
+{% if not source_text and not content_pack_result %}
+<div class="alert alert-info d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+    <div>
+        <strong>No Content Pack generated yet.</strong>
+        <div>Paste a topic, idea, or TikTok URL to build captions, prompts, and draft options.</div>
+    </div>
+    <a href="#contentPackForm" class="btn btn-primary">
+        Start Content Pack
+    </a>
+</div>
+{% endif %}
+
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-4">
 
-        <form method="POST" action="{{ url_for('content_pack') }}">
+        <form method="POST" action="{{ url_for('content_pack') }}" id="contentPackForm">
 
             <div class="mb-3">
                 <label class="form-label fw-semibold">Source Type</label>

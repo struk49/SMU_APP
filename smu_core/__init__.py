@@ -41,6 +41,7 @@ def create_app(config_object=None):
     from smu_core.blueprints.content_pack import content_pack_bp
     from smu_core.blueprints.feedback import feedback_bp
     from smu_core.blueprints.public import public_bp
+    from smu_core.blueprints.tiktok import tiktok_bp
 
     app.register_blueprint(accounts_bp)
     app.register_blueprint(auth_bp)
@@ -49,5 +50,6 @@ def create_app(config_object=None):
     app.register_blueprint(content_pack_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(public_bp)
+    app.register_blueprint(tiktok_bp)
 
     return app

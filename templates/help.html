@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 fw-bold mb-1">Help Centre</h1>
+        <p class="text-muted mb-0">
+            Quick answers for getting around SMU Beta.
+        </p>
+    </div>
+
+    <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+        Back to Dashboard
+    </a>
+</div>
+
+<div class="row g-4">
+    {% for title, body, action_label, action_url in [
+        (
+            'Getting Started',
+            'Begin with your Brand Brief, create a post, then schedule it on the calendar.',
+            'Open Dashboard',
+            url_for('index')
+        ),
+        (
+            'Brand Briefs',
+            'Add your business, audience, tone, offer, goals, and words to avoid.',
+            'Edit Brand Brief',
+            url_for('brand_brief')
+        ),
+        (
+            'Content Packs',
+            'Turn a topic or TikTok idea into captions, image prompts, and draft options.',
+            'Create Content Pack',
+            url_for('content_pack')
+        ),
+        (
+            'Scheduling',
+            'Choose a UK local date and time when creating or viewing a post.',
+            'Create Scheduled Post',
+            url_for('create_post')
+        ),
+        (
+            'Calendar',
+            'Use the calendar to review monthly plans, filter posts, duplicate drafts, and reschedule.',
+            'Open Calendar',
+            url_for('calendar_view')
+        ),
+        (
+            'Publishing',
+            'Connect platforms and Make webhooks before sending posts to the publishing flow.',
+            'Manage Accounts',
+            url_for('connected_accounts')
+        )
+    ] %}
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm rounded-4 h-100">
+                <div class="card-body p-4 d-flex flex-column">
+                    <h2 class="h5 fw-bold">{{ title }}</h2>
+                    <p class="text-muted">{{ body }}</p>
+                    <a href="{{ action_url }}" class="btn btn-outline-primary mt-auto">
+                        {{ action_label }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+{% endblock %}

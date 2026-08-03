@@ -1,7 +1,7 @@
-<div class="card border-0 shadow-sm rounded-4 mb-4">
+<div class="card border-0 shadow-sm rounded-4 studio-card studio-editor-card">
     <div class="card-body p-4">
 
-        <div class="d-flex justify-content-between align-items-start mb-3">
+        <div class="d-flex flex-column flex-sm-row justify-content-between align-items-sm-start gap-3 mb-3">
             <div>
                 <h2 class="h4 fw-bold mb-1">Caption Workspace</h2>
                 <p class="text-muted small mb-0">
@@ -21,9 +21,9 @@
         </div>
 
         {% if post.platforms %}
-            <div class="mb-3">
+            <div class="d-flex flex-wrap gap-2 mb-3">
                 {% for platform in post.platforms.split(',') %}
-                    <span class="badge bg-primary me-1">
+                    <span class="badge bg-primary">
                         {% if platform.strip() == 'x' %}
                             X
                         {% else %}
@@ -38,19 +38,19 @@
             <textarea
                 id="studio-editor"
                 name="final_caption"
-                class="form-control mb-3"
-                rows="22"
-                style="resize: vertical; font-size: 1rem; line-height: 1.6;"
+                class="form-control mb-3 studio-editor-textarea"
+                rows="20"
+                style="resize: vertical;"
             >{{ post.improved_caption if post.improved_caption else post.caption }}</textarea>
 
-            <div class="row g-2">
-                <div class="col-md-6">
+            <div class="row g-3">
+                <div class="col-sm-6">
                     <button type="submit" class="btn btn-primary w-100">
                         ✔ Save Draft
                     </button>
                 </div>
 
-                <div class="col-md-6">
+                <div class="col-sm-6">
                     <button
                         type="submit"
                         formaction="{{ url_for('studio_regrade', post_id=post.id) }}"
