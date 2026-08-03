@@ -36,10 +36,12 @@ def create_app(config_object=None):
 
     from smu_core.blueprints.auth import auth_bp
     from smu_core.blueprints.beta import beta_bp
+    from smu_core.blueprints.feedback import feedback_bp
     from smu_core.blueprints.public import public_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(beta_bp)
+    app.register_blueprint(feedback_bp)
     app.register_blueprint(public_bp)
 
     return app

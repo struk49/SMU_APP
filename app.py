@@ -3485,47 +3485,6 @@ def connected_accounts():
     )
 
 
-@app.route("/feedback", methods=["POST"])
-@login_required
-def submit_feedback():
-    data = request.get_json(silent=True) or {}
-    message = (
-        data.get("message")
-        or request.form.get("message", "")
-    ).strip()
-    page_url = (
-        data.get("page_url")
-        or request.form.get("page_url", "")
-    ).strip()
-
-    if not message:
-        if request.is_json:
-            return jsonify({"error": "Feedback message is required."}), 400
-
-        flash("Please enter feedback before sending.", "danger")
-        return redirect(request.referrer or url_for("index"))
-
-    feedback = Feedback(
-        user_id=current_user.id,
-        message=message,
-        page_url=page_url[:500],
-    )
-
-    db.session.add(feedback)
-    db.session.commit()
-    log_event(
-        "feedback_submission",
-        feedback_id=feedback.id,
-        user_id=current_user.id,
-    )
-
-    if request.is_json:
-        return jsonify({"success": True})
-
-    flash("Thanks for the feedback.", "success")
-    return redirect(request.referrer or url_for("index"))
-
-
 @app.errorhandler(404)
 def not_found_error(error):
     return render_template("404.html"), 404
