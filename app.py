@@ -1047,6 +1047,33 @@ Do not create generic content.
 Use the tone, audience and offer above.
 """
 
+
+app.extensions["smu_content_pack_helpers"] = {
+    "extract_tiktok_transcript": lambda *args, **kwargs: extract_tiktok_transcript(
+        *args,
+        **kwargs,
+    ),
+    "build_brand_context": lambda *args, **kwargs: build_brand_context(
+        *args,
+        **kwargs,
+    ),
+    "generate_content_pack": lambda *args, **kwargs: generate_content_pack(
+        *args,
+        **kwargs,
+    ),
+    "extract_content_pack_section": (
+        lambda *args, **kwargs: extract_content_pack_section(*args, **kwargs)
+    ),
+    "apply_image_style": lambda *args, **kwargs: apply_image_style(
+        *args,
+        **kwargs,
+    ),
+    "get_placeholder_image_url": (
+        lambda *args, **kwargs: get_placeholder_image_url(*args, **kwargs)
+    ),
+}
+
+
 def rewrite_caption_with_action(post, brand_context="", action="improve"):
     action_instructions = {
         "hook": "Improve the opening hook. Make the first line more attention-grabbing.",
@@ -2493,41 +2520,6 @@ Design style:
         return redirect(url_for("tiktok_repurpose"))
 
 
-@app.route("/content-pack", methods=["GET", "POST"])
-@login_required
-def content_pack():
-    source_text = ""
-    content_pack_result = None
-    session["content_pack_started"] = True
-
-    if request.method == "POST":
-        source_type = request.form.get("source_type", "text")
-        source_input = request.form.get("source_input", "").strip()
-
-        if not source_input:
-            flash("Please enter a TikTok URL or topic/text.", "danger")
-            return redirect(url_for("content_pack"))
-
-        try:
-            if source_type == "tiktok":
-                source_text = extract_tiktok_transcript(source_input)
-            else:
-                source_text = source_input
-
-            brand_context = build_brand_context(current_user.id)
-            content_pack_result = generate_content_pack(source_text, brand_context)
-
-        except Exception as e:
-            print("Content pack error:", e)
-            flash(f"Failed: {e}", "danger")
-
-    return render_template(
-        "content_pack.html",
-        source_text=source_text,
-        content_pack_result=content_pack_result,
-    )
-
-
 @app.route("/calendar")
 @login_required
 def calendar_view():
@@ -2879,221 +2871,6 @@ def calendar_duplicate_event(post_id):
         "post_id": new_post.id,
         "detail_url": url_for("view_post", post_id=new_post.id),
     })
-
-
-@app.route("/content-pack/create-carousel", methods=["POST"])
-@login_required
-def create_content_pack_carousel():
-    content_pack_result = request.form.get("content_pack_result", "").strip()
-    image_style = request.form.get("image_style", "").strip()
-
-    if not content_pack_result:
-        flash("No content pack found.", "danger")
-        return redirect(url_for("content_pack"))
-
-    caption = extract_content_pack_section(content_pack_result, "INSTAGRAM_CAPTION")
-    carousel_idea = extract_content_pack_section(content_pack_result, "CAROUSEL_IDEA")
-    image_prompt = extract_content_pack_section(content_pack_result, "IMAGE_PROMPT")
-    hashtags = extract_content_pack_section(content_pack_result, "HASHTAGS")
-
-    if hashtags:
-        caption = caption + "\n\n" + hashtags
-
-    if not carousel_idea:
-        flash("No carousel idea found in the content pack.", "danger")
-        return redirect(url_for("content_pack"))
-
-    try:
-        styled_image_prompt = apply_image_style(image_prompt, image_style)
-        slides = []
-
-        for line in carousel_idea.splitlines():
-            line = line.strip()
-
-            if line.lower().startswith("slide"):
-                parts = line.split(":", 1)
-
-                if len(parts) == 2 and parts[1].strip():
-                    slides.append(parts[1].strip())
-
-        if not slides:
-            slides = [
-                line.strip() for line in carousel_idea.splitlines() if line.strip()
-            ]
-
-        slides = slides[:6]
-
-        if len(slides) < 2:
-            flash("Carousel needs at least 2 slides.", "danger")
-            return redirect(url_for("content_pack"))
-
-        group_id = str(uuid.uuid4())
-        placeholder_url = get_placeholder_image_url()
-
-        for index, slide_text in enumerate(slides):
-            full_prompt = f"""
-Create an Instagram carousel slide.
-
-Slide content:
-{slide_text}
-
-Visual direction:
-{styled_image_prompt}
-
-Design:
-- dark background
-- bold typography
-- high contrast
-- square 1:1 format
-- premium social media style
-"""
-
-            post = Post(
-                file_url=placeholder_url,
-                file_type="image",
-                prompt=full_prompt,
-                caption=caption,
-                platforms="instagram",
-                post_type="carousel",
-                status="generating",
-                group_id=group_id,
-                sort_order=index,
-                is_cover=(index == 0),
-                user_id=current_user.id,
-            )
-
-            db.session.add(post)
-
-        db.session.commit()
-
-        first_post = (
-            Post.query.filter_by(group_id=group_id, user_id=current_user.id)
-            .order_by(Post.sort_order.asc())
-            .first()
-        )
-
-        flash(
-            "Carousel draft created. Images are generating in the background.",
-            "success",
-        )
-        return redirect(url_for("view_post", post_id=first_post.id))
-
-    except Exception as e:
-        print("Create content pack carousel error:", e)
-        flash(f"Failed to create content pack carousel: {e}", "danger")
-        return redirect(url_for("content_pack"))
-
-
-@app.route("/content-pack/create-platform-draft", methods=["POST"])
-@login_required
-def create_content_pack_platform_draft():
-    content_pack_result = request.form.get("content_pack_result", "").strip()
-    platform = request.form.get("platform", "").strip()
-    image_style = request.form.get("image_style", "").strip()
-
-    allowed_platforms = [
-        "instagram",
-        "facebook",
-        "linkedin",
-        "pinterest",
-        "reddit",
-        "x",
-    ]
-
-    if not content_pack_result:
-        flash("No content pack found.", "danger")
-        return redirect(url_for("content_pack"))
-
-    if platform not in allowed_platforms:
-        flash("Invalid platform selected.", "danger")
-        return redirect(url_for("content_pack"))
-
-    image_prompt = extract_content_pack_section(content_pack_result, "IMAGE_PROMPT")
-    hashtags = extract_content_pack_section(content_pack_result, "HASHTAGS")
-
-    if platform == "instagram":
-        caption = extract_content_pack_section(content_pack_result, "INSTAGRAM_CAPTION")
-
-        if hashtags:
-            caption = caption + "\n\n" + hashtags
-
-    elif platform == "facebook":
-        caption = extract_content_pack_section(content_pack_result, "FACEBOOK_POST")
-
-    elif platform == "linkedin":
-        caption = extract_content_pack_section(content_pack_result, "LINKEDIN_POST")
-
-    elif platform == "pinterest":
-        title = extract_content_pack_section(content_pack_result, "PINTEREST_PIN_TITLE")
-        description = extract_content_pack_section(
-            content_pack_result,
-            "PINTEREST_PIN_DESCRIPTION"
-        )
-        caption = f"{title}\n\n{description}".strip()
-
-    elif platform == "reddit":
-        caption = extract_content_pack_section(content_pack_result, "REDDIT_POST")
-
-    elif platform == "x":
-        caption = extract_content_pack_section(content_pack_result, "X_POST")
-
-    if not caption:
-        flash(f"No {platform} content found in the content pack.", "danger")
-        return redirect(url_for("content_pack"))
-
-    try:
-        brand_context = build_brand_context(current_user.id)
-
-        enhanced_prompt = f"""
-Brand Brief:
-{brand_context}
-
-Create a social media image for this {platform} post.
-
-Post Caption:
-{caption}
-
-Extra Visual Direction:
-{image_prompt}
-
-Requirements:
-- Match the meaning and mood of the post
-- Avoid random unrelated objects
-- Avoid generic stock image style
-- Square 1:1 format
-- High quality
-- Suitable for {platform}
-"""
-
-        styled_prompt = apply_image_style(enhanced_prompt, image_style)
-        placeholder_url = get_placeholder_image_url()
-
-        post = Post(
-            file_url=placeholder_url,
-            file_type="image",
-            prompt=styled_prompt,
-            caption=caption,
-            platforms=platform,
-            post_type="single",
-            status="generating",
-            sort_order=0,
-            is_cover=False,
-            user_id=current_user.id,
-        )
-
-        db.session.add(post)
-        db.session.commit()
-
-        flash(
-            f"{platform.title()} draft created. Image is generating in the background.",
-            "success",
-        )
-        return redirect(url_for("view_post", post_id=post.id))
-
-    except Exception as e:
-        print("Create platform draft error:", e)
-        flash(f"Failed to create {platform} draft: {e}", "danger")
-        return redirect(url_for("content_pack"))
 
 
 @app.route("/post/<int:post_id>/improve", methods=["POST"])
