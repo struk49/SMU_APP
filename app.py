@@ -1363,45 +1363,6 @@ def beta_apply():
     return render_template("beta_apply.html")
 
 
-@app.route("/contact", methods=["GET", "POST"])
-def contact():
-    if request.method == "POST":
-        name = request.form.get("name", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        message = request.form.get("message", "").strip()
-
-        errors = []
-        if not name:
-            errors.append("Name is required.")
-        if not is_valid_email(email):
-            errors.append("A valid email is required.")
-        if not message:
-            errors.append("Message is required.")
-        if field_too_long(name, 120) or field_too_long(email, 150):
-            errors.append("Name or email is too long.")
-        if field_too_long(message, 2000):
-            errors.append("Message must be 2000 characters or fewer.")
-
-        if errors:
-            for error in errors:
-                flash(error, "danger")
-            return render_template("contact.html"), 400
-
-        contact_message = ContactMessage(
-            name=name,
-            email=email,
-            message=message,
-        )
-        db.session.add(contact_message)
-        db.session.commit()
-        log_event("contact_submission", contact_message_id=contact_message.id)
-
-        flash("Thanks. Your message has been received.", "success")
-        return redirect(url_for("contact"))
-
-    return render_template("contact.html")
-
-
 @app.route("/")
 @login_required
 def index():

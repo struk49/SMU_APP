@@ -1,8 +1,27 @@
-from flask import Blueprint, render_template
+import re
+
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import login_required
+
+from smu_core.extensions import db
+from smu_core.models import ContactMessage
 
 
 public_bp = Blueprint("public", __name__)
+
+
+def is_valid_email(email):
+    return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
+
+
+def field_too_long(value, max_length):
+    return len(value or "") > max_length
+
+
+def _log_event(event_name, **fields):
+    log_event = current_app.extensions.get("smu_log_event")
+    if log_event:
+        log_event(event_name, **fields)
 
 
 def landing_page():
@@ -26,17 +45,55 @@ def help_centre():
     return render_template("help.html")
 
 
+def contact():
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        email = request.form.get("email", "").strip().lower()
+        message = request.form.get("message", "").strip()
+
+        errors = []
+        if not name:
+            errors.append("Name is required.")
+        if not is_valid_email(email):
+            errors.append("A valid email is required.")
+        if not message:
+            errors.append("Message is required.")
+        if field_too_long(name, 120) or field_too_long(email, 150):
+            errors.append("Name or email is too long.")
+        if field_too_long(message, 2000):
+            errors.append("Message must be 2000 characters or fewer.")
+
+        if errors:
+            for error in errors:
+                flash(error, "danger")
+            return render_template("contact.html"), 400
+
+        contact_message = ContactMessage(
+            name=name,
+            email=email,
+            message=message,
+        )
+        db.session.add(contact_message)
+        db.session.commit()
+        _log_event("contact_submission", contact_message_id=contact_message.id)
+
+        flash("Thanks. Your message has been received.", "success")
+        return redirect(url_for("contact"))
+
+    return render_template("contact.html")
+
+
 @public_bp.record_once
 def register_public_routes(state):
     app = state.app
     routes = [
-        ("/landing", "landing_page", landing_page),
-        ("/privacy", "privacy_policy", privacy_policy),
-        ("/terms", "terms_of_service", terms_of_service),
-        ("/maintenance", "maintenance", maintenance),
-        ("/help", "help_centre", help_centre),
+        ("/landing", "landing_page", landing_page, None),
+        ("/privacy", "privacy_policy", privacy_policy, None),
+        ("/terms", "terms_of_service", terms_of_service, None),
+        ("/maintenance", "maintenance", maintenance, None),
+        ("/help", "help_centre", help_centre, None),
+        ("/contact", "contact", contact, ["GET", "POST"]),
     ]
 
-    for rule, endpoint, view_func in routes:
-        app.add_url_rule(rule, endpoint, view_func)
-
+    for rule, endpoint, view_func, methods in routes:
+        app.add_url_rule(rule, endpoint, view_func, methods=methods)
