@@ -35,9 +35,11 @@ def create_app(config_object=None):
     login_manager.login_message_category = "warning"
 
     from smu_core.blueprints.auth import auth_bp
+    from smu_core.blueprints.beta import beta_bp
     from smu_core.blueprints.public import public_bp
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(beta_bp)
     app.register_blueprint(public_bp)
 
     return app
