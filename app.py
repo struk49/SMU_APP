@@ -82,6 +82,9 @@ def log_event(event_name, **fields):
     smu_logger.info(json.dumps(safe_fields, default=str, sort_keys=True))
 
 
+app.extensions["smu_log_event"] = log_event
+
+
 MAKE_WEBHOOK_SINGLE = os.getenv("MAKE_WEBHOOK_SINGLE", "").strip()
 MAKE_WEBHOOK_CAROUSEL = os.getenv("MAKE_WEBHOOK_CAROUSEL", "").strip()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
@@ -3502,86 +3505,6 @@ def restore_revision(post_id, revision_id):
 
     flash(f"Version {revision.version_number} restored.", "success")
     return redirect(url_for("post_studio", post_id=post.id))
-
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if current_user.is_authenticated:
-        return redirect(url_for("index"))
-
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "").strip()
-        confirm_password = request.form.get("confirm_password", "").strip()
-
-        if not email or not password:
-            flash("Please enter an email and password.", "danger")
-            return redirect(url_for("register"))
-
-        if password != confirm_password:
-            flash("Passwords do not match.", "danger")
-            return redirect(url_for("register"))
-
-        existing_user = User.query.filter_by(email=email).first()
-
-        if existing_user:
-            flash("An account with that email already exists.", "danger")
-            return redirect(url_for("register"))
-
-        user = User(
-            email=email,
-            password_hash=generate_password_hash(password)
-        )
-
-        db.session.add(user)
-        db.session.commit()
-
-        login_user(user)
-
-        flash("Account created successfully.", "success")
-        return redirect(url_for("index"))
-
-    return render_template("register.html")
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for("index"))
-
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "").strip()
-
-        user = User.query.filter_by(email=email).first()
-
-        if not user or not check_password_hash(user.password_hash, password):
-            log_event(
-                "login_failure",
-                email_present=bool(email),
-                reason="invalid_credentials",
-            )
-            flash("Invalid email or password.", "danger")
-            return redirect(url_for("login"))
-
-        login_user(user)
-        log_event(
-            "login_success",
-            user_id=user.id,
-        )
-
-        flash("Logged in successfully.", "success")
-        return redirect(url_for("index"))
-
-    return render_template("login.html")
-
-
-@app.route("/logout")
-@login_required
-def logout():
-    logout_user()
-    flash("Logged out successfully.", "success")
-    return redirect(url_for("login"))
 
 
 @app.route("/settings/accounts", methods=["GET", "POST"])
