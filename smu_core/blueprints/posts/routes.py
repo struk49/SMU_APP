@@ -1,5 +1,6 @@
 import json
 import uuid
+from datetime import datetime
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -39,6 +40,319 @@ def _post_delete_duplicate_helper(name):
         raise RuntimeError(f"Post delete/duplicate helper is not available: {name}")
 
     return helper
+
+
+def _post_create_helper(name):
+    helpers = current_app.extensions.get("smu_post_create_helpers", {})
+    helper = helpers.get(name)
+
+    if not helper:
+        raise RuntimeError(f"Post create helper is not available: {name}")
+
+    return helper
+
+
+def _post_schedule_helper(name):
+    helpers = current_app.extensions.get("smu_post_schedule_helpers", {})
+    helper = helpers.get(name)
+
+    if not helper:
+        raise RuntimeError(f"Post schedule helper is not available: {name}")
+
+    return helper
+
+
+@login_required
+def create_post():
+    default_scheduled_time = ""
+
+    if request.method == "GET":
+        scheduled_date = request.args.get("scheduled_date", "").strip()
+
+        if scheduled_date:
+            try:
+                parsed_date = datetime.strptime(scheduled_date, "%Y-%m-%d")
+                default_scheduled_time = parsed_date.strftime("%Y-%m-%dT09:00")
+            except ValueError:
+                default_scheduled_time = ""
+
+    if request.method == "POST":
+        files = request.files.getlist("media")
+
+        prompt = request.form.get("prompt", "").strip()
+        caption = request.form.get("caption", "").strip()
+        scheduled_time_str = request.form.get("scheduled_time")
+        platforms = request.form.getlist("platforms")
+        make_carousel = request.form.get("make_carousel") == "on"
+        carousel_order_raw = request.form.get("carousel_order", "")
+        cover_index_raw = request.form.get("cover_index", "0")
+        image_style = request.form.get("image_style", "").strip()
+
+        if not platforms:
+            platforms = ["instagram", "facebook"]
+
+        platforms_string = ",".join(platforms)
+
+        scheduled_time = None
+        if scheduled_time_str:
+            scheduled_time = _post_create_helper("convert_uk_time_to_utc")(
+                scheduled_time_str
+            )
+
+        original_files = [
+            (index, file)
+            for index, file in enumerate(files)
+            if file.filename != ""
+        ]
+
+        ordered_items = original_files
+
+        if carousel_order_raw:
+            try:
+                order = json.loads(carousel_order_raw)
+                file_map = {index: file for index, file in original_files}
+
+                ordered_items = [
+                    (index, file_map[index])
+                    for index in order
+                    if isinstance(index, int) and index in file_map
+                ]
+
+            except Exception as e:
+                print("Carousel order error:", e)
+
+        try:
+            cover_index = int(cover_index_raw)
+        except ValueError:
+            cover_index = 0
+
+        if make_carousel and ordered_items:
+            cover_item = None
+            remaining_items = []
+
+            for index, file in ordered_items:
+                if index == cover_index:
+                    cover_item = (index, file)
+                else:
+                    remaining_items.append((index, file))
+
+            if cover_item:
+                ordered_items = [cover_item] + remaining_items
+
+        uploaded_files = [file for _, file in ordered_items]
+        has_files = len(uploaded_files) > 0
+
+        if not prompt and not has_files:
+            flash("Upload a file or enter a prompt.", "danger")
+            return redirect(url_for("create_post"))
+
+        try:
+            if prompt and not has_files:
+                image_count = 3 if make_carousel else 1
+
+                brand_context = _post_create_helper("build_brand_context")(
+                    current_user.id
+                )
+
+                branded_prompt = f"""
+{brand_context}
+
+Create a branded social media image.
+
+User Request:
+{prompt}
+"""
+
+                styled_prompt = _post_create_helper("apply_image_style")(
+                    branded_prompt,
+                    image_style
+                )
+
+                image_urls = _post_create_helper("generate_multiple_openai_images")(
+                    styled_prompt,
+                    image_count
+                )
+
+                group_id = str(uuid.uuid4()) if make_carousel else None
+                created_posts = []
+
+                for index, image_url in enumerate(image_urls):
+                    post = Post(
+                        file_url=image_url,
+                        file_type="image",
+                        prompt=styled_prompt,
+                        caption=caption,
+                        platforms=platforms_string,
+                        post_type="carousel" if make_carousel else "single",
+                        status="scheduled" if scheduled_time else "draft",
+                        scheduled_time=scheduled_time,
+                        group_id=group_id,
+                        sort_order=index,
+                        is_cover=(index == 0),
+                        user_id=current_user.id,
+                    )
+
+                    db.session.add(post)
+                    created_posts.append(post)
+
+                db.session.commit()
+
+                if make_carousel:
+                    flash("AI carousel created successfully.", "success")
+                    return redirect(url_for("index"))
+
+                flash("AI image created successfully.", "success")
+                return redirect(url_for("view_post", post_id=created_posts[0].id))
+
+            if has_files:
+                if make_carousel and len(uploaded_files) > 10:
+                    flash(
+                        "Instagram carousel posts can only contain up to 10 images.",
+                        "danger",
+                    )
+                    return redirect(url_for("create_post"))
+
+                is_carousel = make_carousel and len(uploaded_files) > 1
+                group_id = str(uuid.uuid4()) if is_carousel else None
+                created_posts = []
+
+                for index, file in enumerate(uploaded_files):
+                    file_type = _post_create_helper("get_file_type")(file.filename)
+
+                    if make_carousel and file_type != "image":
+                        raise Exception("Carousel posts currently support images only.")
+
+                    upload_result = _post_create_helper("upload_to_cloudinary")(
+                        file,
+                        force_jpeg=(
+                            file_type == "image"
+                            and _post_create_helper("is_instagram_selected")(platforms)
+                        ),
+                    )
+
+                    post = Post(
+                        file_url=upload_result["secure_url"],
+                        file_type=file_type,
+                        prompt=prompt,
+                        caption=caption,
+                        platforms=platforms_string,
+                        post_type="carousel" if is_carousel else "single",
+                        status="scheduled" if scheduled_time else "draft",
+                        scheduled_time=scheduled_time,
+                        group_id=group_id,
+                        sort_order=index,
+                        is_cover=(is_carousel and index == 0),
+                        user_id=current_user.id,
+                    )
+
+                    db.session.add(post)
+                    created_posts.append(post)
+
+                db.session.commit()
+
+                if is_carousel:
+                    flash("Carousel created successfully.", "success")
+                    return redirect(url_for("index"))
+
+                flash("Post created successfully.", "success")
+                return redirect(url_for("view_post", post_id=created_posts[0].id))
+
+        except Exception as e:
+            print("Create post error:", e)
+            flash(f"Failed: {e}", "danger")
+            return redirect(url_for("create_post"))
+
+    return render_template(
+        "create_post.html",
+        default_scheduled_time=default_scheduled_time,
+    )
+
+
+@login_required
+def schedule_post(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    scheduled_time_str = request.form.get(
+        "scheduled_time",
+        ""
+    ).strip()
+
+    if not scheduled_time_str:
+        flash("Please select a date and time.", "danger")
+        return redirect(
+            url_for("view_post", post_id=post.id)
+        )
+
+    try:
+        scheduled_time = _post_schedule_helper("convert_uk_time_to_utc")(
+            scheduled_time_str
+        )
+
+        if post.group_id:
+            group_posts = _post_schedule_helper("get_ordered_carousel_posts")(
+                post.group_id,
+                user_id=current_user.id,
+            )
+
+            if not group_posts:
+                flash(
+                    "No carousel posts were found.",
+                    "danger"
+                )
+                return redirect(
+                    url_for("view_post", post_id=post.id)
+                )
+
+            for group_post in group_posts:
+                group_post.scheduled_time = scheduled_time
+                group_post.status = "scheduled"
+
+            db.session.commit()
+
+            for group_post in group_posts:
+                _post_schedule_helper("log_scheduled_post_diagnostics")(
+                    group_post,
+                    input_local_time=scheduled_time_str,
+                )
+
+            flash(
+                "Carousel scheduled successfully.",
+                "success"
+            )
+
+            return redirect(
+                url_for("view_post", post_id=post.id)
+            )
+
+        post.scheduled_time = scheduled_time
+        post.status = "scheduled"
+
+        db.session.commit()
+
+        _post_schedule_helper("log_scheduled_post_diagnostics")(
+            post,
+            input_local_time=scheduled_time_str,
+        )
+
+        flash(
+            "Post scheduled successfully.",
+            "success"
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        print("Schedule error:", e)
+        flash(
+            f"Error scheduling post: {e}",
+            "danger"
+        )
+
+    return redirect(
+        url_for("view_post", post_id=post.id)
+    )
 
 
 @login_required
@@ -299,6 +613,18 @@ def delete_carousel(group_id):
 
 @posts_bp.record_once
 def register_routes(state):
+    state.app.add_url_rule(
+        "/create",
+        "create_post",
+        create_post,
+        methods=["GET", "POST"],
+    )
+    state.app.add_url_rule(
+        "/schedule/<int:post_id>",
+        "schedule_post",
+        schedule_post,
+        methods=["POST"],
+    )
     state.app.add_url_rule("/post/<int:post_id>", "view_post", view_post)
     state.app.add_url_rule(
         "/edit-post/<int:post_id>",

@@ -684,6 +684,45 @@ app.extensions.setdefault("smu_post_delete_duplicate_helpers", {}).update({
 })
 
 
+app.extensions.setdefault("smu_post_create_helpers", {}).update({
+    "convert_uk_time_to_utc": (
+        lambda *args, **kwargs: convert_uk_time_to_utc(*args, **kwargs)
+    ),
+    "build_brand_context": lambda *args, **kwargs: build_brand_context(
+        *args,
+        **kwargs,
+    ),
+    "apply_image_style": lambda *args, **kwargs: apply_image_style(
+        *args,
+        **kwargs,
+    ),
+    "generate_multiple_openai_images": (
+        lambda *args, **kwargs: generate_multiple_openai_images(*args, **kwargs)
+    ),
+    "get_file_type": lambda *args, **kwargs: get_file_type(*args, **kwargs),
+    "upload_to_cloudinary": lambda *args, **kwargs: upload_to_cloudinary(
+        *args,
+        **kwargs,
+    ),
+    "is_instagram_selected": (
+        lambda *args, **kwargs: is_instagram_selected(*args, **kwargs)
+    ),
+})
+
+
+app.extensions.setdefault("smu_post_schedule_helpers", {}).update({
+    "convert_uk_time_to_utc": (
+        lambda *args, **kwargs: convert_uk_time_to_utc(*args, **kwargs)
+    ),
+    "get_ordered_carousel_posts": (
+        lambda *args, **kwargs: get_ordered_carousel_posts(*args, **kwargs)
+    ),
+    "log_scheduled_post_diagnostics": (
+        lambda *args, **kwargs: log_scheduled_post_diagnostics(*args, **kwargs)
+    ),
+})
+
+
 def clean_transcript_text(text):
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -1736,8 +1775,6 @@ def is_current_user_admin():
     )
 
 
-@app.route("/create", methods=["GET", "POST"])
-@login_required
 def create_post():
     default_scheduled_time = ""
 
@@ -2297,94 +2334,6 @@ def send_carousel_to_make(group_id):
         print("Send carousel error:", e)
         flash(f"Failed: {e}", "danger")
         return redirect(url_for("view_post", post_id=posts[0].id))
-
-
-@app.route("/schedule/<int:post_id>", methods=["POST"])
-@login_required
-def schedule_post(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    scheduled_time_str = request.form.get(
-        "scheduled_time",
-        ""
-    ).strip()
-
-    if not scheduled_time_str:
-        flash("Please select a date and time.", "danger")
-        return redirect(
-            url_for("view_post", post_id=post.id)
-        )
-
-    try:
-        scheduled_time = convert_uk_time_to_utc(
-            scheduled_time_str
-        )
-
-        if post.group_id:
-            group_posts = get_ordered_carousel_posts(
-                post.group_id,
-                user_id=current_user.id,
-            )
-
-            if not group_posts:
-                flash(
-                    "No carousel posts were found.",
-                    "danger"
-                )
-                return redirect(
-                    url_for("view_post", post_id=post.id)
-                )
-
-            for group_post in group_posts:
-                group_post.scheduled_time = scheduled_time
-                group_post.status = "scheduled"
-
-            db.session.commit()
-
-            for group_post in group_posts:
-                log_scheduled_post_diagnostics(
-                    group_post,
-                    input_local_time=scheduled_time_str,
-                )
-
-            flash(
-                "Carousel scheduled successfully.",
-                "success"
-            )
-
-            return redirect(
-                url_for("view_post", post_id=post.id)
-            )
-
-        post.scheduled_time = scheduled_time
-        post.status = "scheduled"
-
-        db.session.commit()
-
-        log_scheduled_post_diagnostics(
-            post,
-            input_local_time=scheduled_time_str,
-        )
-
-        flash(
-            "Post scheduled successfully.",
-            "success"
-        )
-
-    except Exception as e:
-        db.session.rollback()
-        print("Schedule error:", e)
-        flash(
-            f"Error scheduling post: {e}",
-            "danger"
-        )
-
-    return redirect(
-        url_for("view_post", post_id=post.id)
-    )
 
 
 @app.route("/post/<int:post_id>/improve", methods=["POST"])
