@@ -659,6 +659,13 @@ app.extensions.setdefault("smu_calendar_helpers", {}).update({
 })
 
 
+app.extensions.setdefault("smu_post_detail_helpers", {}).update({
+    "get_ordered_carousel_posts": (
+        lambda *args, **kwargs: get_ordered_carousel_posts(*args, **kwargs)
+    ),
+})
+
+
 def clean_transcript_text(text):
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -1912,26 +1919,6 @@ User Request:
         "create_post.html",
         default_scheduled_time=default_scheduled_time,
     )
-
-@app.route("/post/<int:post_id>")
-@login_required
-def view_post(post_id):
-    post = Post.query.get_or_404(post_id)
-
-    if post.user_id != current_user.id:
-        flash("You do not have access to this post.", "danger")
-        return redirect(url_for("index"))
-
-    carousel_posts = []
-
-    if post.group_id:
-        carousel_posts = get_ordered_carousel_posts(
-            post.group_id,
-            user_id=current_user.id,
-        )
-
-    return render_template("view_post.html", post=post, carousel_posts=carousel_posts)
-
 
 @app.route("/edit-post/<int:post_id>", methods=["GET", "POST"])
 @login_required
