@@ -40,6 +40,7 @@ def create_app(config_object=None):
     from smu_core.blueprints.brand import brand_bp
     from smu_core.blueprints.calendar import calendar_bp
     from smu_core.blueprints.content_pack import content_pack_bp
+    from smu_core.blueprints.dashboard import dashboard_bp
     from smu_core.blueprints.feedback import feedback_bp
     from smu_core.blueprints.public import public_bp
     from smu_core.blueprints.tiktok import tiktok_bp
@@ -50,6 +51,7 @@ def create_app(config_object=None):
     app.register_blueprint(brand_bp)
     app.register_blueprint(calendar_bp)
     app.register_blueprint(content_pack_bp)
+    app.register_blueprint(dashboard_bp)
     app.register_blueprint(feedback_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(tiktok_bp)

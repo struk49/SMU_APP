@@ -1685,6 +1685,16 @@ def build_onboarding_progress(user_id):
     }
 
 
+app.extensions.setdefault("smu_dashboard_helpers", {}).update({
+    "build_onboarding_progress": (
+        lambda *args, **kwargs: build_onboarding_progress(*args, **kwargs)
+    ),
+    "build_connected_platform_cards": (
+        lambda *args, **kwargs: build_connected_platform_cards(*args, **kwargs)
+    ),
+})
+
+
 def is_valid_email(email):
     return bool(re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email or ""))
 
@@ -1698,71 +1708,6 @@ def is_current_user_admin():
     return (
         current_user.is_authenticated
         and current_user.email.lower() in admin_emails
-    )
-
-
-@app.route("/")
-@login_required
-def index():
-    status_filter = request.args.get("status", "all")
-    type_filter = request.args.get("type", "all")
-    platform_filter = request.args.get("platform", "all")
-    search_query = request.args.get("q", "").strip()
-
-    query = Post.query.filter_by(user_id=current_user.id)
-
-    if status_filter != "all":
-        query = query.filter(Post.status == status_filter)
-
-    if type_filter != "all":
-        query = query.filter(Post.post_type == type_filter)
-
-    if platform_filter != "all":
-        query = query.filter(Post.platforms.ilike(f"%{platform_filter}%"))
-
-    if search_query:
-        search_term = f"%{search_query}%"
-        query = query.filter(
-            db.or_(
-                Post.caption.ilike(search_term),
-                Post.prompt.ilike(search_term),
-                Post.platforms.ilike(search_term),
-                Post.status.ilike(search_term),
-                Post.post_type.ilike(search_term),
-            )
-        )
-
-    posts = query.order_by(
-        Post.created_at.desc(),
-        Post.is_cover.desc(),
-        Post.sort_order.asc(),
-        Post.id.asc(),
-    ).all()
-
-    stats = {
-        "total": Post.query.filter_by(user_id=current_user.id).count(),
-        "drafts": Post.query.filter_by(user_id=current_user.id, status="draft").count(),
-        "scheduled": Post.query.filter_by(
-            user_id=current_user.id, status="scheduled"
-        ).count(),
-        "sent": Post.query.filter_by(
-            user_id=current_user.id, status="sent_to_make"
-        ).count(),
-        "carousels": Post.query.filter_by(
-            user_id=current_user.id, post_type="carousel"
-        ).count(),
-    }
-
-    return render_template(
-        "index.html",
-        posts=posts,
-        status_filter=status_filter,
-        type_filter=type_filter,
-        platform_filter=platform_filter,
-        search_query=search_query,
-        stats=stats,
-        onboarding=build_onboarding_progress(current_user.id),
-        connected_platforms=build_connected_platform_cards(current_user.id),
     )
 
 
