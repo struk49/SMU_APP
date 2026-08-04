@@ -677,6 +677,13 @@ app.extensions.setdefault("smu_post_edit_helpers", {}).update({
 })
 
 
+app.extensions.setdefault("smu_post_delete_duplicate_helpers", {}).update({
+    "get_ordered_carousel_posts": (
+        lambda *args, **kwargs: get_ordered_carousel_posts(*args, **kwargs)
+    ),
+})
+
+
 def clean_transcript_text(text):
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -1998,97 +2005,6 @@ def rewrite_carousel_caption(group_id):
         return redirect(url_for("edit_carousel", group_id=group_id))
 
 
-@app.route("/duplicate-post/<int:post_id>", methods=["POST"])
-@login_required
-def duplicate_post(post_id):
-    original = Post.query.get_or_404(post_id)
-
-    if original.user_id != current_user.id:
-        flash("You do not have access to this post.", "danger")
-        return redirect(url_for("index"))
-
-    if original.post_type == "carousel":
-        flash("Use duplicate carousel for carousel posts.", "warning")
-        return redirect(url_for("view_post", post_id=original.id))
-
-    try:
-        new_post = Post(
-            file_url=original.file_url,
-            file_type=original.file_type,
-            prompt=original.prompt,
-            caption=original.caption,
-            status="draft",
-            platforms=original.platforms,
-            post_type="single",
-            sort_order=0,
-            is_cover=False,
-            group_id=None,
-            scheduled_time=None,
-            sent_at=None,
-            user_id=current_user.id,
-        )
-
-        db.session.add(new_post)
-        db.session.commit()
-
-        flash("Post duplicated successfully.", "success")
-        return redirect(url_for("view_post", post_id=new_post.id))
-
-    except Exception as e:
-        print("Duplicate post error:", e)
-        flash(f"Failed to duplicate post: {e}", "danger")
-        return redirect(url_for("view_post", post_id=original.id))
-
-
-@app.route("/duplicate-carousel/<group_id>", methods=["POST"])
-@login_required
-def duplicate_carousel(group_id):
-    original_posts = get_ordered_carousel_posts(
-        group_id,
-        user_id=current_user.id,
-    )
-
-    if not original_posts:
-        flash("Carousel not found.", "danger")
-        return redirect(url_for("index"))
-
-    try:
-        new_group_id = str(uuid.uuid4())
-        first_new_post = None
-
-        for post in original_posts:
-            new_post = Post(
-                file_url=post.file_url,
-                file_type=post.file_type,
-                prompt=post.prompt,
-                caption=post.caption,
-                status="draft",
-                platforms=post.platforms,
-                post_type="carousel",
-                group_id=new_group_id,
-                sort_order=post.sort_order,
-                is_cover=post.is_cover,
-                scheduled_time=None,
-                sent_at=None,
-                user_id=current_user.id,
-            )
-
-            db.session.add(new_post)
-
-            if first_new_post is None:
-                first_new_post = new_post
-
-        db.session.commit()
-
-        flash("Carousel duplicated successfully.", "success")
-        return redirect(url_for("view_post", post_id=first_new_post.id))
-
-    except Exception as e:
-        print("Duplicate carousel error:", e)
-        flash(f"Failed to duplicate carousel: {e}", "danger")
-        return redirect(url_for("index"))
-
-
 def get_user_connected_accounts(user_id=None):
     if user_id is None:
         if not current_user.is_authenticated:
@@ -2469,57 +2385,6 @@ def schedule_post(post_id):
     return redirect(
         url_for("view_post", post_id=post.id)
     )
-
-
-@app.route("/delete/<int:post_id>", methods=["POST"])
-@login_required
-def delete_post(post_id):
-    post = Post.query.get_or_404(post_id)
-
-    if post.user_id != current_user.id:
-        flash("You do not have access to this post.", "danger")
-        return redirect(url_for("index"))
-
-    if post.group_id:
-        group_posts = get_ordered_carousel_posts(
-            post.group_id,
-            user_id=current_user.id,
-        )
-
-        for group_post in group_posts:
-            db.session.delete(group_post)
-
-        db.session.commit()
-
-        flash("Carousel deleted.", "warning")
-        return redirect(url_for("index"))
-
-    db.session.delete(post)
-    db.session.commit()
-
-    flash("Post deleted.", "warning")
-    return redirect(url_for("index"))
-
-
-@app.route("/delete-carousel/<group_id>", methods=["POST"])
-@login_required
-def delete_carousel(group_id):
-    posts = get_ordered_carousel_posts(
-        group_id,
-        user_id=current_user.id,
-    )
-
-    if not posts:
-        flash("Carousel not found.", "danger")
-        return redirect(url_for("index"))
-
-    for post in posts:
-        db.session.delete(post)
-
-    db.session.commit()
-
-    flash("Carousel deleted.", "warning")
-    return redirect(url_for("index"))
 
 
 @app.route("/post/<int:post_id>/improve", methods=["POST"])
