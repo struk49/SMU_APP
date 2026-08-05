@@ -734,6 +734,29 @@ app.extensions.setdefault("smu_manual_publish_helpers", {}).update({
 })
 
 
+app.extensions.setdefault("smu_caption_helpers", {}).update({
+    "rewrite_caption_with_ai": (
+        lambda *args, **kwargs: rewrite_caption_with_ai(*args, **kwargs)
+    ),
+    "get_ordered_carousel_posts": (
+        lambda *args, **kwargs: get_ordered_carousel_posts(*args, **kwargs)
+    ),
+    "build_brand_context": lambda *args, **kwargs: build_brand_context(
+        *args,
+        **kwargs,
+    ),
+    "improve_post_with_ai": (
+        lambda *args, **kwargs: improve_post_with_ai(*args, **kwargs)
+    ),
+    "update_brand_coach": (
+        lambda *args, **kwargs: update_brand_coach(*args, **kwargs)
+    ),
+    "save_post_revision": (
+        lambda *args, **kwargs: save_post_revision(*args, **kwargs)
+    ),
+})
+
+
 def clean_transcript_text(text):
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -1986,73 +2009,6 @@ User Request:
         default_scheduled_time=default_scheduled_time,
     )
 
-@app.route("/rewrite-caption/<int:post_id>", methods=["POST"])
-@login_required
-def rewrite_caption(post_id):
-    post = Post.query.get_or_404(post_id)
-
-    if post.user_id != current_user.id:
-        flash("You do not have access to this post.", "danger")
-        return redirect(url_for("index"))
-
-    rewrite_type = request.form.get("rewrite_type", "").strip()
-    current_caption = request.form.get("caption", "").strip()
-
-    if not current_caption:
-        flash("Add a caption before using AI rewrite.", "danger")
-        return redirect(url_for("edit_post", post_id=post.id))
-
-    try:
-        new_caption = rewrite_caption_with_ai(current_caption, rewrite_type)
-
-        post.caption = new_caption
-        db.session.commit()
-
-        flash("Caption rewritten successfully.", "success")
-        return redirect(url_for("edit_post", post_id=post.id))
-
-    except Exception as e:
-        print("Rewrite caption error:", e)
-        flash(f"Failed to rewrite caption: {e}", "danger")
-        return redirect(url_for("edit_post", post_id=post.id))
-
-
-@app.route("/rewrite-carousel-caption/<group_id>", methods=["POST"])
-@login_required
-def rewrite_carousel_caption(group_id):
-    posts = get_ordered_carousel_posts(
-        group_id,
-        user_id=current_user.id,
-    )
-
-    if not posts:
-        flash("Carousel not found.", "danger")
-        return redirect(url_for("index"))
-
-    rewrite_type = request.form.get("rewrite_type", "").strip()
-    current_caption = request.form.get("caption", "").strip()
-
-    if not current_caption:
-        flash("Add a caption before using AI rewrite.", "danger")
-        return redirect(url_for("edit_carousel", group_id=group_id))
-
-    try:
-        new_caption = rewrite_caption_with_ai(current_caption, rewrite_type)
-
-        for post in posts:
-            post.caption = new_caption
-
-        db.session.commit()
-
-        flash("Carousel caption rewritten successfully.", "success")
-        return redirect(url_for("edit_carousel", group_id=group_id))
-
-    except Exception as e:
-        print("Rewrite carousel caption error:", e)
-        flash(f"Failed to rewrite carousel caption: {e}", "danger")
-        return redirect(url_for("edit_carousel", group_id=group_id))
-
-
 def get_user_connected_accounts(user_id=None):
     if user_id is None:
         if not current_user.is_authenticated:
@@ -2253,37 +2209,6 @@ def studio_action(post_id, action):
     return redirect(url_for("post_studio", post_id=post.id))
 
 
-@app.route("/post/<int:post_id>/improve", methods=["POST"])
-@login_required
-def improve_post(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    try:
-        brand_context = build_brand_context(current_user.id)
-        improved_caption = improve_post_with_ai(post, brand_context)
-
-        post.improved_caption = improved_caption
-        post.improved_at = datetime.utcnow()
-
-        brand_context = build_brand_context(current_user.id)
-
-        update_brand_coach(post, brand_context)
-
-        db.session.commit()
-
-        flash("Improved caption created successfully.", "success")
-
-    except Exception as e:
-        print("Improve post error:", e)
-        flash(f"Failed to improve post: {e}", "danger")
-
-    return redirect(url_for("view_post", post_id=post.id))
-    
-
-
 def improve_post_with_ai(post, brand_context=""):
     prompt = f"""
 You are an expert social media copywriter.
@@ -2320,77 +2245,6 @@ Rules:
 
     return response.output_text.strip()
 
-
-
-@app.route("/post/<int:post_id>/use-improved", methods=["POST"])
-@login_required
-def use_improved_caption(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    if not post.improved_caption:
-        flash("No improved caption found.", "warning")
-        return redirect(url_for("view_post", post_id=post.id))
-
-    save_post_revision(post, source="before_ai_improved")
-
-    post.caption = post.improved_caption
-    post.improved_caption = None
-    post.improved_at = None
-
-    brand_context = build_brand_context(current_user.id)
-
-    update_brand_coach(post, brand_context)
-
-    db.session.commit()
-
-    flash("Improved caption is now the main caption.", "success")
-    return redirect(url_for("view_post", post_id=post.id))
-
-
-@app.route("/post/<int:post_id>/custom-caption", methods=["POST"])
-@login_required
-def use_custom_caption(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    custom_caption = request.form.get("custom_caption", "").strip()
-
-    if not custom_caption:
-        flash("Custom caption cannot be empty.", "danger")
-        return redirect(url_for("view_post", post_id=post.id))
-
-    save_post_revision(post, source="before_custom_caption")
-
-    post.caption = custom_caption
-    post.improved_caption = None
-    post.improved_at = None
-
-    db.session.commit()
-
-    flash("Custom caption saved as the main caption.", "success")
-    return redirect(url_for("view_post", post_id=post.id))
-
-
-@app.route("/post/<int:post_id>/discard-improved", methods=["POST"])
-@login_required
-def discard_improved_caption(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    post.improved_caption = None
-    post.improved_at = None
-
-    db.session.commit()
-
-    flash("Improved caption discarded.", "success")
-    return redirect(url_for("view_post", post_id=post.id))
 
 
 @app.route("/post/<int:post_id>/ai-editor", methods=["GET", "POST"])

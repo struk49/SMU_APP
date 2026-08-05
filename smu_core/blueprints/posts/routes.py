@@ -72,6 +72,16 @@ def _manual_publish_helper(name):
     return helper
 
 
+def _caption_helper(name):
+    helpers = current_app.extensions.get("smu_caption_helpers", {})
+    helper = helpers.get(name)
+
+    if not helper:
+        raise RuntimeError(f"Caption helper is not available: {name}")
+
+    return helper
+
+
 @login_required
 def create_post():
     default_scheduled_time = ""
@@ -458,6 +468,177 @@ def send_carousel_to_make(group_id):
 
 
 @login_required
+def rewrite_caption(post_id):
+    post = Post.query.get_or_404(post_id)
+
+    if post.user_id != current_user.id:
+        flash("You do not have access to this post.", "danger")
+        return redirect(url_for("index"))
+
+    rewrite_type = request.form.get("rewrite_type", "").strip()
+    current_caption = request.form.get("caption", "").strip()
+
+    if not current_caption:
+        flash("Add a caption before using AI rewrite.", "danger")
+        return redirect(url_for("edit_post", post_id=post.id))
+
+    try:
+        new_caption = _caption_helper("rewrite_caption_with_ai")(
+            current_caption,
+            rewrite_type,
+        )
+
+        post.caption = new_caption
+        db.session.commit()
+
+        flash("Caption rewritten successfully.", "success")
+        return redirect(url_for("edit_post", post_id=post.id))
+
+    except Exception as e:
+        print("Rewrite caption error:", e)
+        flash(f"Failed to rewrite caption: {e}", "danger")
+        return redirect(url_for("edit_post", post_id=post.id))
+
+
+@login_required
+def rewrite_carousel_caption(group_id):
+    posts = _caption_helper("get_ordered_carousel_posts")(
+        group_id,
+        user_id=current_user.id,
+    )
+
+    if not posts:
+        flash("Carousel not found.", "danger")
+        return redirect(url_for("index"))
+
+    rewrite_type = request.form.get("rewrite_type", "").strip()
+    current_caption = request.form.get("caption", "").strip()
+
+    if not current_caption:
+        flash("Add a caption before using AI rewrite.", "danger")
+        return redirect(url_for("edit_carousel", group_id=group_id))
+
+    try:
+        new_caption = _caption_helper("rewrite_caption_with_ai")(
+            current_caption,
+            rewrite_type,
+        )
+
+        for post in posts:
+            post.caption = new_caption
+
+        db.session.commit()
+
+        flash("Carousel caption rewritten successfully.", "success")
+        return redirect(url_for("edit_carousel", group_id=group_id))
+
+    except Exception as e:
+        print("Rewrite carousel caption error:", e)
+        flash(f"Failed to rewrite carousel caption: {e}", "danger")
+        return redirect(url_for("edit_carousel", group_id=group_id))
+
+
+@login_required
+def improve_post(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    try:
+        brand_context = _caption_helper("build_brand_context")(current_user.id)
+        improved_caption = _caption_helper("improve_post_with_ai")(
+            post,
+            brand_context,
+        )
+
+        post.improved_caption = improved_caption
+        post.improved_at = datetime.utcnow()
+
+        brand_context = _caption_helper("build_brand_context")(current_user.id)
+
+        _caption_helper("update_brand_coach")(post, brand_context)
+
+        db.session.commit()
+
+        flash("Improved caption created successfully.", "success")
+
+    except Exception as e:
+        print("Improve post error:", e)
+        flash(f"Failed to improve post: {e}", "danger")
+
+    return redirect(url_for("view_post", post_id=post.id))
+
+
+@login_required
+def use_improved_caption(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    if not post.improved_caption:
+        flash("No improved caption found.", "warning")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    _caption_helper("save_post_revision")(post, source="before_ai_improved")
+
+    post.caption = post.improved_caption
+    post.improved_caption = None
+    post.improved_at = None
+
+    brand_context = _caption_helper("build_brand_context")(current_user.id)
+
+    _caption_helper("update_brand_coach")(post, brand_context)
+
+    db.session.commit()
+
+    flash("Improved caption is now the main caption.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
+
+
+@login_required
+def use_custom_caption(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    custom_caption = request.form.get("custom_caption", "").strip()
+
+    if not custom_caption:
+        flash("Custom caption cannot be empty.", "danger")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    _caption_helper("save_post_revision")(post, source="before_custom_caption")
+
+    post.caption = custom_caption
+    post.improved_caption = None
+    post.improved_at = None
+
+    db.session.commit()
+
+    flash("Custom caption saved as the main caption.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
+
+
+@login_required
+def discard_improved_caption(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    post.improved_caption = None
+    post.improved_at = None
+
+    db.session.commit()
+
+    flash("Improved caption discarded.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
+
+
+@login_required
 def view_post(post_id):
     post = Post.query.get_or_404(post_id)
 
@@ -737,6 +918,42 @@ def register_routes(state):
         "/send-carousel/<group_id>",
         "send_carousel_to_make",
         send_carousel_to_make,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/rewrite-caption/<int:post_id>",
+        "rewrite_caption",
+        rewrite_caption,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/rewrite-carousel-caption/<group_id>",
+        "rewrite_carousel_caption",
+        rewrite_carousel_caption,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/improve",
+        "improve_post",
+        improve_post,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/use-improved",
+        "use_improved_caption",
+        use_improved_caption,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/custom-caption",
+        "use_custom_caption",
+        use_custom_caption,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/discard-improved",
+        "discard_improved_caption",
+        discard_improved_caption,
         methods=["POST"],
     )
     state.app.add_url_rule("/post/<int:post_id>", "view_post", view_post)
