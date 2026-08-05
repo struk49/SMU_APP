@@ -62,6 +62,16 @@ def _post_schedule_helper(name):
     return helper
 
 
+def _manual_publish_helper(name):
+    helpers = current_app.extensions.get("smu_manual_publish_helpers", {})
+    helper = helpers.get(name)
+
+    if not helper:
+        raise RuntimeError(f"Manual publish helper is not available: {name}")
+
+    return helper
+
+
 @login_required
 def create_post():
     default_scheduled_time = ""
@@ -356,6 +366,98 @@ def schedule_post(post_id):
 
 
 @login_required
+def send_to_make(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    if post.status in {"publishing", "sent_to_make"}:
+        flash("This post has already been sent to Make.")
+        return redirect(
+            url_for("view_post", post_id=post.id)
+        )
+
+    try:
+        _manual_publish_helper("publish_post_to_make")(post, current_user.id)
+
+        db.session.commit()
+        _manual_publish_helper("log_event")(
+            "publishing_success",
+            post_id=post.id,
+            post_type="single",
+            user_id=current_user.id,
+            source="manual",
+        )
+
+        flash(
+            "Post sent to Make.com successfully.",
+            "success",
+        )
+
+    except Exception as e:
+        db.session.rollback()
+        _manual_publish_helper("log_event")(
+            "publishing_failure",
+            post_id=post.id,
+            post_type="single",
+            user_id=current_user.id,
+            source="manual",
+            error_type=type(e).__name__,
+        )
+        print("Send to Make error:", e)
+        flash(f"Failed to send post: {e}", "danger")
+
+    return redirect(
+        url_for("view_post", post_id=post.id)
+    )
+
+
+@login_required
+def send_carousel_to_make(group_id):
+    posts = _manual_publish_helper("get_ordered_carousel_posts")(
+        group_id,
+        user_id=current_user.id,
+    )
+    if not posts:
+        flash("Carousel not found.", "danger")
+        return redirect(url_for("index"))
+
+    if all(post.status == "sent_to_make" for post in posts):
+        flash("This post has already been sent to Make.")
+        return redirect(url_for("view_post", post_id=posts[0].id))
+
+    try:
+        _manual_publish_helper("publish_post_to_make")(posts[0], current_user.id)
+
+        db.session.commit()
+        _manual_publish_helper("log_event")(
+            "publishing_success",
+            post_id=posts[0].id,
+            post_type="carousel",
+            user_id=current_user.id,
+            source="manual",
+        )
+
+        flash("Carousel sent to Make.com successfully.", "success")
+        return redirect(url_for("index"))
+
+    except Exception as e:
+        db.session.rollback()
+        _manual_publish_helper("log_event")(
+            "publishing_failure",
+            post_id=posts[0].id,
+            post_type="carousel",
+            user_id=current_user.id,
+            source="manual",
+            error_type=type(e).__name__,
+        )
+        print("Send carousel error:", e)
+        flash(f"Failed: {e}", "danger")
+        return redirect(url_for("view_post", post_id=posts[0].id))
+
+
+@login_required
 def view_post(post_id):
     post = Post.query.get_or_404(post_id)
 
@@ -623,6 +725,18 @@ def register_routes(state):
         "/schedule/<int:post_id>",
         "schedule_post",
         schedule_post,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/send/<int:post_id>",
+        "send_to_make",
+        send_to_make,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/send-carousel/<group_id>",
+        "send_carousel_to_make",
+        send_carousel_to_make,
         methods=["POST"],
     )
     state.app.add_url_rule("/post/<int:post_id>", "view_post", view_post)

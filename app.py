@@ -723,6 +723,17 @@ app.extensions.setdefault("smu_post_schedule_helpers", {}).update({
 })
 
 
+app.extensions.setdefault("smu_manual_publish_helpers", {}).update({
+    "publish_post_to_make": (
+        lambda *args, **kwargs: publish_post_to_make(*args, **kwargs)
+    ),
+    "get_ordered_carousel_posts": (
+        lambda *args, **kwargs: get_ordered_carousel_posts(*args, **kwargs)
+    ),
+    "log_event": lambda *args, **kwargs: log_event(*args, **kwargs),
+})
+
+
 def clean_transcript_text(text):
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -2180,55 +2191,6 @@ def publish_post_to_make(post, user_id):
 
 
 
-@app.route("/send/<int:post_id>", methods=["POST"])
-@login_required
-def send_to_make(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    if post.status in {"publishing", "sent_to_make"}:
-        flash("This post has already been sent to Make.")
-        return redirect(
-            url_for("view_post", post_id=post.id)
-        )
-
-    try:
-        publish_post_to_make(post, current_user.id)
-
-        db.session.commit()
-        log_event(
-            "publishing_success",
-            post_id=post.id,
-            post_type="single",
-            user_id=current_user.id,
-            source="manual",
-        )
-
-        flash(
-            "Post sent to Make.com successfully.",
-            "success",
-        )
-
-    except Exception as e:
-        db.session.rollback()
-        log_event(
-            "publishing_failure",
-            post_id=post.id,
-            post_type="single",
-            user_id=current_user.id,
-            source="manual",
-            error_type=type(e).__name__,
-        )
-        print("Send to Make error:", e)
-        flash(f"Failed to send post: {e}", "danger")
-
-    return redirect(
-        url_for("view_post", post_id=post.id)
-    )
-
-
 @app.template_filter("from_json")
 def from_json_filter(value):
     try:
@@ -2289,51 +2251,6 @@ def studio_action(post_id, action):
         flash(f"Failed to run studio action: {e}", "danger")
 
     return redirect(url_for("post_studio", post_id=post.id))
-
-
-@app.route("/send-carousel/<group_id>", methods=["POST"])
-@login_required
-def send_carousel_to_make(group_id):
-    posts = get_ordered_carousel_posts(
-        group_id,
-        user_id=current_user.id,
-    )
-    if not posts:
-        flash("Carousel not found.", "danger")
-        return redirect(url_for("index"))
-
-    if all(post.status == "sent_to_make" for post in posts):
-        flash("This post has already been sent to Make.")
-        return redirect(url_for("view_post", post_id=posts[0].id))
-
-    try:
-        publish_post_to_make(posts[0], current_user.id)
-
-        db.session.commit()
-        log_event(
-            "publishing_success",
-            post_id=posts[0].id,
-            post_type="carousel",
-            user_id=current_user.id,
-            source="manual",
-        )
-
-        flash("Carousel sent to Make.com successfully.", "success")
-        return redirect(url_for("index"))
-
-    except Exception as e:
-        db.session.rollback()
-        log_event(
-            "publishing_failure",
-            post_id=posts[0].id,
-            post_type="carousel",
-            user_id=current_user.id,
-            source="manual",
-            error_type=type(e).__name__,
-        )
-        print("Send carousel error:", e)
-        flash(f"Failed: {e}", "danger")
-        return redirect(url_for("view_post", post_id=posts[0].id))
 
 
 @app.route("/post/<int:post_id>/improve", methods=["POST"])
