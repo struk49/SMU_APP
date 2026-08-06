@@ -40,6 +40,7 @@ from smu_core.models.feedback import Feedback
 from smu_core.models.post import Post
 from smu_core.models.post_revision import PostRevision
 from smu_core.services import publishing as publishing_service
+from smu_core.services import scheduler as scheduler_service
 
 load_dotenv()
 
@@ -1178,132 +1179,13 @@ Transcript:
 
 def check_scheduled_posts():
     with app.app_context():
-        try:
-            now_utc = datetime.utcnow()
-
-            print(
-                "Scheduler check:",
-                now_utc.strftime("%Y-%m-%d %H:%M:%S"),
-                "UTC",
-            )
-
-            scheduled_query = Post.query.filter(
-                Post.scheduled_time.isnot(None),
-                Post.status == "scheduled",
-            )
-            scheduled_count = scheduled_query.count()
-            earliest_scheduled = (
-                scheduled_query.order_by(Post.scheduled_time.asc())
-                .with_entities(Post.scheduled_time)
-                .first()
-            )
-
-            due_posts = (
-                Post.query.filter(
-                    Post.scheduled_time.isnot(None),
-                    Post.status == "scheduled",
-                    Post.scheduled_time <= now_utc,
-                )
-                .order_by(
-                    Post.scheduled_time.asc(),
-                    Post.sort_order.asc(),
-                    Post.id.asc(),
-                )
-                .all()
-            )
-
-            print(
-                "Scheduler diagnostics:",
-                {
-                    "current_utc_time": now_utc,
-                    "scheduled_row_count": scheduled_count,
-                    "earliest_scheduled_time": (
-                        earliest_scheduled[0] if earliest_scheduled else None
-                    ),
-                    "due_row_count": len(due_posts),
-                },
-            )
-
-            processed_groups = set()
-
-            for post in due_posts:
-                try:
-                    print(
-                        f"Processing scheduled post {post.id}: "
-                        f"scheduled={post.scheduled_time}, "
-                        f"status={post.status}, "
-                        f"user_id={post.user_id}"
-                    )
-
-                    if post.group_id:
-                        if post.group_id in processed_groups:
-                            continue
-
-                    publish_post_to_make(post, post.user_id)
-
-                    if post.group_id:
-                        processed_groups.add(post.group_id)
-
-                        print(
-                            f"✅ Sent scheduled carousel "
-                            f"{post.group_id}"
-                        )
-                        log_event(
-                            "publishing_success",
-                            post_id=post.id,
-                            post_type="carousel",
-                            user_id=post.user_id,
-                            source="scheduler",
-                        )
-
-                    else:
-                        print(
-                            f"✅ Sent scheduled post {post.id}"
-                        )
-                        log_event(
-                            "publishing_success",
-                            post_id=post.id,
-                            post_type="single",
-                            user_id=post.user_id,
-                            source="scheduler",
-                        )
-
-                    db.session.commit()
-
-                except Exception as post_error:
-                    db.session.rollback()
-                    log_event(
-                        "publishing_failure",
-                        post_id=post.id,
-                        post_type=post.post_type,
-                        user_id=post.user_id,
-                        source="scheduler",
-                        error_type=type(post_error).__name__,
-                    )
-
-                    print(
-                        f"❌ Scheduled post {post.id} failed:",
-                        repr(post_error),
-                    )
-
-                    try:
-                        post.status = "schedule_failed"
-                        db.session.commit()
-                    except Exception as status_error:
-                        db.session.rollback()
-                        print(
-                            f"Failed to mark scheduled post {post.id} "
-                            "as failed:",
-                            repr(status_error),
-                        )
-
-        except Exception as worker_error:
-            db.session.rollback()
-
-            print(
-                "❌ Scheduled-post worker error:",
-                repr(worker_error),
-            )
+        return scheduler_service.check_scheduled_posts(
+            publish_post=publish_post_to_make,
+            log_event=log_event,
+            now_provider=datetime.utcnow,
+            post_model=Post,
+            db_session=db.session,
+        )
 
                         
 
