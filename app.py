@@ -39,6 +39,7 @@ from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
 from smu_core.models.post import Post
 from smu_core.models.post_revision import PostRevision
+from smu_core.services import publishing as publishing_service
 
 load_dotenv()
 
@@ -564,47 +565,19 @@ def generate_multiple_openai_images(prompt, count=1):
 
 
 def send_payload_to_make(payload, webhook_url=None):
-    if not webhook_url:
-        if payload.get("post_type") == "carousel":
-            webhook_url = MAKE_WEBHOOK_CAROUSEL
-        else:
-            webhook_url = MAKE_WEBHOOK_SINGLE
-
-    if not webhook_url:
-        raise Exception(
-            f"No Make webhook configured for "
-            f"{payload.get('post_type', 'unknown')} posts."
-        )
-
-    print("\n========== MAKE REQUEST ==========")
-    print("Post type:", payload.get("post_type"))
-    print("Webhook configured:", bool(webhook_url))
-    print("Platforms:", payload.get("platforms"))
-    print("Media count:", len(payload.get("media", [])))
-    print("==================================")
-
-    response = requests.post(
+    return publishing_service.send_payload_to_make(
+        payload,
         webhook_url,
-        json=payload,
-        timeout=30,
+        make_webhook_single=MAKE_WEBHOOK_SINGLE,
+        make_webhook_carousel=MAKE_WEBHOOK_CAROUSEL,
     )
 
-    print("Make status:", response.status_code)
-
-    response.raise_for_status()
-
-    return response
 
 def build_single_payload(post):
-    return {
-        "post_type": "single",
-        "post_id": post.id,
-        "caption": post.caption,
-        "prompt": post.prompt,
-        "file_url": post.file_url,
-        "file_type": post.file_type,
-        "platforms": parse_platforms(post.platforms),
-    }
+    return publishing_service.build_single_payload(
+        post,
+        parse_platforms_func=parse_platforms,
+    )
 
 
 def get_ordered_carousel_posts(group_id, user_id=None):
@@ -621,30 +594,13 @@ def get_ordered_carousel_posts(group_id, user_id=None):
 
 
 def build_carousel_payload(group_id, user_id=None):
-    posts = get_ordered_carousel_posts(group_id, user_id=user_id)
-
-    if not posts:
-        return None
-
-    first_post = posts[0]
-
-    return {
-        "post_type": "carousel",
-        "group_id": group_id,
-        "caption": first_post.caption,
-        "prompt": first_post.prompt,
-        "platforms": parse_platforms(first_post.platforms),
-        "media": [
-            {
-                "post_id": post.id,
-                "file_url": make_instagram_safe_url(post.file_url),
-                "file_type": post.file_type,
-                "sort_order": post.sort_order,
-                "is_cover": post.is_cover,
-            }
-            for post in posts
-        ],
-    }
+    return publishing_service.build_carousel_payload(
+        group_id,
+        user_id=user_id,
+        get_ordered_carousel_posts_func=get_ordered_carousel_posts,
+        parse_platforms_func=parse_platforms,
+        make_instagram_safe_url_func=make_instagram_safe_url,
+    )
 
 
 app.extensions.setdefault("smu_calendar_helpers", {}).update({
@@ -2047,140 +2003,42 @@ User Request:
     )
 
 def get_user_connected_accounts(user_id=None):
-    if user_id is None:
-        if not current_user.is_authenticated:
-            return None
-
-        user_id = current_user.id
-
-    return ConnectedAccount.query.filter_by(
-        user_id=user_id
-    ).first()
+    return publishing_service.get_user_connected_accounts(user_id)
 
 
 def get_enabled_platforms_for_user(
     selected_platforms,
     user_id=None,
 ):
-    accounts = get_user_connected_accounts(user_id)
-
-    if not accounts:
-        return []
-
-    platform_map = {
-        "instagram": accounts.instagram_connected,
-        "facebook": accounts.facebook_connected,
-        "linkedin": accounts.linkedin_connected,
-        "pinterest": accounts.pinterest_connected,
-        "reddit": accounts.reddit_connected,
-        "x": accounts.x_connected,
-    }
-
-    enabled_platforms = []
-
-    for platform in selected_platforms:
-        clean_platform = platform.strip().lower()
-
-        if platform_map.get(clean_platform, False):
-            enabled_platforms.append(clean_platform)
-
-    return enabled_platforms
+    return publishing_service.get_enabled_platforms_for_user(
+        selected_platforms,
+        user_id=user_id,
+        get_user_connected_accounts_func=get_user_connected_accounts,
+    )
 
 
 def get_user_make_webhook(post_type, user_id=None):
-    accounts = get_user_connected_accounts(user_id)
-
-    if post_type == "carousel":
-        if accounts and accounts.make_webhook_carousel:
-            return accounts.make_webhook_carousel
-
-        return MAKE_WEBHOOK_CAROUSEL or None
-
-    if accounts and accounts.make_webhook_single:
-        return accounts.make_webhook_single
-
-    return MAKE_WEBHOOK_SINGLE or None
+    return publishing_service.get_user_make_webhook(
+        post_type,
+        user_id=user_id,
+        get_user_connected_accounts_func=get_user_connected_accounts,
+        make_webhook_single=MAKE_WEBHOOK_SINGLE,
+        make_webhook_carousel=MAKE_WEBHOOK_CAROUSEL,
+    )
 
 
 def publish_post_to_make(post, user_id):
-    if user_id is None:
-        raise ValueError("user_id is required for publishing")
-
-    selected_platforms = [
-        platform.strip().lower()
-        for platform in (post.platforms or "").split(",")
-        if platform.strip()
-    ]
-
-    enabled_platforms = get_enabled_platforms_for_user(
-        selected_platforms,
-        user_id=user_id,
+    return publishing_service.publish_post_to_make(
+        post,
+        user_id,
+        get_enabled_platforms_func=get_enabled_platforms_for_user,
+        build_carousel_payload_func=build_carousel_payload,
+        get_user_make_webhook_func=get_user_make_webhook,
+        send_payload_func=send_payload_to_make,
+        get_ordered_carousel_posts_func=get_ordered_carousel_posts,
+        build_single_payload_func=build_single_payload,
+        log_single_image_diagnostics_func=log_single_image_diagnostics,
     )
-
-    if not enabled_platforms:
-        raise Exception(
-            "No connected platforms are enabled for this post. "
-            "Check Connected Accounts."
-        )
-
-    if post.group_id:
-        payload = build_carousel_payload(
-            post.group_id,
-            user_id=user_id,
-        )
-
-        if not payload:
-            raise Exception("Carousel payload could not be built.")
-
-        webhook_url = get_user_make_webhook(
-            "carousel",
-            user_id=user_id,
-        )
-
-        if not webhook_url:
-            raise Exception(
-                "No carousel webhook is configured. "
-                "Add it in Connected Accounts."
-            )
-
-        payload["platforms"] = enabled_platforms
-        response = send_payload_to_make(payload, webhook_url)
-
-        group_posts = get_ordered_carousel_posts(
-            post.group_id,
-            user_id=user_id,
-        )
-
-        for group_post in group_posts:
-            group_post.status = "sent_to_make"
-            group_post.sent_at = datetime.utcnow()
-
-        return response
-
-    payload = build_single_payload(post)
-    payload["platforms"] = enabled_platforms
-    log_single_image_diagnostics(post, enabled_platforms)
-
-    if "instagram" in enabled_platforms and not post.file_url:
-        raise Exception("Instagram single-image posts require an image URL.")
-
-    webhook_url = get_user_make_webhook(
-        "single",
-        user_id=user_id,
-    )
-
-    if not webhook_url:
-        raise Exception(
-            "No single-post webhook is configured. "
-            "Add it in Connected Accounts."
-        )
-
-    response = send_payload_to_make(payload, webhook_url)
-
-    post.status = "sent_to_make"
-    post.sent_at = datetime.utcnow()
-
-    return response
 
 
 
