@@ -757,6 +757,20 @@ app.extensions.setdefault("smu_caption_helpers", {}).update({
 })
 
 
+app.extensions.setdefault("smu_ai_editor_helpers", {}).update({
+    "save_post_revision": (
+        lambda *args, **kwargs: save_post_revision(*args, **kwargs)
+    ),
+    "build_brand_context": lambda *args, **kwargs: build_brand_context(
+        *args,
+        **kwargs,
+    ),
+    "update_brand_coach": (
+        lambda *args, **kwargs: update_brand_coach(*args, **kwargs)
+    ),
+})
+
+
 def clean_transcript_text(text):
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -2245,36 +2259,6 @@ Rules:
 
     return response.output_text.strip()
 
-
-
-@app.route("/post/<int:post_id>/ai-editor", methods=["GET", "POST"])
-@login_required
-def ai_editor(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    if request.method == "POST":
-        final_caption = request.form.get("final_caption", "").strip()
-
-        if not final_caption:
-            flash("Final caption cannot be empty.", "danger")
-            return redirect(url_for("ai_editor", post_id=post.id))
-
-        save_post_revision(post, source="before_ai_editor")
-
-        post.caption = final_caption
-        post.improved_caption = None
-        post.improved_at = None
-        update_brand_coach(post, brand_context)
-
-        db.session.commit()
-
-        flash("Final caption saved successfully.", "success")
-        return redirect(url_for("view_post", post_id=post.id))
-
-    return render_template("ai_editor.html", post=post)
 
 
 @app.route("/post/<int:post_id>/studio", methods=["GET", "POST"])

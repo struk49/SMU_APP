@@ -82,6 +82,16 @@ def _caption_helper(name):
     return helper
 
 
+def _ai_editor_helper(name):
+    helpers = current_app.extensions.get("smu_ai_editor_helpers", {})
+    helper = helpers.get(name)
+
+    if not helper:
+        raise RuntimeError(f"AI Editor helper is not available: {name}")
+
+    return helper
+
+
 @login_required
 def create_post():
     default_scheduled_time = ""
@@ -639,6 +649,36 @@ def discard_improved_caption(post_id):
 
 
 @login_required
+def ai_editor(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    if request.method == "POST":
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if not final_caption:
+            flash("Final caption cannot be empty.", "danger")
+            return redirect(url_for("ai_editor", post_id=post.id))
+
+        _ai_editor_helper("save_post_revision")(post, source="before_ai_editor")
+
+        post.caption = final_caption
+        post.improved_caption = None
+        post.improved_at = None
+        brand_context = _ai_editor_helper("build_brand_context")(current_user.id)
+        _ai_editor_helper("update_brand_coach")(post, brand_context)
+
+        db.session.commit()
+
+        flash("Final caption saved successfully.", "success")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    return render_template("ai_editor.html", post=post)
+
+
+@login_required
 def view_post(post_id):
     post = Post.query.get_or_404(post_id)
 
@@ -955,6 +995,12 @@ def register_routes(state):
         "discard_improved_caption",
         discard_improved_caption,
         methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/ai-editor",
+        "ai_editor",
+        ai_editor,
+        methods=["GET", "POST"],
     )
     state.app.add_url_rule("/post/<int:post_id>", "view_post", view_post)
     state.app.add_url_rule(
