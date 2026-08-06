@@ -771,6 +771,29 @@ app.extensions.setdefault("smu_ai_editor_helpers", {}).update({
 })
 
 
+app.extensions.setdefault("smu_studio_helpers", {}).update({
+    "save_post_revision": (
+        lambda *args, **kwargs: save_post_revision(*args, **kwargs)
+    ),
+    "build_brand_context": lambda *args, **kwargs: build_brand_context(
+        *args,
+        **kwargs,
+    ),
+    "update_brand_coach": (
+        lambda *args, **kwargs: update_brand_coach(*args, **kwargs)
+    ),
+    "rewrite_caption_with_action": (
+        lambda *args, **kwargs: rewrite_caption_with_action(*args, **kwargs)
+    ),
+    "grade_post_with_ai": (
+        lambda *args, **kwargs: grade_post_with_ai(*args, **kwargs)
+    ),
+    "extract_overall_score": (
+        lambda *args, **kwargs: extract_overall_score(*args, **kwargs)
+    ),
+})
+
+
 def clean_transcript_text(text):
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"\s+", " ", text)
@@ -2169,60 +2192,6 @@ def from_json_filter(value):
         return {}
 
 
-@app.route("/post/<int:post_id>/studio/action/<action>", methods=["POST"])
-@login_required
-def studio_action(post_id, action):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    allowed_actions = [
-        "hook",
-        "cta",
-        "shorten",
-        "professional",
-        "friendly",
-        "alternatives",
-    ]
-
-    if action not in allowed_actions:
-        flash("Invalid studio action.", "danger")
-        return redirect(url_for("post_studio", post_id=post.id))
-
-    try:
-        final_caption = request.form.get("final_caption", "").strip()
-
-        if final_caption:
-            post.caption = final_caption
-
-        brand_context = build_brand_context(current_user.id)
-
-        rewritten_caption = rewrite_caption_with_action(
-            post,
-            brand_context,
-            action
-        )
-
-        post.improved_caption = rewritten_caption
-        post.improved_at = datetime.utcnow()
-
-
-        brand_context = build_brand_context(current_user.id)
-
-        update_brand_coach(post, brand_context)
-
-        db.session.commit()
-
-        flash("AI Studio action completed.", "success")
-
-    except Exception as e:
-        print("Studio action error:", e)
-        flash(f"Failed to run studio action: {e}", "danger")
-
-    return redirect(url_for("post_studio", post_id=post.id))
-
-
 def improve_post_with_ai(post, brand_context=""):
     prompt = f"""
 You are an expert social media copywriter.
@@ -2259,121 +2228,6 @@ Rules:
 
     return response.output_text.strip()
 
-
-
-@app.route("/post/<int:post_id>/studio", methods=["GET", "POST"])
-@login_required
-def post_studio(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    brief = BrandBrief.query.filter_by(
-        user_id=current_user.id
-    ).first()
-
-    revisions = PostRevision.query.filter_by(
-        post_id=post.id,
-        user_id=current_user.id
-    ).order_by(
-        PostRevision.version_number.desc()
-    ).all()
-
-    if request.method == "POST":
-        final_caption = request.form.get("final_caption", "").strip()
-
-        if not final_caption:
-            flash("Final caption cannot be empty.", "danger")
-            return redirect(url_for("post_studio", post_id=post.id))
-
-        save_post_revision(post, source="before_studio_save")
-
-        post.caption = final_caption
-        post.improved_caption = None
-        post.improved_at = None
-
-
-        brand_context = build_brand_context(current_user.id)
-        update_brand_coach(post, brand_context)
-
-        db.session.commit()
-
-        flash("Studio caption saved successfully.", "success")
-        return redirect(url_for("post_studio", post_id=post.id))
-
-    return render_template(
-        "post_studio.html",
-        post=post,
-        brief=brief,
-        revisions=revisions
-    )
-
-
-@app.route("/post/<int:post_id>/studio/regrade", methods=["POST"])
-@login_required
-def studio_regrade(post_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    try:
-        final_caption = request.form.get("final_caption", "").strip()
-
-        if final_caption:
-            post.caption = final_caption
-
-        brand_context = build_brand_context(current_user.id)
-
-        grade_result = grade_post_with_ai(post, brand_context)
-        overall_score = extract_overall_score(grade_result)
-
-        post.grade_result = grade_result
-        post.grade_score = overall_score
-        post.graded_at = datetime.utcnow()
-
-        update_brand_coach(post, brand_context)
-
-        db.session.commit()
-
-        flash("Studio caption regraded successfully.", "success")
-
-    except Exception as e:
-        db.session.rollback()
-        print("Studio regrade error:", e)
-        flash(f"Failed to regrade caption: {e}", "danger")
-
-    return redirect(url_for("post_studio", post_id=post.id))
-
-
-@app.route("/post/<int:post_id>/revision/<int:revision_id>/restore", methods=["POST"])
-@login_required
-def restore_revision(post_id, revision_id):
-    post = Post.query.filter_by(
-        id=post_id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    revision = PostRevision.query.filter_by(
-        id=revision_id,
-        post_id=post.id,
-        user_id=current_user.id
-    ).first_or_404()
-
-    save_post_revision(post, source="before_revision_restore")
-
-    post.caption = revision.caption
-    post.improved_caption = None
-    post.improved_at = None
-
-    brand_context = build_brand_context(current_user.id)
-    update_brand_coach(post, brand_context)
-
-    db.session.commit()
-
-    flash(f"Version {revision.version_number} restored.", "success")
-    return redirect(url_for("post_studio", post_id=post.id))
 
 
 @app.errorhandler(404)

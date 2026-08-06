@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, flash, redirect, render_template, requ
 from flask_login import current_user, login_required
 
 from smu_core.extensions import db
-from smu_core.models import Post
+from smu_core.models import BrandBrief, Post, PostRevision
 
 
 posts_bp = Blueprint("posts", __name__)
@@ -88,6 +88,16 @@ def _ai_editor_helper(name):
 
     if not helper:
         raise RuntimeError(f"AI Editor helper is not available: {name}")
+
+    return helper
+
+
+def _studio_helper(name):
+    helpers = current_app.extensions.get("smu_studio_helpers", {})
+    helper = helpers.get(name)
+
+    if not helper:
+        raise RuntimeError(f"Studio helper is not available: {name}")
 
     return helper
 
@@ -649,6 +659,169 @@ def discard_improved_caption(post_id):
 
 
 @login_required
+def studio_action(post_id, action):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    allowed_actions = [
+        "hook",
+        "cta",
+        "shorten",
+        "professional",
+        "friendly",
+        "alternatives",
+    ]
+
+    if action not in allowed_actions:
+        flash("Invalid studio action.", "danger")
+        return redirect(url_for("post_studio", post_id=post.id))
+
+    try:
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if final_caption:
+            post.caption = final_caption
+
+        brand_context = _studio_helper("build_brand_context")(current_user.id)
+
+        rewritten_caption = _studio_helper("rewrite_caption_with_action")(
+            post,
+            brand_context,
+            action
+        )
+
+        post.improved_caption = rewritten_caption
+        post.improved_at = datetime.utcnow()
+
+        brand_context = _studio_helper("build_brand_context")(current_user.id)
+
+        _studio_helper("update_brand_coach")(post, brand_context)
+
+        db.session.commit()
+
+        flash("AI Studio action completed.", "success")
+
+    except Exception as e:
+        print("Studio action error:", e)
+        flash(f"Failed to run studio action: {e}", "danger")
+
+    return redirect(url_for("post_studio", post_id=post.id))
+
+
+@login_required
+def post_studio(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    brief = BrandBrief.query.filter_by(
+        user_id=current_user.id
+    ).first()
+
+    revisions = PostRevision.query.filter_by(
+        post_id=post.id,
+        user_id=current_user.id
+    ).order_by(
+        PostRevision.version_number.desc()
+    ).all()
+
+    if request.method == "POST":
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if not final_caption:
+            flash("Final caption cannot be empty.", "danger")
+            return redirect(url_for("post_studio", post_id=post.id))
+
+        _studio_helper("save_post_revision")(post, source="before_studio_save")
+
+        post.caption = final_caption
+        post.improved_caption = None
+        post.improved_at = None
+
+        brand_context = _studio_helper("build_brand_context")(current_user.id)
+        _studio_helper("update_brand_coach")(post, brand_context)
+
+        db.session.commit()
+
+        flash("Studio caption saved successfully.", "success")
+        return redirect(url_for("post_studio", post_id=post.id))
+
+    return render_template(
+        "post_studio.html",
+        post=post,
+        brief=brief,
+        revisions=revisions
+    )
+
+
+@login_required
+def studio_regrade(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    try:
+        final_caption = request.form.get("final_caption", "").strip()
+
+        if final_caption:
+            post.caption = final_caption
+
+        brand_context = _studio_helper("build_brand_context")(current_user.id)
+
+        grade_result = _studio_helper("grade_post_with_ai")(post, brand_context)
+        overall_score = _studio_helper("extract_overall_score")(grade_result)
+
+        post.grade_result = grade_result
+        post.grade_score = overall_score
+        post.graded_at = datetime.utcnow()
+
+        _studio_helper("update_brand_coach")(post, brand_context)
+
+        db.session.commit()
+
+        flash("Studio caption regraded successfully.", "success")
+
+    except Exception as e:
+        db.session.rollback()
+        print("Studio regrade error:", e)
+        flash(f"Failed to regrade caption: {e}", "danger")
+
+    return redirect(url_for("post_studio", post_id=post.id))
+
+
+@login_required
+def restore_revision(post_id, revision_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    revision = PostRevision.query.filter_by(
+        id=revision_id,
+        post_id=post.id,
+        user_id=current_user.id
+    ).first_or_404()
+
+    _studio_helper("save_post_revision")(post, source="before_revision_restore")
+
+    post.caption = revision.caption
+    post.improved_caption = None
+    post.improved_at = None
+
+    brand_context = _studio_helper("build_brand_context")(current_user.id)
+    _studio_helper("update_brand_coach")(post, brand_context)
+
+    db.session.commit()
+
+    flash(f"Version {revision.version_number} restored.", "success")
+    return redirect(url_for("post_studio", post_id=post.id))
+
+
+@login_required
 def ai_editor(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -1001,6 +1174,30 @@ def register_routes(state):
         "ai_editor",
         ai_editor,
         methods=["GET", "POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/studio",
+        "post_studio",
+        post_studio,
+        methods=["GET", "POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/studio/action/<action>",
+        "studio_action",
+        studio_action,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/studio/regrade",
+        "studio_regrade",
+        studio_regrade,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/revision/<int:revision_id>/restore",
+        "restore_revision",
+        restore_revision,
+        methods=["POST"],
     )
     state.app.add_url_rule("/post/<int:post_id>", "view_post", view_post)
     state.app.add_url_rule(
