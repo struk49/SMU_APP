@@ -6,9 +6,7 @@ import re
 import base64
 import logging
 from logging.handlers import RotatingFileHandler
-from io import BytesIO
 from datetime import datetime
-from urllib.parse import urlparse
 
 import pytz
 import requests
@@ -23,7 +21,6 @@ from flask_login import (
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
-from PIL import Image
 
 import cloudinary
 import cloudinary.uploader
@@ -41,6 +38,7 @@ from smu_core.models.post import Post
 from smu_core.models.post_revision import PostRevision
 from smu_core.services import captions as captions_service
 from smu_core.services import content as content_service
+from smu_core.services import media as media_service
 from smu_core.services import publishing as publishing_service
 from smu_core.services import scheduler as scheduler_service
 
@@ -165,15 +163,7 @@ with app.app_context():
         conn.commit()
 
 def get_file_type(filename: str) -> str:
-    ext = filename.rsplit(".", 1)[1].lower() if "." in filename else ""
-
-    if ext in {"png", "jpg", "jpeg", "gif", "webp"}:
-        return "image"
-
-    if ext in {"mp4", "mov", "avi", "webm"}:
-        return "video"
-
-    raise Exception(f"Unsupported file type: {ext}")
+    return media_service.get_file_type(filename)
 
 
 def parse_platforms(platforms_string):
@@ -194,82 +184,32 @@ def is_instagram_selected(platforms):
 
 
 def normalize_image_to_jpeg(file_or_bytes):
-    if isinstance(file_or_bytes, bytes):
-        source = BytesIO(file_or_bytes)
-    else:
-        source = file_or_bytes
-
-    if hasattr(source, "seek"):
-        source.seek(0)
-
-    with Image.open(source) as image:
-        source_format = image.format or "unknown"
-
-        if image.mode in {"RGBA", "LA"} or (
-            image.mode == "P" and "transparency" in image.info
-        ):
-            rgba_image = image.convert("RGBA")
-            background = Image.new("RGBA", rgba_image.size, (255, 255, 255, 255))
-            background.alpha_composite(rgba_image)
-            final_image = background.convert("RGB")
-        else:
-            final_image = image.convert("RGB")
-
-        output = BytesIO()
-        final_image.save(
-            output,
-            format="JPEG",
-            quality=92,
-            progressive=False,
-            optimize=True,
-        )
-
-    return {
-        "bytes": output.getvalue(),
-        "source_format": source_format,
-        "final_format": "JPEG",
-        "final_mode": "RGB",
-    }
+    return media_service.normalize_image_to_jpeg(file_or_bytes)
 
 
 def log_image_normalization_diagnostics(result, upload_url=None):
-    print(
-        "Image normalization diagnostics:",
-        {
-            "source_format": result.get("source_format"),
-            "final_format": result.get("final_format"),
-            "final_color_mode": result.get("final_mode"),
-            "final_url_extension": get_url_path_extension(upload_url),
-        },
+    return media_service.log_image_normalization_diagnostics(
+        result,
+        upload_url=upload_url,
+        get_url_path_extension_func=get_url_path_extension,
     )
 
 
 def upload_jpeg_to_cloudinary(file_or_bytes):
-    normalized = normalize_image_to_jpeg(file_or_bytes)
-    upload_buffer = BytesIO(normalized["bytes"])
-    upload_buffer.name = "instagram-safe.jpg"
-
-    upload_result = cloudinary.uploader.upload(
-        upload_buffer,
-        folder="social_posts",
-        resource_type="image",
-        format="jpg",
+    return media_service.upload_jpeg_to_cloudinary(
+        file_or_bytes,
+        normalize_image_func=normalize_image_to_jpeg,
+        upload_func=cloudinary.uploader.upload,
+        log_diagnostics_func=log_image_normalization_diagnostics,
     )
-
-    log_image_normalization_diagnostics(
-        normalized,
-        upload_url=upload_result.get("secure_url"),
-    )
-
-    return upload_result
 
 
 def upload_to_cloudinary(file_or_url, force_jpeg=False):
-    if force_jpeg:
-        return upload_jpeg_to_cloudinary(file_or_url)
-
-    return cloudinary.uploader.upload(
-        file_or_url, folder="social_posts", resource_type="auto"
+    return media_service.upload_to_cloudinary(
+        file_or_url,
+        force_jpeg=force_jpeg,
+        upload_jpeg_func=upload_jpeg_to_cloudinary,
+        upload_func=cloudinary.uploader.upload,
     )
 
 
@@ -314,13 +254,11 @@ def convert_utc_to_uk(utc_datetime):
 
 
 def make_instagram_safe_url(url):
-    return url.replace("/upload/", "/upload/c_fill,w_1080,h_1080,q_auto,f_jpg/")
+    return media_service.make_instagram_safe_url(url)
 
 
 def get_url_path_extension(url):
-    path = urlparse(url or "").path
-    _, extension = os.path.splitext(path)
-    return extension.lower().lstrip(".")
+    return media_service.get_url_path_extension(url)
 
 
 def log_scheduled_post_diagnostics(post, input_local_time=None):
