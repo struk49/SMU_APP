@@ -1,6 +1,6 @@
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -16,6 +16,7 @@ os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import app as smu_app  # noqa: E402
+from smu_core.services.time_utils import utc_now  # noqa: E402
 
 
 try:
@@ -124,7 +125,7 @@ def create_post(
 
 def create_carousel(module, user, *, status="draft", scheduled=False):
     group_id = f"group-{user.id}"
-    scheduled_time = datetime.utcnow() - timedelta(minutes=1) if scheduled else None
+    scheduled_time = utc_now() - timedelta(minutes=1) if scheduled else None
     first = create_post(
         module,
         user,

@@ -1,10 +1,9 @@
-from datetime import datetime
-
 from flask import url_for
 
 import app as smu_app
 from conftest import create_carousel, create_post, create_user, login
 from smu_core.models import Post, PostRevision
+from smu_core.services.time_utils import utc_now
 
 
 def rules_for(app, path):
@@ -275,7 +274,7 @@ def test_use_improved_replaces_caption_and_creates_revision(client, app, module,
     post = create_post(module, user)
     post.caption = "Original"
     post.improved_caption = "Improved"
-    post.improved_at = datetime.utcnow()
+    post.improved_at = utc_now()
     module.db.session.commit()
 
     set_caption_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
@@ -311,7 +310,7 @@ def test_custom_caption_saves_and_creates_revision(client, module):
     post = create_post(module, user)
     post.caption = "Original"
     post.improved_caption = "Improved"
-    post.improved_at = datetime.utcnow()
+    post.improved_at = utc_now()
     module.db.session.commit()
     login(client, user)
 
@@ -355,7 +354,7 @@ def test_discard_improved_clears_suggestion_without_changing_caption(client, mod
     post = create_post(module, user)
     post.caption = "Original"
     post.improved_caption = "Improved"
-    post.improved_at = datetime.utcnow()
+    post.improved_at = utc_now()
     module.db.session.commit()
     login(client, user)
 

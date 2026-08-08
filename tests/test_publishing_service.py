@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -6,6 +6,7 @@ import app as smu_app
 from conftest import MockMakeResponse, create_accounts, create_carousel, create_post, create_user
 from smu_core.models import ConnectedAccount, Post
 from smu_core.services import publishing
+from smu_core.services.time_utils import utc_now
 
 
 def create_full_accounts(module, user, **overrides):
@@ -388,7 +389,7 @@ def test_scheduled_publish_caller_still_uses_extracted_service(app, module, monk
         module,
         user,
         status="scheduled",
-        scheduled_time=datetime.utcnow() - timedelta(minutes=1),
+        scheduled_time=utc_now() - timedelta(minutes=1),
         platforms="instagram",
     )
     sent = []

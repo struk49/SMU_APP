@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import app as smu_app
 from conftest import create_accounts, create_carousel, create_post, create_user, login
 from smu_core.models import Post
+from smu_core.services.time_utils import utc_now
 
 
 EXPECTED_COLUMNS = [
@@ -52,7 +53,10 @@ def test_post_columns_defaults_and_nullable_settings_are_unchanged(module):
     assert columns.scheduled_time.nullable is True
     assert columns.group_id.nullable is True
     assert columns.status.default.arg == "draft"
-    assert isinstance(columns.created_at.default.arg, datetime)
+    assert callable(columns.created_at.default.arg)
+    created_at_default = columns.created_at.default.arg(None)
+    assert isinstance(created_at_default, datetime)
+    assert created_at_default.tzinfo is None
     assert columns.post_type.default.arg == "single"
     assert columns.platforms.default.arg == "instagram,facebook"
     assert columns.sort_order.default.arg == 0
@@ -187,19 +191,19 @@ def test_scheduled_due_query_still_finds_due_post(app, module):
             module,
             user,
             status="scheduled",
-            scheduled_time=datetime.utcnow() - timedelta(minutes=1),
+            scheduled_time=utc_now() - timedelta(minutes=1),
         )
         future_post = create_post(
             module,
             user,
             status="scheduled",
-            scheduled_time=datetime.utcnow() + timedelta(days=1),
+            scheduled_time=utc_now() + timedelta(days=1),
         )
 
         due_posts = module.Post.query.filter(
             module.Post.scheduled_time.isnot(None),
             module.Post.status == "scheduled",
-            module.Post.scheduled_time <= datetime.utcnow(),
+            module.Post.scheduled_time <= utc_now(),
         ).order_by(module.Post.scheduled_time.asc()).all()
 
         assert due_post in due_posts

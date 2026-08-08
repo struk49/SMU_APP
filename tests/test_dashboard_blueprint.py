@@ -1,11 +1,12 @@
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from flask import template_rendered, url_for
 
 import app as smu_app
 from conftest import create_post, create_user, login
 from smu_core.models import BrandBrief, ConnectedAccount, Post
+from smu_core.services.time_utils import utc_now
 
 
 @contextmanager
@@ -178,9 +179,9 @@ def test_dashboard_ordering_and_carousel_template_grouping(client, app, module):
         sort_order=1,
         file_url="https://cdn.test/child.jpg",
     )
-    older.created_at = datetime.utcnow() - timedelta(days=2)
-    newer.created_at = datetime.utcnow()
-    cover.created_at = datetime.utcnow() - timedelta(days=1)
+    older.created_at = utc_now() - timedelta(days=2)
+    newer.created_at = utc_now()
+    cover.created_at = utc_now() - timedelta(days=1)
     child.created_at = cover.created_at
     module.db.session.commit()
     login(client, user)

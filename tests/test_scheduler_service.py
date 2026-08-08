@@ -6,6 +6,7 @@ import app as smu_app
 from conftest import MockMakeResponse, create_accounts, create_carousel, create_post, create_user
 from smu_core.models import Post
 from smu_core.services import scheduler as scheduler_service
+from smu_core.services.time_utils import utc_now
 
 
 class RecordingSession:
@@ -463,7 +464,7 @@ def test_app_scheduler_wrapper_preserves_publish_monkeypatch(app, module, monkey
         module,
         user,
         status="scheduled",
-        scheduled_time=datetime.utcnow() - timedelta(minutes=1),
+        scheduled_time=utc_now() - timedelta(minutes=1),
     )
     calls = []
 
@@ -486,7 +487,7 @@ def test_existing_publishing_service_scheduler_caller_still_works(app, module, m
         module,
         user,
         status="scheduled",
-        scheduled_time=datetime.utcnow() - timedelta(minutes=1),
+        scheduled_time=utc_now() - timedelta(minutes=1),
         platforms="instagram",
     )
     sent = []

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from io import BytesIO
 
 import pytest
@@ -13,6 +13,7 @@ from conftest import (
     create_user,
     login,
 )
+from smu_core.services.time_utils import utc_now
 
 
 def test_manual_single_post_publishing(client, module, monkeypatch):
@@ -47,7 +48,7 @@ def test_scheduled_single_post_publishing(app, module, monkeypatch):
         module,
         user,
         status="scheduled",
-        scheduled_time=datetime.utcnow() - timedelta(minutes=1),
+        scheduled_time=utc_now() - timedelta(minutes=1),
     )
 
     sent = []
@@ -254,7 +255,7 @@ def test_fresh_scheduled_single_post_publishes_once(client, module, monkeypatch)
     create_accounts(module, user, facebook=True)
     post = create_post(module, user)
     login(client, user)
-    due_local = datetime.utcnow() - timedelta(minutes=2)
+    due_local = utc_now() - timedelta(minutes=2)
 
     sent = []
 
@@ -290,7 +291,7 @@ def test_fresh_scheduled_manual_carousel_publishes_once(client, module, monkeypa
     create_accounts(module, user)
     group_id, posts = create_carousel(module, user)
     login(client, user)
-    due_local = datetime.utcnow() - timedelta(minutes=2)
+    due_local = utc_now() - timedelta(minutes=2)
 
     sent = []
 
@@ -330,7 +331,7 @@ def test_scheduled_tiktok_carousel_publishes_once(client, module, monkeypatch):
     create_accounts(module, user)
     group_id, posts = create_carousel(module, user)
     login(client, user)
-    due_local = datetime.utcnow() - timedelta(minutes=2)
+    due_local = utc_now() - timedelta(minutes=2)
 
     for post in posts:
         post.prompt = "TikTok carousel slide"
@@ -580,7 +581,7 @@ def test_scheduler_still_publishes_after_jpeg_normalisation(
         module,
         user,
         status="scheduled",
-        scheduled_time=datetime.utcnow() - timedelta(minutes=1),
+        scheduled_time=utc_now() - timedelta(minutes=1),
         file_url="https://cdn.test/scheduled.jpg",
         platforms="instagram",
     )
