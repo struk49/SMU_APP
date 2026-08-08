@@ -1,10 +1,10 @@
 import os
-from datetime import datetime
 
 import requests
 from flask_login import current_user
 
 from smu_core.models import ConnectedAccount, Post
+from smu_core.services.time_utils import utc_now
 
 
 MAKE_WEBHOOK_SINGLE = os.getenv("MAKE_WEBHOOK_SINGLE", "").strip()
@@ -289,7 +289,7 @@ def publish_post_to_make(
 
         for group_post in group_posts:
             group_post.status = "sent_to_make"
-            group_post.sent_at = datetime.utcnow()
+            group_post.sent_at = utc_now()
 
         return response
 
@@ -314,6 +314,6 @@ def publish_post_to_make(
     response = send_payload_func(payload, webhook_url)
 
     post.status = "sent_to_make"
-    post.sent_at = datetime.utcnow()
+    post.sent_at = utc_now()
 
     return response

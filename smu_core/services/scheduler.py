@@ -1,7 +1,6 @@
-from datetime import datetime
-
 from smu_core.extensions import db
 from smu_core.models import Post
+from smu_core.services.time_utils import utc_now
 
 
 def check_scheduled_posts(
@@ -13,7 +12,7 @@ def check_scheduled_posts(
     db_session=None,
 ):
     if now_provider is None:
-        now_provider = datetime.utcnow
+        now_provider = utc_now
     if post_model is None:
         post_model = Post
     if db_session is None:

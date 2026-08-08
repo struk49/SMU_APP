@@ -3,7 +3,6 @@ import time
 import json
 import uuid
 import re
-import base64
 import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
@@ -38,9 +37,11 @@ from smu_core.models.post import Post
 from smu_core.models.post_revision import PostRevision
 from smu_core.services import captions as captions_service
 from smu_core.services import content as content_service
+from smu_core.services import images as images_service
 from smu_core.services import media as media_service
 from smu_core.services import publishing as publishing_service
 from smu_core.services import scheduler as scheduler_service
+from smu_core.services import time_utils
 
 load_dotenv()
 
@@ -80,7 +81,7 @@ def log_event(event_name, **fields):
         if key not in {"password", "token", "api_key", "webhook_url", "caption", "payload"}
     }
     safe_fields["event"] = event_name
-    safe_fields["timestamp"] = datetime.utcnow().isoformat() + "Z"
+    safe_fields["timestamp"] = time_utils.utc_now_iso_z()
     smu_logger.info(json.dumps(safe_fields, default=str, sort_keys=True))
 
 
@@ -433,33 +434,20 @@ def update_brand_coach(post, brand_context=""):
 
 
 def generate_openai_image(prompt):
-    if not OPENAI_API_KEY:
-        raise Exception("OPENAI_API_KEY is missing from your .env file")
-
-    result = openai_client.images.generate(
-        model="gpt-image-1",
-        prompt=prompt,
-        size="1024x1024",
-        quality="medium",
-        output_format="jpeg",
+    return images_service.generate_openai_image(
+        prompt,
+        openai_api_key=OPENAI_API_KEY,
+        openai_client=openai_client,
+        upload_jpeg_to_cloudinary_func=upload_jpeg_to_cloudinary,
     )
-
-    image_base64 = result.data[0].b64_json
-    image_bytes = base64.b64decode(image_base64)
-
-    upload_result = upload_jpeg_to_cloudinary(image_bytes)
-
-    return upload_result["secure_url"]
 
 
 def generate_multiple_openai_images(prompt, count=1):
-    image_urls = []
-
-    for _ in range(count):
-        image_url = generate_openai_image(prompt)
-        image_urls.append(image_url)
-
-    return image_urls
+    return images_service.generate_multiple_openai_images(
+        prompt,
+        count=count,
+        generate_openai_image_func=generate_openai_image,
+    )
 
 
 def send_payload_to_make(payload, webhook_url=None):
@@ -547,6 +535,10 @@ app.extensions.setdefault("smu_post_create_helpers", {}).update({
         **kwargs,
     ),
     "apply_image_style": lambda *args, **kwargs: apply_image_style(
+        *args,
+        **kwargs,
+    ),
+    "generate_openai_image": lambda *args, **kwargs: generate_openai_image(
         *args,
         **kwargs,
     ),
@@ -714,7 +706,7 @@ def check_scheduled_posts():
         return scheduler_service.check_scheduled_posts(
             publish_post=publish_post_to_make,
             log_event=log_event,
-            now_provider=datetime.utcnow,
+            now_provider=time_utils.utc_now,
             post_model=Post,
             db_session=db.session,
         )
