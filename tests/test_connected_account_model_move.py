@@ -6,7 +6,33 @@ from conftest import create_accounts, create_post, create_user, login
 from smu_core.models import ConnectedAccount
 
 
-EXPECTED_COLUMNS = [
+LEGACY_COLUMNS = {
+    "id",
+    "user_id",
+    "instagram_connected",
+    "facebook_connected",
+    "linkedin_connected",
+    "pinterest_connected",
+    "reddit_connected",
+    "x_connected",
+    "make_webhook_single",
+    "make_webhook_carousel",
+    "created_at",
+    "updated_at",
+}
+
+LINKEDIN_OAUTH_COLUMNS = {
+    "linkedin_access_token",
+    "linkedin_access_token_expires_at",
+    "linkedin_scopes",
+    "linkedin_member_id",
+    "linkedin_member_urn",
+    "linkedin_display_name",
+    "linkedin_refresh_token",
+    "linkedin_refresh_token_expires_at",
+}
+
+EXPECTED_LEGACY_ORDER = [
     "id",
     "user_id",
     "instagram_connected",
@@ -26,13 +52,28 @@ def test_connected_account_model_remains_compatible(module):
     assert smu_app.ConnectedAccount is ConnectedAccount
     assert module.ConnectedAccount is ConnectedAccount
     assert ConnectedAccount.__table__.name == "connected_account"
-    assert list(ConnectedAccount.__table__.columns.keys()) == EXPECTED_COLUMNS
+    column_names = list(ConnectedAccount.__table__.columns.keys())
+    columns = ConnectedAccount.__table__.columns
+
+    assert LEGACY_COLUMNS.issubset(column_names)
+    assert LINKEDIN_OAUTH_COLUMNS.issubset(column_names)
+    assert [
+        column for column in column_names if column in LEGACY_COLUMNS
+    ] == EXPECTED_LEGACY_ORDER
     assert "connected_account" in module.db.metadata.tables
     assert ConnectedAccount.__table__.c.user_id.unique is True
     assert {
         foreign_key.target_fullname
         for foreign_key in ConnectedAccount.__table__.foreign_keys
     } == {"user.id"}
+    assert columns.linkedin_connected.default.arg is False
+    assert columns.instagram_connected.default.arg is False
+    assert columns.facebook_connected.default.arg is False
+    assert columns.pinterest_connected.default.arg is False
+    assert columns.make_webhook_single.nullable is True
+    assert columns.make_webhook_carousel.nullable is True
+    for column_name in LINKEDIN_OAUTH_COLUMNS:
+        assert columns[column_name].nullable is True
 
 
 def test_connected_account_unique_user_and_relationship_still_work(app, module):

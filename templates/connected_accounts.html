@@ -13,15 +13,44 @@
   </a>
 </div>
 
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-center gap-3">
+      <div>
+        <h2 class="h5 fw-bold mb-1">LinkedIn</h2>
+        {% if accounts.linkedin_connected %}
+        <div class="text-success fw-semibold">Connected</div>
+        {% if accounts.linkedin_display_name %}
+        <div class="text-muted small">{{ accounts.linkedin_display_name }}</div>
+        {% endif %}
+        {% else %}
+        <div class="text-muted small">Not connected</div>
+        {% endif %}
+      </div>
+
+      {% if accounts.linkedin_connected %}
+      <form method="POST" action="{{ url_for('linkedin_disconnect') }}">
+        <button type="submit" class="btn btn-outline-danger">
+          Disconnect
+        </button>
+      </form>
+      {% else %}
+      <a href="{{ url_for('linkedin_connect') }}" class="btn btn-outline-primary">
+        Connect LinkedIn
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <form method="POST">
   <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-4">
       <h2 class="h5 fw-bold mb-3">Platforms</h2>
 
       {% for field, label in [ ('instagram_connected', 'Instagram'),
-      ('facebook_connected', 'Facebook'), ('linkedin_connected', 'LinkedIn'),
-      ('pinterest_connected', 'Pinterest'), ('reddit_connected', 'Reddit'),
-      ('x_connected', 'X') ] %}
+      ('facebook_connected', 'Facebook'), ('pinterest_connected', 'Pinterest'),
+      ('reddit_connected', 'Reddit'), ('x_connected', 'X') ] %}
       <div
         class="d-flex justify-content-between align-items-center border-bottom py-3"
       >

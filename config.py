@@ -18,6 +18,9 @@ class Config:
         DATABASE_URL or f"sqlite:///{os.path.join(BASE_DIR, 'posts.db')}"
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    LINKEDIN_CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID", "").strip()
+    LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET", "").strip()
+    LINKEDIN_REDIRECT_URI = os.getenv("LINKEDIN_REDIRECT_URI", "").strip()
     SQLALCHEMY_ENGINE_OPTIONS = {
         "pool_pre_ping": True,
         "pool_recycle": 280,

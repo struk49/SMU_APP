@@ -10,7 +10,6 @@ from smu_core.models import ConnectedAccount
 ALL_ENABLED_FORM = {
     "instagram_connected": "on",
     "facebook_connected": "on",
-    "linkedin_connected": "on",
     "pinterest_connected": "on",
     "reddit_connected": "on",
     "x_connected": "on",
@@ -97,7 +96,7 @@ def test_accounts_post_creates_row_stores_toggles_and_webhooks(client, module):
     assert account is not None
     assert account.instagram_connected is True
     assert account.facebook_connected is True
-    assert account.linkedin_connected is True
+    assert account.linkedin_connected is False
     assert account.pinterest_connected is True
     assert account.reddit_connected is True
     assert account.x_connected is True

@@ -1,3 +1,3 @@
 """Platform-specific publishing adapters."""
 
-__all__ = ["linkedin"]
+__all__ = ["linkedin", "linkedin_oauth"]

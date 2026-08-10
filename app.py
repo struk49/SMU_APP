@@ -112,7 +112,7 @@ def uk_time_filter(value, format_string="%d/%m/%Y %H:%M"):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 
 with app.app_context():
@@ -160,6 +160,24 @@ with app.app_context():
 
         if "brand_feedback" not in columns:
             conn.execute(db.text("ALTER TABLE post ADD COLUMN brand_feedback TEXT"))
+
+        account_columns = [
+            col["name"] for col in inspector.get_columns("connected_account")
+        ]
+        connected_account_column_sql = {
+            "linkedin_access_token": "ALTER TABLE connected_account ADD COLUMN linkedin_access_token VARCHAR(1000)",
+            "linkedin_access_token_expires_at": "ALTER TABLE connected_account ADD COLUMN linkedin_access_token_expires_at TIMESTAMP",
+            "linkedin_scopes": "ALTER TABLE connected_account ADD COLUMN linkedin_scopes VARCHAR(500)",
+            "linkedin_member_id": "ALTER TABLE connected_account ADD COLUMN linkedin_member_id VARCHAR(255)",
+            "linkedin_member_urn": "ALTER TABLE connected_account ADD COLUMN linkedin_member_urn VARCHAR(255)",
+            "linkedin_display_name": "ALTER TABLE connected_account ADD COLUMN linkedin_display_name VARCHAR(255)",
+            "linkedin_refresh_token": "ALTER TABLE connected_account ADD COLUMN linkedin_refresh_token VARCHAR(1000)",
+            "linkedin_refresh_token_expires_at": "ALTER TABLE connected_account ADD COLUMN linkedin_refresh_token_expires_at TIMESTAMP",
+        }
+
+        for column_name, alter_sql in connected_account_column_sql.items():
+            if column_name not in account_columns:
+                conn.execute(db.text(alter_sql))
 
         conn.commit()
 

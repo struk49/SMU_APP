@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from smu_core.extensions import db
+from smu_core.services.time_utils import utc_now
 
 
 class ConnectedAccount(db.Model):
@@ -15,9 +14,17 @@ class ConnectedAccount(db.Model):
     reddit_connected = db.Column(db.Boolean, default=False)
     x_connected = db.Column(db.Boolean, default=False)
 
+    linkedin_access_token = db.Column(db.String(1000))
+    linkedin_access_token_expires_at = db.Column(db.DateTime)
+    linkedin_scopes = db.Column(db.String(500))
+    linkedin_member_id = db.Column(db.String(255))
+    linkedin_member_urn = db.Column(db.String(255))
+    linkedin_display_name = db.Column(db.String(255))
+    linkedin_refresh_token = db.Column(db.String(1000))
+    linkedin_refresh_token_expires_at = db.Column(db.DateTime)
+
     make_webhook_single = db.Column(db.String(500))
     make_webhook_carousel = db.Column(db.String(500))
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
-
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)
