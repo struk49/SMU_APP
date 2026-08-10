@@ -5,6 +5,7 @@ __all__ = [
     "content",
     "images",
     "media",
+    "platforms",
     "publishing",
     "scheduler",
     "time_utils",
