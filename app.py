@@ -38,6 +38,7 @@ from smu_core.models.post_revision import PostRevision
 from smu_core.services import captions as captions_service
 from smu_core.services import content as content_service
 from smu_core.services import images as images_service
+from smu_core.services import linkedin_publishing as linkedin_publishing_service
 from smu_core.services import media as media_service
 from smu_core.services import publishing as publishing_service
 from smu_core.services import scheduler as scheduler_service
@@ -1219,6 +1220,15 @@ def publish_post_to_make(post, user_id):
         get_ordered_carousel_posts_func=get_ordered_carousel_posts,
         build_single_payload_func=build_single_payload,
         log_single_image_diagnostics_func=log_single_image_diagnostics,
+        get_user_connected_accounts_func=get_user_connected_accounts,
+        publish_linkedin_text_post_func=publish_linkedin_text_post,
+    )
+
+
+def publish_linkedin_text_post(post, connected_account):
+    return linkedin_publishing_service.publish_text_only_post(
+        post,
+        connected_account,
     )
 
 

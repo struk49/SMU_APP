@@ -4,6 +4,7 @@ __all__ = [
     "captions",
     "content",
     "images",
+    "linkedin_publishing",
     "media",
     "platforms",
     "publishing",

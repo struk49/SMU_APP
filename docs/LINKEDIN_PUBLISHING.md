@@ -58,8 +58,8 @@ Recommended SMU MVP support:
 
 | Content type | LinkedIn support | SMU MVP status |
 | --- | --- | --- |
-| Text-only | Organic supported | MVP 1 |
-| Single image | Organic supported after image upload | MVP 1 |
+| Text-only | Organic supported | Implemented for personal profiles |
+| Single image | Organic supported after image upload | Deferred |
 | MultiImage | Organic supported after uploading 2-20 images | MVP 2 |
 | Video | Organic supported after video upload/finalize | Later MVP |
 | Document | Organic supported | Out of scope initially |
@@ -426,11 +426,11 @@ Recommended smallest safe sequence:
 
 - LinkedIn developer app configuration
 - OAuth connection flow
-- personal profile publishing
+- personal profile text publishing
 - text-only post
-- single-image post
-- scheduled text/single-image post
+- scheduled text-only post
 - adapter tests with mocked LinkedIn HTTP calls
+- single-image post remains deferred
 
 ### MVP 2
 
@@ -468,17 +468,21 @@ Adapter tests:
 - headers include Authorization, LinkedIn version and Rest.li protocol version
 - text-only post payload
 - image upload initialize request
-- binary image upload handling
+- binary image upload handling when implemented
 - single-image post payload
 - MultiImage payload and ordering
 - video upload sequence when implemented
 - LinkedIn API failure mapping
 - rate-limit response handling
+- LinkedIn text-only direct publishing
+- LinkedIn-only scheduled publishing
+- mixed Make + LinkedIn publishing split
 
 Publishing integration tests:
 
 - manual LinkedIn single publish invokes adapter
 - scheduled LinkedIn single publish invokes adapter once
+- LinkedIn-only text success is marked `published`, not `sent_to_make`
 - LinkedIn MultiImage publishes once per SMU carousel group
 - cross-user posts cannot use another user's LinkedIn token
 - missing token fails before network call

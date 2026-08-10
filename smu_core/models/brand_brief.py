@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from smu_core.extensions import db
+from smu_core.services.time_utils import utc_now
 
 
 class BrandBrief(db.Model):
@@ -18,5 +17,5 @@ class BrandBrief(db.Model):
     cta_style = db.Column(db.String(200))
     words_to_avoid = db.Column(db.Text)
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow(), onupdate=datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
+    updated_at = db.Column(db.DateTime, default=utc_now, onupdate=utc_now)

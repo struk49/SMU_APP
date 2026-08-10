@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from smu_core.extensions import db
+from smu_core.services.time_utils import utc_now
 
 
 class PostRevision(db.Model):
@@ -14,5 +13,4 @@ class PostRevision(db.Model):
     score = db.Column(db.Float, nullable=True)
     source = db.Column(db.String(50), default="manual")
 
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
+    created_at = db.Column(db.DateTime, default=utc_now)

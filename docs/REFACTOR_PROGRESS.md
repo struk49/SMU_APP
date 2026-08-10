@@ -1,85 +1,195 @@
 # SMU Refactor Progress
 
-## Verified Checkpoint
+This document records the refactor journey and the current verified checkpoint.
+It complements `ARCHITECTURE.md`, which is the canonical architecture reference.
 
-The current compatibility refactor has completed model extraction while keeping
-`app.py` as the runtime entry point.
+## 1. Refactor Goal
 
-Moved models:
+The refactor goal was to reduce the old monolithic `app.py` while preserving
+working behavior. The work separated routes, models and business logic into
+clearer layers, kept publishing and scheduling stable, preserved endpoint
+compatibility, and added regression tests around each extraction.
 
-- `User`
-- `Post`
-- `PostRevision`
+## 2. Starting Point
+
+Historical starting point:
+
+- most routes lived directly in `app.py`
+- models were coupled to `app.py`
+- publishing and scheduling helpers were mixed with route logic
+- AI, media, TikTok and Content Pack helpers were not separated into services
+- broad changes carried high regression risk because many workflows depended on
+  shared module-level helpers
+
+## 3. Refactor Strategy
+
+The refactor used an incremental compatibility-first approach:
+
+- move one model, route, domain or service at a time
+- preserve existing URLs and endpoint names
+- add targeted regression tests for each extraction
+- run the full pytest suite at verified checkpoints
+- keep compatibility wrappers where existing callers or tests required them
+- defer broad redesigns until behavior was protected
+
+## 4. Completed Blueprint Phases
+
+Major route domains now live under `smu_core/blueprints/`.
+
+Completed blueprint/domain moves:
+
+- `public`
+- `auth`
+- `beta`
+- `feedback`
+- `brand`
+- `accounts`
+- `content_pack`
+- `tiktok`
+- `calendar`
+- `dashboard`
+- `posts`
+
+The Posts blueprint now owns the main post workflow groups:
+
+- detail
+- create
+- edit
+- delete and duplicate
+- schedule
+- manual publishing
+- caption utilities
+- AI editor
+- Studio and revision restore
+
+## 5. Completed Model Refactor
+
+All application models now live under `smu_core.models`:
+
+- `BetaApplication`
 - `BrandBrief`
 - `ConnectedAccount`
-- `Feedback`
 - `ContactMessage`
-- `BetaApplication`
+- `Feedback`
+- `Post`
+- `PostRevision`
+- `User`
 
-Shared extensions:
+Shared extensions live under `smu_core.extensions`:
 
-- `smu_core.extensions.db`
-- `smu_core.extensions.login_manager`
+- `db`
+- `login_manager`
 
-Compatibility preserved:
+`app.py` still imports and re-exports models and extensions where needed for
+compatibility with existing imports such as `import app as smu_app`.
 
-- `import app as smu_app`
-- `smu_app.app`
-- `smu_app.db`
-- `smu_app.login_manager`
-- `smu_app.User`
-- `smu_app.Post`
+## 6. Completed Service Extractions
 
-## Current Phase
+Current service modules live under `smu_core/services/`.
 
-Introduce a minimal `create_app(config_object=None)` factory in `smu_core`.
+- `publishing`: connected-account lookup, platform filtering, webhook selection,
+  payload building, Make.com delivery and publish status updates.
+- `scheduler`: scheduled-post processing, due-post lookup, carousel
+  de-duplication and scheduled publish transaction handling.
+- `captions`: Brand Brief context, caption revisions, Brand Coach updates,
+  caption rewrites, grading and score extraction.
+- `content`: TikTok transcript extraction/cleaning, transcript fallbacks,
+  Content Pack generation and section extraction.
+- `media`: file type detection, JPEG normalization, Cloudinary upload
+  orchestration and Instagram-safe URL handling.
+- `images`: OpenAI image generation and multiple-image orchestration.
+- `time_utils`: shared naive-UTC helpers.
 
-Factory responsibilities for this phase:
+See `ARCHITECTURE.md` for implementation details and lifecycle diagrams.
 
-- create the Flask app
-- load the same configuration currently used by `app.py`
-- accept test config overrides
-- initialise the shared `db`
-- initialise the shared `login_manager`
-- return the app
+## 7. Compatibility Work Preserved
 
-Responsibilities intentionally left in `app.py`:
+The compatibility layer is intentional, not an unfinished mistake.
 
-- route definitions
-- `login_manager.user_loader`
-- `db.create_all()`
-- manual `post` table patching
-- external client setup
-- scheduler job registration and startup
-- `python app.py` development server behavior
+Preserved boundaries include:
 
-## Order To Preserve
+- `app.py` compatibility wrappers around service-backed helpers
+- unqualified endpoint names such as `url_for("calendar_view")`
+- `app.extensions` helper bridges used by blueprints
+- monkeypatch compatibility for existing tests
+- scheduler registration and startup remaining in `app.py`
+- external client setup remaining in `app.py`
+- database creation and compatibility patching remaining in `app.py`
 
-1. Load environment variables.
-2. Read configuration values.
-3. Create and configure the Flask app through the factory.
-4. Initialise shared extensions.
-5. Import models before `db.create_all()`.
-6. Register `user_loader`.
-7. Run `db.create_all()`.
-8. Run manual `post` table patching.
-9. Define routes and helpers.
-10. Register and start scheduler jobs.
-11. Run development server when `app.py` is executed directly.
+These boundaries can be reduced later only when tests and callers prove it is
+safe.
 
-## Current Risks
+## 8. Major Regressions Found And Resolved
 
-- Starting the scheduler in the factory would start background jobs during
-  factory-only tests.
-- Moving `db.create_all()` into the factory would change database patching
-  timing.
-- Moving routes now would make endpoint changes hard to diagnose.
-- Full `git diff --check` may still report unrelated template whitespace from
-  existing working-tree changes.
+Important examples from the refactor:
 
-## Rollback
+- some database-backed regression tests bypassed the pytest app/database fixture
+  and were corrected to use the shared fixture pattern
+- TikTok and Content Pack transcript flows exposed helper bridge timing issues
+  after route moves
+- TikTok subtitle extraction was improved to use caption metadata and better
+  candidate selection
+- scheduler registration tests were adjusted to account for the fixture
+  environment intentionally suppressing live jobs
+- a media wrapper test double returned the wrong Cloudinary result shape and was
+  corrected to match the helper contract
+- a SQLAlchemy callable-default test needed to call the wrapped default with a
+  context argument
 
-The factory phase can be rolled back by restoring direct app construction and
-extension initialisation in `app.py`, removing `create_app()` and its focused
-tests, then rerunning the local test suite.
+These regressions are the reason the refactor stayed incremental and test-led.
 
+## 9. Technical Debt Cleaned Up
+
+Completed cleanup includes:
+
+- production `datetime.utcnow()` usage removed
+- test and fixture `datetime.utcnow()` usage removed
+- shared naive-UTC `utc_now()` and `utc_now_iso_z()` helpers introduced
+- production direct `Query.get()` usage replaced with `db.session.get()`
+- duplicate legacy TikTok transcript implementation removed
+
+## 10. Current Verification Checkpoint
+
+Current verified status:
+
+- 545 tests passing
+- current architecture documented in `docs/ARCHITECTURE.md`
+- no production `datetime.utcnow()` matches
+- no test or fixture `datetime.utcnow()` matches
+- no production direct `.query.get()` matches
+- scheduler and manual publishing smoke tests passed where verified
+- AI image/create flows were manually smoke-tested where verified
+
+Remaining warnings are primarily third-party or Flask-SQLAlchemy
+`Query.get()`-related warnings from library internals/helper behavior rather
+than production direct `Query.get()` calls.
+
+## 11. Remaining Engineering Work
+
+Remaining engineering cleanup should stay incremental:
+
+- add typing where it clarifies service contracts
+- continue structured logging improvements
+- improve authentication/API boundaries if a separate API surface is introduced
+- reduce compatibility wrappers only when safe
+- perform a final warning audit and library upgrade review where useful
+
+Product roadmap items belong in `ROADMAP.md`.
+
+## 12. Refactor Status
+
+Core architectural refactor: complete.
+
+Compatibility cleanup: largely complete.
+
+Technical debt cleanup: substantially complete.
+
+Future work: incremental hardening and feature development.
+
+## Related Documents
+
+- `ARCHITECTURE.md`
+- `ROADMAP.md`
+- `PUBLISHING_CONTRACT.md`
+- `TEST_PLAN.md`
+- `ENVIRONMENT.md`

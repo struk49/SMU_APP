@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import BrandBrief, Post, PostRevision
+from smu_core.services.time_utils import utc_now
 
 
 posts_bp = Blueprint("posts", __name__)
@@ -181,12 +182,44 @@ def create_post():
 
         uploaded_files = [file for _, file in ordered_items]
         has_files = len(uploaded_files) > 0
+        selected_platforms = {
+            platform.strip().lower()
+            for platform in platforms
+            if platform.strip()
+        }
+        linkedin_text_only = (
+            not prompt
+            and not has_files
+            and selected_platforms == {"linkedin"}
+        )
 
-        if not prompt and not has_files:
+        if not prompt and not has_files and not linkedin_text_only:
             flash("Upload a file or enter a prompt.", "danger")
             return redirect(url_for("create_post"))
 
         try:
+            if linkedin_text_only:
+                if not caption.strip():
+                    flash("LinkedIn text posts require a caption.", "danger")
+                    return redirect(url_for("create_post"))
+
+                post = Post(
+                    file_url="",
+                    file_type="text",
+                    prompt="",
+                    caption=caption,
+                    platforms=platforms_string,
+                    post_type="single",
+                    status="scheduled" if scheduled_time else "draft",
+                    scheduled_time=scheduled_time,
+                    user_id=current_user.id,
+                )
+                db.session.add(post)
+                db.session.commit()
+
+                flash("LinkedIn text post created successfully.", "success")
+                return redirect(url_for("view_post", post_id=post.id))
+
             if prompt and not has_files:
                 image_count = 3 if make_carousel else 1
 
@@ -407,6 +440,11 @@ def send_to_make(post_id):
         return redirect(
             url_for("view_post", post_id=post.id)
         )
+    if post.status == "published":
+        flash("This post has already been published.")
+        return redirect(
+            url_for("view_post", post_id=post.id)
+        )
 
     try:
         _manual_publish_helper("publish_post_to_make")(post, current_user.id)
@@ -420,10 +458,16 @@ def send_to_make(post_id):
             source="manual",
         )
 
-        flash(
-            "Post sent to Make.com successfully.",
-            "success",
-        )
+        if post.status == "published":
+            flash(
+                "Post published successfully.",
+                "success",
+            )
+        else:
+            flash(
+                "Post sent to Make.com successfully.",
+                "success",
+            )
 
     except Exception as e:
         db.session.rollback()
@@ -573,7 +617,7 @@ def improve_post(post_id):
         )
 
         post.improved_caption = improved_caption
-        post.improved_at = datetime.utcnow()
+        post.improved_at = utc_now()
 
         brand_context = _caption_helper("build_brand_context")(current_user.id)
 
@@ -693,7 +737,7 @@ def studio_action(post_id, action):
         )
 
         post.improved_caption = rewritten_caption
-        post.improved_at = datetime.utcnow()
+        post.improved_at = utc_now()
 
         brand_context = _studio_helper("build_brand_context")(current_user.id)
 
@@ -777,7 +821,7 @@ def studio_regrade(post_id):
 
         post.grade_result = grade_result
         post.grade_score = overall_score
-        post.graded_at = datetime.utcnow()
+        post.graded_at = utc_now()
 
         _studio_helper("update_brand_coach")(post, brand_context)
 

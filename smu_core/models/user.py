@@ -1,15 +1,14 @@
-from datetime import datetime
-
 from flask_login import UserMixin
 
 from smu_core.extensions import db
+from smu_core.services.time_utils import utc_now
 
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utc_now)
 
     brand_brief = db.relationship(
         "BrandBrief",
@@ -25,4 +24,3 @@ class User(UserMixin, db.Model):
 )
 
     posts = db.relationship("Post", backref="user", lazy=True)
-

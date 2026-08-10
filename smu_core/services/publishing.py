@@ -4,6 +4,7 @@ import requests
 from flask_login import current_user
 
 from smu_core.models import ConnectedAccount, Post
+from smu_core.services import linkedin_publishing
 from smu_core.services.time_utils import utc_now
 
 
@@ -223,6 +224,8 @@ def publish_post_to_make(
     get_ordered_carousel_posts_func=None,
     build_single_payload_func=None,
     log_single_image_diagnostics_func=None,
+    get_user_connected_accounts_func=None,
+    publish_linkedin_text_post_func=None,
 ):
     if user_id is None:
         raise ValueError("user_id is required for publishing")
@@ -241,25 +244,42 @@ def publish_post_to_make(
         build_single_payload_func = build_single_payload
     if log_single_image_diagnostics_func is None:
         log_single_image_diagnostics_func = lambda post, enabled_platforms: None
+    if get_user_connected_accounts_func is None:
+        get_user_connected_accounts_func = get_user_connected_accounts
+    if publish_linkedin_text_post_func is None:
+        publish_linkedin_text_post_func = linkedin_publishing.publish_text_only_post
 
     selected_platforms = [
         platform.strip().lower()
         for platform in (post.platforms or "").split(",")
         if platform.strip()
     ]
+    linkedin_selected = "linkedin" in selected_platforms
 
     enabled_platforms = get_enabled_platforms_func(
         selected_platforms,
         user_id=user_id,
     )
 
-    if not enabled_platforms:
+    accounts = get_user_connected_accounts_func(user_id)
+    if linkedin_selected:
+        linkedin_publishing._validate_account(accounts, now_provider=utc_now)
+        linkedin_publishing.validate_text_only_eligibility(post)
+
+    make_enabled_platforms = [
+        platform for platform in enabled_platforms if platform != "linkedin"
+    ]
+
+    if not enabled_platforms and not linkedin_selected:
         raise Exception(
             "No connected platforms are enabled for this post. "
             "Check Connected Accounts."
         )
 
     if post.group_id:
+        if linkedin_selected:
+            raise Exception("LinkedIn carousel publishing is not available yet.")
+
         payload = build_carousel_payload_func(
             post.group_id,
             user_id=user_id,
@@ -279,7 +299,13 @@ def publish_post_to_make(
                 "Add it in Connected Accounts."
             )
 
-        payload["platforms"] = enabled_platforms
+        if not make_enabled_platforms:
+            raise Exception(
+                "No connected Make-supported platforms are enabled for this post. "
+                "Check Connected Accounts."
+            )
+
+        payload["platforms"] = make_enabled_platforms
         response = send_payload_func(payload, webhook_url)
 
         group_posts = get_ordered_carousel_posts_func(
@@ -294,26 +320,40 @@ def publish_post_to_make(
         return response
 
     payload = build_single_payload_func(post)
-    payload["platforms"] = enabled_platforms
-    log_single_image_diagnostics_func(post, enabled_platforms)
+    payload["platforms"] = make_enabled_platforms
+    log_single_image_diagnostics_func(post, make_enabled_platforms)
 
-    if "instagram" in enabled_platforms and not post.file_url:
+    if "instagram" in make_enabled_platforms and not post.file_url:
         raise Exception("Instagram single-image posts require an image URL.")
 
-    webhook_url = get_user_make_webhook_func(
-        "single",
-        user_id=user_id,
-    )
+    make_response = None
+    linkedin_response = None
 
-    if not webhook_url:
-        raise Exception(
-            "No single-post webhook is configured. "
-            "Add it in Connected Accounts."
+    if make_enabled_platforms:
+        webhook_url = get_user_make_webhook_func(
+            "single",
+            user_id=user_id,
         )
 
-    response = send_payload_func(payload, webhook_url)
+        if not webhook_url:
+            raise Exception(
+                "No single-post webhook is configured. "
+                "Add it in Connected Accounts."
+            )
 
-    post.status = "sent_to_make"
-    post.sent_at = utc_now()
+        make_response = send_payload_func(payload, webhook_url)
 
-    return response
+    if linkedin_selected:
+        linkedin_response = publish_linkedin_text_post_func(post, accounts)
+
+    if make_response is not None:
+        post.status = "sent_to_make"
+        post.sent_at = utc_now()
+    elif linkedin_response is not None:
+        post.status = "published"
+        post.sent_at = utc_now()
+
+    if make_response is not None:
+        return make_response
+
+    return linkedin_response

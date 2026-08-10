@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from smu_core.extensions import db
+from smu_core.services.time_utils import utc_now
 
 
 class Post(db.Model):
@@ -10,7 +9,7 @@ class Post(db.Model):
     prompt = db.Column(db.Text)
     caption = db.Column(db.Text)
     status = db.Column(db.String(50), default="draft")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
     sent_at = db.Column(db.DateTime)
     scheduled_time = db.Column(db.DateTime, nullable=True)
     group_id = db.Column(db.String(100), nullable=True)
@@ -35,4 +34,3 @@ class Post(db.Model):
     lazy=True,
     cascade="all, delete-orphan"
 )
-

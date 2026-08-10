@@ -1,6 +1,5 @@
-from datetime import datetime
-
 from smu_core.extensions import db
+from smu_core.services.time_utils import utc_now
 
 
 class BetaApplication(db.Model):
@@ -12,4 +11,4 @@ class BetaApplication(db.Model):
     challenge = db.Column(db.Text, nullable=False)
     consent = db.Column(db.Boolean, default=False, nullable=False)
     status = db.Column(db.String(50), default="new", nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow())
+    created_at = db.Column(db.DateTime, default=utc_now)
