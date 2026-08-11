@@ -59,7 +59,7 @@ Recommended SMU MVP support:
 | Content type | LinkedIn support | SMU MVP status |
 | --- | --- | --- |
 | Text-only | Organic supported | Implemented for personal profiles |
-| Single image | Organic supported after image upload | Deferred |
+| Single image | Organic supported after image upload | Implemented for personal profiles |
 | MultiImage | Organic supported after uploading 2-20 images | MVP 2 |
 | Video | Organic supported after video upload/finalize | Later MVP |
 | Document | Organic supported | Out of scope initially |
@@ -181,9 +181,10 @@ Important details:
 - post creation references the image URN in `content.media.id`
 - image permissions depend on owner type
 
-SMU currently stores media as Cloudinary URLs. A future LinkedIn adapter must
-download or otherwise resolve the binary media from the stored SMU asset before
-uploading it to LinkedIn.
+SMU stores media as Cloudinary/public URLs. The current LinkedIn single-image
+slice downloads the stored public image, validates that the response is JPEG,
+PNG or GIF, uploads the bytes to the LinkedIn-provided upload URL, then creates
+the personal-profile post with the returned image URN.
 
 ## 8. MultiImage Flow
 
@@ -428,9 +429,10 @@ Recommended smallest safe sequence:
 - OAuth connection flow
 - personal profile text publishing
 - text-only post
+- personal profile single-image publishing
 - scheduled text-only post
+- scheduled single-image post
 - adapter tests with mocked LinkedIn HTTP calls
-- single-image post remains deferred
 
 ### MVP 2
 
@@ -468,13 +470,15 @@ Adapter tests:
 - headers include Authorization, LinkedIn version and Rest.li protocol version
 - text-only post payload
 - image upload initialize request
-- binary image upload handling when implemented
+- binary image upload handling
 - single-image post payload
+- single-image post creation sequence
 - MultiImage payload and ordering
 - video upload sequence when implemented
 - LinkedIn API failure mapping
 - rate-limit response handling
 - LinkedIn text-only direct publishing
+- LinkedIn single-image direct publishing
 - LinkedIn-only scheduled publishing
 - mixed Make + LinkedIn publishing split
 

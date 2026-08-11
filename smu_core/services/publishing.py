@@ -226,6 +226,8 @@ def publish_post_to_make(
     log_single_image_diagnostics_func=None,
     get_user_connected_accounts_func=None,
     publish_linkedin_text_post_func=None,
+    prepare_linkedin_post_func=None,
+    publish_prepared_linkedin_post_func=None,
 ):
     if user_id is None:
         raise ValueError("user_id is required for publishing")
@@ -246,8 +248,18 @@ def publish_post_to_make(
         log_single_image_diagnostics_func = lambda post, enabled_platforms: None
     if get_user_connected_accounts_func is None:
         get_user_connected_accounts_func = get_user_connected_accounts
-    if publish_linkedin_text_post_func is None:
-        publish_linkedin_text_post_func = linkedin_publishing.publish_text_only_post
+    if prepare_linkedin_post_func is None:
+        prepare_linkedin_post_func = linkedin_publishing.prepare_post_for_publish
+    if publish_prepared_linkedin_post_func is None:
+        if publish_linkedin_text_post_func is not None:
+            publish_prepared_linkedin_post_func = (
+                lambda prepared: publish_linkedin_text_post_func(
+                    prepared.post,
+                    prepared.connected_account,
+                )
+            )
+        else:
+            publish_prepared_linkedin_post_func = linkedin_publishing.publish_prepared_post
 
     selected_platforms = [
         platform.strip().lower()
@@ -262,9 +274,9 @@ def publish_post_to_make(
     )
 
     accounts = get_user_connected_accounts_func(user_id)
+    prepared_linkedin_post = None
     if linkedin_selected:
-        linkedin_publishing._validate_account(accounts, now_provider=utc_now)
-        linkedin_publishing.validate_text_only_eligibility(post)
+        prepared_linkedin_post = prepare_linkedin_post_func(post, accounts)
 
     make_enabled_platforms = [
         platform for platform in enabled_platforms if platform != "linkedin"
@@ -344,7 +356,7 @@ def publish_post_to_make(
         make_response = send_payload_func(payload, webhook_url)
 
     if linkedin_selected:
-        linkedin_response = publish_linkedin_text_post_func(post, accounts)
+        linkedin_response = publish_prepared_linkedin_post_func(prepared_linkedin_post)
 
     if make_response is not None:
         post.status = "sent_to_make"

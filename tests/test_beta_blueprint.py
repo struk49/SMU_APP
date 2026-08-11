@@ -34,6 +34,10 @@ def test_beta_routes_preserve_old_endpoints_and_methods(module):
     expected = {
         "/beta/apply": ("beta_apply", {"GET", "POST"}),
         "/admin/beta": ("admin_beta", {"GET"}),
+        "/admin/beta/<int:application_id>/status": (
+            "update_beta_application_status",
+            {"POST"},
+        ),
     }
 
     for path, (endpoint, methods) in expected.items():
@@ -48,6 +52,9 @@ def test_beta_url_for_compatibility(module):
     with module.app.test_request_context():
         assert url_for("beta_apply") == "/beta/apply"
         assert url_for("admin_beta") == "/admin/beta"
+        assert url_for("update_beta_application_status", application_id=7) == (
+            "/admin/beta/7/status"
+        )
 
 
 def test_beta_apply_get_preserves_template_and_public_access(client, app):
@@ -181,6 +188,56 @@ def test_admin_beta_renders_applications_and_feedback(client, module, app):
     assert "Admin Visible Applicant" in html
     assert "Pinterest" in html
     assert "Nice dashboard." in html
+
+
+def test_admin_can_update_beta_application_status(client, module, app):
+    app.config["SMU_ADMIN_EMAILS"] = {"admin@example.com"}
+    admin = create_user(module, email="admin@example.com")
+    application = module.BetaApplication(
+        name="Approve Me",
+        email="approve-me@example.com",
+        primary_platform="LinkedIn",
+        posting_frequency="6-15 posts",
+        challenge="Planning ahead.",
+        consent=True,
+    )
+    module.db.session.add(application)
+    module.db.session.commit()
+    login(client, admin)
+
+    response = client.post(
+        f"/admin/beta/{application.id}/status",
+        data={"status": "approved"},
+        follow_redirects=True,
+    )
+    saved_application = module.db.session.get(module.BetaApplication, application.id)
+
+    assert response.status_code == 200
+    assert "Beta application status updated." in response.get_data(as_text=True)
+    assert saved_application.status == "approved"
+
+
+def test_admin_status_update_rejects_non_admin(client, module):
+    user = create_user(module, email="user-status@example.com")
+    application = module.BetaApplication(
+        name="Hidden",
+        email="hidden@example.com",
+        primary_platform="Instagram",
+        posting_frequency="1-5 posts",
+        challenge="Planning.",
+        consent=True,
+    )
+    module.db.session.add(application)
+    module.db.session.commit()
+    login(client, user)
+
+    response = client.post(
+        f"/admin/beta/{application.id}/status",
+        data={"status": "approved"},
+    )
+
+    assert response.status_code == 404
+    assert module.db.session.get(module.BetaApplication, application.id).status == "new"
 
 
 def test_beta_application_model_compatibility_remains(module):

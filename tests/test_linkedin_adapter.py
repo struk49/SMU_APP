@@ -217,6 +217,58 @@ def test_initialize_image_upload_rejects_malformed_response(body):
         )
 
 
+def test_upload_image_binary_puts_bytes_with_authorization_and_content_type():
+    calls = []
+
+    def fake_put(url, **kwargs):
+        calls.append((url, kwargs))
+        return FakeResponse(201, None)
+
+    result = linkedin.upload_image_binary(
+        "token",
+        "https://upload.linkedin.com/image?signature=opaque",
+        b"image-bytes",
+        "image/jpeg",
+        put_request=fake_put,
+        timeout=17,
+    )
+
+    assert result == linkedin.LinkedInImageBinaryUpload(status_code=201)
+    assert calls == [
+        (
+            "https://upload.linkedin.com/image?signature=opaque",
+            {
+                "headers": {
+                    "Authorization": "Bearer token",
+                    "Content-Type": "image/jpeg",
+                },
+                "data": b"image-bytes",
+                "timeout": 17,
+            },
+        )
+    ]
+
+
+def test_upload_image_binary_raises_for_failed_upload_without_leaking_token():
+    token = "secret-token"
+
+    with pytest.raises(linkedin.LinkedInAPIError) as exc_info:
+        linkedin.upload_image_binary(
+            token,
+            "https://upload.linkedin.com/image?signature=opaque",
+            b"image-bytes",
+            "image/png",
+            put_request=lambda *args, **kwargs: FakeResponse(
+                403,
+                {"message": "Forbidden", "code": "ACCESS_DENIED"},
+            ),
+        )
+
+    assert exc_info.value.stage == "upload_image_binary"
+    assert exc_info.value.status_code == 403
+    assert token not in str(exc_info.value)
+
+
 def test_single_image_payload_maps_media_id_exactly():
     payload = linkedin.build_single_image_post_payload(
         PERSON_URN,
@@ -237,6 +289,86 @@ def test_single_image_payload_maps_media_id_exactly():
         "isReshareDisabledByAuthor": False,
         "content": {"media": {"id": IMAGE_URN}},
     }
+
+
+def test_create_single_image_post_initializes_uploads_binary_and_creates_post():
+    post_calls = []
+    put_calls = []
+
+    def fake_initialize_or_create_post(url, **kwargs):
+        post_calls.append((url, kwargs))
+        if url == linkedin.LINKEDIN_IMAGES_INITIALIZE_UPLOAD_ENDPOINT:
+            return FakeResponse(
+                200,
+                {
+                    "value": {
+                        "uploadUrl": "https://upload.linkedin.com/image?signature=opaque",
+                        "image": IMAGE_URN,
+                    }
+                },
+            )
+        return FakeResponse(
+            201,
+            {"id": "ignored-body-id"},
+            {"x-restli-id": "urn:li:share:999"},
+        )
+
+    def fake_put(url, **kwargs):
+        put_calls.append((url, kwargs))
+        return FakeResponse(201, None)
+
+    result = linkedin.create_single_image_post(
+        "token",
+        PERSON_URN,
+        "Image caption",
+        b"image-bytes",
+        "image/png",
+        initialize_post_request=fake_initialize_or_create_post,
+        upload_put_request=fake_put,
+        post_request=fake_initialize_or_create_post,
+        timeout=22,
+    )
+
+    assert result == linkedin.LinkedInPostResult(
+        post_urn="urn:li:share:999",
+        status_code=201,
+        response_body={"id": "ignored-body-id"},
+    )
+    assert post_calls == [
+        (
+            linkedin.LINKEDIN_IMAGES_INITIALIZE_UPLOAD_ENDPOINT,
+            {
+                "headers": linkedin.build_headers("token"),
+                "json": linkedin.build_initialize_image_upload_payload(PERSON_URN),
+                "timeout": 22,
+            },
+        ),
+        (
+            linkedin.LINKEDIN_POSTS_ENDPOINT,
+            {
+                "headers": linkedin.build_headers("token"),
+                "json": linkedin.build_single_image_post_payload(
+                    PERSON_URN,
+                    "Image caption",
+                    IMAGE_URN,
+                ),
+                "timeout": 22,
+            },
+        ),
+    ]
+    assert put_calls == [
+        (
+            "https://upload.linkedin.com/image?signature=opaque",
+            {
+                "headers": {
+                    "Authorization": "Bearer token",
+                    "Content-Type": "image/png",
+                },
+                "data": b"image-bytes",
+                "timeout": 22,
+            },
+        )
+    ]
 
 
 def test_adapter_does_not_log_binary_or_token(caplog):

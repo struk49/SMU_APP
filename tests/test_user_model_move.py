@@ -33,6 +33,19 @@ def test_user_loader_returns_correct_user(app, module):
 
 
 def test_registration_creates_hashed_user_and_logs_in(client, module):
+    module.db.session.add(
+        module.BetaApplication(
+            name="Approved User",
+            email="new@example.com",
+            primary_platform="LinkedIn",
+            posting_frequency="6-15 posts",
+            challenge="Planning content.",
+            consent=True,
+            status="approved",
+        )
+    )
+    module.db.session.commit()
+
     response = client.post(
         "/register",
         data={
@@ -102,11 +115,11 @@ def test_logout_clears_session(client, module):
         assert "_user_id" not in session
 
 
-def test_protected_routes_still_redirect_unauthenticated_users(client):
+def test_public_root_renders_landing_for_unauthenticated_users(client):
     response = client.get("/")
 
-    assert response.status_code == 302
-    assert "/login" in response.location
+    assert response.status_code == 200
+    assert "Turn One Idea Into Content Everywhere" in response.get_data(as_text=True)
 
 
 def test_user_relationships_still_work(app, module):

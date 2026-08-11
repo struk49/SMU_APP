@@ -12,8 +12,15 @@
                     <h1 class="h3 fw-bold">Create your SMU account</h1>
 
                     <p class="text-muted">
-                        Start creating and managing your AI-powered content in SMU.
+                        SMU is currently in private beta. Registration is
+                        available to approved beta users.
                     </p>
+                    <a
+                        href="{{ url_for('beta_apply') }}"
+                        class="fw-semibold text-decoration-none"
+                    >
+                        Apply for Beta Access
+                    </a>
                 </div>
 
                 <form method="POST">
@@ -28,6 +35,7 @@
                             name="email"
                             class="form-control form-control-lg"
                             placeholder="you@example.com"
+                            value="{{ email or '' }}"
                             required
                         >
                     </div>

@@ -65,6 +65,13 @@ class LinkedInImageUpload:
     image_urn: str
 
 
+@dataclass(frozen=True)
+class LinkedInImageBinaryUpload:
+    """Stable subset of a LinkedIn binary image upload response."""
+
+    status_code: int
+
+
 def build_headers(
     access_token: str,
     api_version: str = LINKEDIN_API_VERSION,
@@ -171,6 +178,94 @@ def create_text_post(
         timeout=timeout,
     )
     _raise_for_http_failure(response, "create_text_post")
+
+    return LinkedInPostResult(
+        post_urn=_response_header(response, "x-restli-id"),
+        status_code=getattr(response, "status_code", 0),
+        response_body=_safe_json(response),
+    )
+
+
+def upload_image_binary(
+    access_token: str,
+    upload_url: str,
+    image_bytes: bytes,
+    content_type: str,
+    *,
+    put_request: Callable[..., Any] = requests.put,
+    timeout: int = 30,
+) -> LinkedInImageBinaryUpload:
+    """Upload image bytes to a LinkedIn Images API upload URL."""
+
+    if not access_token:
+        raise ValueError("LinkedIn access token is required.")
+    if not upload_url:
+        raise ValueError("LinkedIn image upload URL is required.")
+    if not image_bytes:
+        raise ValueError("LinkedIn image bytes are required.")
+    if not content_type:
+        raise ValueError("LinkedIn image content type is required.")
+
+    response = put_request(
+        upload_url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": content_type,
+        },
+        data=image_bytes,
+        timeout=timeout,
+    )
+    _raise_for_http_failure(response, "upload_image_binary")
+
+    return LinkedInImageBinaryUpload(
+        status_code=getattr(response, "status_code", 0),
+    )
+
+
+def create_single_image_post(
+    access_token: str,
+    author_urn: str,
+    commentary: str,
+    image_bytes: bytes,
+    content_type: str,
+    *,
+    visibility: str = "PUBLIC",
+    api_version: str = LINKEDIN_API_VERSION,
+    initialize_post_request: Callable[..., Any] = requests.post,
+    upload_put_request: Callable[..., Any] = requests.put,
+    post_request: Callable[..., Any] = requests.post,
+    timeout: int = 30,
+) -> LinkedInPostResult:
+    """Create a LinkedIn single-image post through injectable HTTP callables."""
+
+    upload = initialize_image_upload(
+        access_token,
+        author_urn,
+        api_version=api_version,
+        post_request=initialize_post_request,
+        timeout=timeout,
+    )
+    upload_image_binary(
+        access_token,
+        upload.upload_url,
+        image_bytes,
+        content_type,
+        put_request=upload_put_request,
+        timeout=timeout,
+    )
+
+    response = post_request(
+        LINKEDIN_POSTS_ENDPOINT,
+        headers=build_headers(access_token, api_version=api_version),
+        json=build_single_image_post_payload(
+            author_urn,
+            commentary,
+            upload.image_urn,
+            visibility=visibility,
+        ),
+        timeout=timeout,
+    )
+    _raise_for_http_failure(response, "create_single_image_post")
 
     return LinkedInPostResult(
         post_urn=_response_header(response, "x-restli-id"),

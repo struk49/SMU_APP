@@ -4,6 +4,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from smu_core.extensions import db
 from smu_core.models import User
+from smu_core.services.beta_access import is_email_approved_for_beta
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -37,6 +38,13 @@ def register():
         if existing_user:
             flash("An account with that email already exists.", "danger")
             return redirect(url_for("register"))
+
+        if not is_email_approved_for_beta(email):
+            flash(
+                "SMU is currently in private beta. Apply for access using the Join Beta form.",
+                "warning",
+            )
+            return render_template("register.html", email=email), 403
 
         user = User(
             email=email,

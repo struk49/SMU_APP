@@ -45,11 +45,13 @@ def test_dashboard_url_for_compatibility(module):
         assert url_for("index") == "/"
 
 
-def test_dashboard_requires_login(client):
+def test_dashboard_root_renders_public_landing_for_anonymous_users(client):
     response = client.get("/")
+    html = response.get_data(as_text=True)
 
-    assert response.status_code == 302
-    assert "/login" in response.location
+    assert response.status_code == 200
+    assert "Turn One Idea Into Content Everywhere" in html
+    assert "Join the Beta" in html
 
 
 def test_dashboard_renders_same_template_and_context_keys(client, app, module):

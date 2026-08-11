@@ -6,9 +6,9 @@ def test_public_landing_page_renders_without_login(client):
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Create Once. Publish Everywhere." in html
-    assert "Join Beta" in html
-    assert "SMU v1.0.0-rc1" in html
+    assert "Turn One Idea Into Content Everywhere" in html
+    assert "Join the Beta" in html
+    assert "© 2026 SMU" in html
 
 
 def test_legacy_branding_is_not_rendered_on_public_pages(client):

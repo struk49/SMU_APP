@@ -1,5 +1,5 @@
 from flask import Blueprint, current_app, render_template, request
-from flask_login import current_user, login_required
+from flask_login import current_user
 
 from smu_core.extensions import db
 from smu_core.models import Post
@@ -18,8 +18,10 @@ def _dashboard_helper(name):
     return helper
 
 
-@login_required
 def index():
+    if not current_user.is_authenticated:
+        return render_template("landing.html")
+
     status_filter = request.args.get("status", "all")
     type_filter = request.args.get("type", "all")
     platform_filter = request.args.get("platform", "all")

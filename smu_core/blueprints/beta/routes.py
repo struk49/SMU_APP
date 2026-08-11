@@ -109,12 +109,38 @@ def admin_beta():
     )
 
 
+@login_required
+def update_beta_application_status(application_id):
+    if not is_current_user_admin():
+        abort(404)
+
+    status = request.form.get("status", "").strip().lower()
+    if status not in {"new", "approved", "rejected"}:
+        flash("Invalid beta application status.", "danger")
+        return redirect(url_for("admin_beta"))
+
+    application = db.session.get(BetaApplication, application_id)
+    if application is None:
+        abort(404)
+
+    application.status = status
+    db.session.commit()
+    flash("Beta application status updated.", "success")
+    return redirect(url_for("admin_beta"))
+
+
 @beta_bp.record_once
 def register_beta_routes(state):
     app = state.app
     routes = [
         ("/beta/apply", "beta_apply", beta_apply, ["GET", "POST"]),
         ("/admin/beta", "admin_beta", admin_beta, ["GET"]),
+        (
+            "/admin/beta/<int:application_id>/status",
+            "update_beta_application_status",
+            update_beta_application_status,
+            ["POST"],
+        ),
     ]
 
     for rule, endpoint, view_func, methods in routes:

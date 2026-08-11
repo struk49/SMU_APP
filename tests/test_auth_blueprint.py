@@ -66,6 +66,19 @@ def test_register_get_preserves_template(client, app):
 
 
 def test_registration_creates_hashed_user_and_logs_in(client, module):
+    module.db.session.add(
+        module.BetaApplication(
+            name="Approved Auth",
+            email="new-auth@example.com",
+            primary_platform="LinkedIn",
+            posting_frequency="6-15 posts",
+            challenge="Planning content.",
+            consent=True,
+            status="approved",
+        )
+    )
+    module.db.session.commit()
+
     response = client.post(
         "/register",
         data={
@@ -115,6 +128,21 @@ def test_registration_validation_redirects_back_to_register(client, module):
     assert response.status_code == 302
     assert response.location.endswith("/register")
     assert module.User.query.count() == 0
+
+
+def test_unapproved_registration_is_blocked(client, module):
+    response = client.post(
+        "/register",
+        data={
+            "email": "unapproved-auth@example.com",
+            "password": "secret-password",
+            "confirm_password": "secret-password",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "SMU is currently in private beta" in response.get_data(as_text=True)
+    assert module.User.query.filter_by(email="unapproved-auth@example.com").first() is None
 
 
 def test_login_get_preserves_template(client, app):

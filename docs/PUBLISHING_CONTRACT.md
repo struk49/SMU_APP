@@ -20,9 +20,10 @@ Publishing-related responsibilities are split as follows:
   wrappers.
 - `smu_core.services.publishing`: connected-account lookup, enabled-platform
   filtering, webhook resolution, Make.com payload creation, Make.com delivery,
-  direct LinkedIn text-only orchestration and publish status updates.
-- `smu_core.services.linkedin_publishing`: LinkedIn text-only validation,
-  account checks and adapter invocation for personal profiles.
+  direct LinkedIn orchestration and publish status updates.
+- `smu_core.services.linkedin_publishing`: LinkedIn text/single-image
+  validation, media download checks, account checks and adapter invocation for
+  personal profiles.
 - `smu_core.services.scheduler`: scheduled-post orchestration, due-post lookup,
   carousel de-duplication, scheduled publish invocation and rollback handling.
 - `smu_core.services.media`: JPEG normalization, Cloudinary upload orchestration
@@ -42,8 +43,8 @@ Typical publishing lifecycle:
 4. Selected platforms are read from the post.
 5. Connected Accounts filter the selected platforms.
 6. Make-supported platforms are sent through Make.com.
-7. LinkedIn text-only personal-profile posts are sent through LinkedIn's direct
-   API.
+7. LinkedIn text-only and single-image personal-profile posts are sent through
+   LinkedIn's direct API.
 8. SMU updates `status` and `sent_at` after successful delivery.
 9. Manual or scheduled publishing completes.
 
@@ -239,7 +240,7 @@ draft or scheduled
 -> sent_to_make
 ```
 
-Current successful LinkedIn-only text transition:
+Current successful LinkedIn-only text or single-image transition:
 
 ```text
 draft or scheduled
@@ -252,7 +253,8 @@ On success:
 - single posts receive `sent_at`
 - all posts in a successfully sent carousel group are marked `sent_to_make`
 - all posts in a successfully sent carousel group receive `sent_at`
-- LinkedIn-only text posts are marked `published`, not `sent_to_make`
+- LinkedIn-only text and single-image posts are marked `published`, not
+  `sent_to_make`
 - mixed Make + LinkedIn single posts remain `sent_to_make` because Make delivery
   occurred
 
@@ -260,9 +262,9 @@ The application does not currently confirm final platform publication status
 from Make in this service. Any later platform-side state such as published
 analytics is outside this contract.
 
-LinkedIn text-only publishing uses the direct LinkedIn Posts API for personal
-profiles. LinkedIn image, MultiImage, video and organization publishing remain
-outside this contract.
+LinkedIn text-only and single-image publishing use the direct LinkedIn Posts and
+Images APIs for personal profiles. LinkedIn MultiImage, video and organization
+publishing remain outside this contract.
 
 Scheduled failures are marked `schedule_failed` by the scheduler service after a
 rollback and failed-post isolation attempt.
@@ -275,6 +277,8 @@ Failure behavior:
 - missing webhook raises before contacting Make
 - missing Instagram single-image URL raises before contacting Make
 - missing carousel payload raises before contacting Make
+- unsupported LinkedIn image media raises before contacting Make or LinkedIn
+  upload/post creation in mixed-platform publishing
 - non-2xx Make responses raise through `response.raise_for_status()`
 - network failures from `requests.post` propagate as publish failures
 - scheduler processing rolls back the session for failed posts
@@ -299,6 +303,10 @@ media count.
 - `get_enabled_platforms_for_user`
 - `get_user_make_webhook`
 - `publish_post_to_make`
+- `prepare_linkedin_post`
+- `publish_prepared_linkedin_post`
+- `publish_linkedin_post`
+- `publish_linkedin_text_post`
 
 These wrappers preserve:
 
@@ -330,6 +338,7 @@ Current regression coverage includes:
 - cross-user carousel access protection
 - TikTok and Content Pack helper compatibility
 - media normalization and Cloudinary wrapper contracts
+- LinkedIn text and single-image personal-profile publishing
 
 Tests mock external HTTP/API calls. Unit and regression tests must not call real
 Make webhooks, Cloudinary, OpenAI or TikTok network paths.

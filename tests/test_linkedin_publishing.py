@@ -17,6 +17,17 @@ class FakeMakeResponse:
     status_code = 200
 
 
+class FakeImageResponse:
+    def __init__(self, content_type="image/jpeg", content=b"image-bytes", status_code=200):
+        self.status_code = status_code
+        self.headers = {"Content-Type": content_type}
+        self.content = content
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise RuntimeError("HTTP failure")
+
+
 def make_linkedin_account(module, user, **overrides):
     account = create_accounts(
         module,
@@ -48,6 +59,14 @@ def make_text_only_post(module, user, *, platforms="linkedin", status="draft"):
     post = create_post(module, user, platforms=platforms, status=status)
     post.file_url = ""
     post.file_type = "text"
+    module.db.session.commit()
+    return post
+
+
+def make_image_post(module, user, *, platforms="linkedin", status="draft"):
+    post = create_post(module, user, platforms=platforms, status=status)
+    post.file_url = "https://cdn.example.test/image.jpg"
+    post.file_type = "image"
     module.db.session.commit()
     return post
 
@@ -150,6 +169,106 @@ def test_empty_caption_and_media_posts_fail_before_adapter(app, module):
     assert "require a caption" in str(blank_error.value)
     assert "image publishing is not available yet" in str(media_error.value)
     assert calls == []
+
+
+def test_generic_linkedin_image_publish_downloads_media_and_calls_image_adapter(app, module):
+    user = create_user(module)
+    account = make_linkedin_account(module, user)
+    post = make_image_post(module, user)
+    get_calls = []
+    image_calls = []
+    text_calls = []
+
+    result = linkedin_publishing.publish_post(
+        post,
+        account,
+        fetch_image_media_func=lambda url: (
+            get_calls.append(url)
+            or linkedin_publishing.LinkedInMediaDownload(
+                image_bytes=b"png-bytes",
+                content_type="image/png",
+                byte_length=len(b"png-bytes"),
+            )
+        ),
+        create_text_post_func=lambda *args, **kwargs: text_calls.append(args),
+        create_single_image_post_func=(
+            lambda *args, **kwargs: image_calls.append(args) or FakeLinkedInResult()
+        ),
+    )
+
+    assert result.status_code == 201
+    assert get_calls == ["https://cdn.example.test/image.jpg"]
+    assert text_calls == []
+    assert image_calls == [
+        (
+            "token-secret",
+            "urn:li:person:member123",
+            "Caption",
+            b"png-bytes",
+            "image/png",
+        )
+    ]
+
+
+@pytest.mark.parametrize("content_type", ["image/jpeg", "image/png", "image/gif"])
+def test_linkedin_image_media_accepts_supported_content_types(content_type):
+    media = linkedin_publishing.fetch_image_media(
+        "https://cdn.example.test/image",
+        get_request=lambda *args, **kwargs: FakeImageResponse(content_type=content_type),
+    )
+
+    assert media.content_type == content_type
+    assert media.image_bytes == b"image-bytes"
+    assert media.byte_length == len(b"image-bytes")
+
+
+def test_linkedin_image_media_rejects_unsupported_content_type():
+    with pytest.raises(linkedin_publishing.LinkedInPublishingError) as exc_info:
+        linkedin_publishing.fetch_image_media(
+            "https://cdn.example.test/image",
+            get_request=lambda *args, **kwargs: FakeImageResponse(
+                content_type="image/webp",
+            ),
+        )
+
+    assert "JPEG, PNG and GIF" in str(exc_info.value)
+
+
+def test_linkedin_image_post_without_url_fails_before_adapter(app, module):
+    user = create_user(module)
+    account = make_linkedin_account(module, user)
+    post = make_image_post(module, user)
+    post.file_url = ""
+    module.db.session.commit()
+    calls = []
+
+    with pytest.raises(linkedin_publishing.LinkedInPublishingError) as exc_info:
+        linkedin_publishing.publish_post(
+            post,
+            account,
+            create_single_image_post_func=lambda *args, **kwargs: calls.append(args),
+        )
+
+    assert "image URL" in str(exc_info.value)
+    assert calls == []
+
+
+def test_linkedin_carousel_and_video_remain_unsupported(app, module):
+    user = create_user(module)
+    account = make_linkedin_account(module, user)
+    carousel_post = make_image_post(module, user)
+    carousel_post.group_id = "carousel-1"
+    video_post = make_image_post(module, user)
+    video_post.file_type = "video"
+    module.db.session.commit()
+
+    with pytest.raises(linkedin_publishing.LinkedInPublishingError) as carousel_error:
+        linkedin_publishing.publish_post(carousel_post, account)
+    with pytest.raises(linkedin_publishing.LinkedInPublishingError) as video_error:
+        linkedin_publishing.publish_post(video_post, account)
+
+    assert "carousel publishing is not available yet" in str(carousel_error.value)
+    assert "single-image" in str(video_error.value)
 
 
 def test_adapter_error_is_translated_without_token(app, module):
@@ -258,18 +377,111 @@ def test_mixed_media_post_with_linkedin_fails_before_make_or_linkedin(app, modul
     make_calls = []
     linkedin_calls = []
 
+    publishing.publish_post_to_make(
+        post,
+        user.id,
+        send_payload_func=lambda payload, webhook_url: (
+            make_calls.append((payload, webhook_url)) or FakeMakeResponse()
+        ),
+        prepare_linkedin_post_func=lambda *args, **kwargs: "prepared-linkedin-image",
+        publish_prepared_linkedin_post_func=lambda *args, **kwargs: (
+            linkedin_calls.append(args) or FakeLinkedInResult()
+        ),
+    )
+
+    assert make_calls[0][0]["platforms"] == ["instagram"]
+    assert make_calls[0][1] == "https://make.test/single"
+    assert linkedin_calls == [("prepared-linkedin-image",)]
+    assert post.status == "sent_to_make"
+
+
+def test_mixed_instagram_facebook_linkedin_image_preserves_make_order_and_linkedin_once(
+    app,
+    module,
+):
+    from smu_core.services import publishing
+
+    user = create_user(module)
+    make_linkedin_account(module, user)
+    post = make_image_post(module, user, platforms="instagram,facebook,linkedin")
+    make_calls = []
+    linkedin_calls = []
+
+    publishing.publish_post_to_make(
+        post,
+        user.id,
+        send_payload_func=lambda payload, webhook_url: (
+            make_calls.append((payload, webhook_url)) or FakeMakeResponse()
+        ),
+        prepare_linkedin_post_func=lambda *args, **kwargs: "prepared-linkedin-image",
+        publish_prepared_linkedin_post_func=lambda *args, **kwargs: (
+            linkedin_calls.append(args) or FakeLinkedInResult()
+        ),
+    )
+
+    assert make_calls[0][0]["platforms"] == ["instagram", "facebook"]
+    assert linkedin_calls == [("prepared-linkedin-image",)]
+    assert post.status == "sent_to_make"
+
+
+def test_linkedin_only_single_image_does_not_require_make_and_marks_published(
+    app,
+    module,
+):
+    from smu_core.services import publishing
+
+    user = create_user(module)
+    make_linkedin_account(module, user)
+    post = make_image_post(module, user, platforms="linkedin")
+    make_calls = []
+    linkedin_calls = []
+
+    publishing.publish_post_to_make(
+        post,
+        user.id,
+        send_payload_func=lambda *args, **kwargs: make_calls.append(args),
+        prepare_linkedin_post_func=lambda *args, **kwargs: "prepared-linkedin-image",
+        publish_prepared_linkedin_post_func=lambda *args, **kwargs: (
+            linkedin_calls.append(args) or FakeLinkedInResult()
+        ),
+    )
+
+    assert make_calls == []
+    assert linkedin_calls == [("prepared-linkedin-image",)]
+    assert post.status == "published"
+    assert post.sent_at is not None
+
+
+def test_invalid_linkedin_image_media_in_mixed_post_blocks_make_and_linkedin(app, module):
+    from smu_core.services import publishing
+
+    user = create_user(module)
+    make_linkedin_account(module, user)
+    post = make_image_post(module, user, platforms="instagram,linkedin")
+    make_calls = []
+    linkedin_calls = []
+
     with pytest.raises(linkedin_publishing.LinkedInPublishingError) as exc_info:
         publishing.publish_post_to_make(
             post,
             user.id,
             send_payload_func=lambda *args, **kwargs: make_calls.append(args),
-            publish_linkedin_text_post_func=lambda *args, **kwargs: linkedin_calls.append(args),
+            prepare_linkedin_post_func=lambda *args, **kwargs: (
+                (_ for _ in ()).throw(
+                    linkedin_publishing.LinkedInPublishingError(
+                        "LinkedIn supports JPEG, PNG and GIF images only.",
+                        stage="media_fetch",
+                    )
+                )
+            ),
+            publish_prepared_linkedin_post_func=lambda *args, **kwargs: (
+                linkedin_calls.append(args) or FakeLinkedInResult()
+            ),
         )
 
-    assert "image publishing is not available yet" in str(exc_info.value)
+    assert "JPEG, PNG and GIF" in str(exc_info.value)
     assert make_calls == []
     assert linkedin_calls == []
-    assert post.status == "draft"
 
 
 def test_mixed_instagram_text_post_fails_before_make_or_linkedin(app, module):
@@ -328,7 +540,7 @@ def test_manual_route_owner_linkedin_only_publish_calls_adapter_once(
 
     monkeypatch.setattr(
         module,
-        "publish_linkedin_text_post",
+        "publish_prepared_linkedin_post",
         lambda *args, **kwargs: calls.append(args) or FakeLinkedInResult(),
     )
 
@@ -390,7 +602,7 @@ def test_manual_route_blocks_already_published_post(client, app, module, monkeyp
 
     monkeypatch.setattr(
         module,
-        "publish_linkedin_text_post",
+        "publish_prepared_linkedin_post",
         lambda *args, **kwargs: calls.append(args),
     )
 
@@ -411,7 +623,7 @@ def test_scheduled_linkedin_only_post_invokes_linkedin_once(app, module, monkeyp
 
     monkeypatch.setattr(
         module,
-        "publish_linkedin_text_post",
+        "publish_prepared_linkedin_post",
         lambda *args, **kwargs: calls.append(args) or FakeLinkedInResult(),
     )
 
@@ -449,7 +661,7 @@ def test_scheduled_mixed_post_rejects_unsatisfied_instagram_text_before_channels
     )
     monkeypatch.setattr(
         module,
-        "publish_linkedin_text_post",
+        "publish_prepared_linkedin_post",
         lambda *args, **kwargs: linkedin_calls.append(args) or FakeLinkedInResult(),
     )
 
@@ -476,3 +688,35 @@ def test_scheduled_linkedin_failure_uses_existing_schedule_failed_policy(
     updated = module.db.session.get(module.Post, post.id)
 
     assert updated.status == "schedule_failed"
+
+
+def test_scheduled_linkedin_only_image_post_invokes_linkedin_once(
+    app,
+    module,
+    monkeypatch,
+):
+    user = create_user(module)
+    make_linkedin_account(module, user)
+    post = make_image_post(module, user, platforms="linkedin", status="scheduled")
+    post.scheduled_time = utc_now() - timedelta(minutes=1)
+    module.db.session.commit()
+    calls = []
+
+    monkeypatch.setattr(
+        module,
+        "prepare_linkedin_post",
+        lambda *args, **kwargs: "prepared-linkedin-image",
+    )
+    monkeypatch.setattr(
+        module,
+        "publish_prepared_linkedin_post",
+        lambda *args, **kwargs: calls.append(args) or FakeLinkedInResult(),
+    )
+
+    module.check_scheduled_posts()
+    module.check_scheduled_posts()
+    updated = module.db.session.get(module.Post, post.id)
+
+    assert calls == [("prepared-linkedin-image",)]
+    assert updated.status == "published"
+    assert updated.sent_at is not None

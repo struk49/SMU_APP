@@ -26,6 +26,7 @@
                             <th>Platform</th>
                             <th>Frequency</th>
                             <th>Status</th>
+                            <th>Actions</th>
                             <th>Challenge</th>
                         </tr>
                     </thead>
@@ -38,6 +39,38 @@
                                 <td>{{ application.primary_platform }}</td>
                                 <td>{{ application.posting_frequency }}</td>
                                 <td><span class="badge bg-secondary">{{ application.status }}</span></td>
+                                <td>
+                                    <form
+                                        method="POST"
+                                        action="{{ url_for('update_beta_application_status', application_id=application.id) }}"
+                                        class="d-flex flex-wrap gap-2"
+                                    >
+                                        <button
+                                            class="btn btn-sm btn-outline-success"
+                                            name="status"
+                                            value="approved"
+                                            type="submit"
+                                        >
+                                            Approve
+                                        </button>
+                                        <button
+                                            class="btn btn-sm btn-outline-danger"
+                                            name="status"
+                                            value="rejected"
+                                            type="submit"
+                                        >
+                                            Reject
+                                        </button>
+                                        <button
+                                            class="btn btn-sm btn-outline-secondary"
+                                            name="status"
+                                            value="new"
+                                            type="submit"
+                                        >
+                                            Reset
+                                        </button>
+                                    </form>
+                                </td>
                                 <td>{{ application.challenge }}</td>
                             </tr>
                         {% endfor %}

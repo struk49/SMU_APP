@@ -1,110 +1,330 @@
-{% extends 'base.html' %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta
+        name="description"
+        content="SMU helps creators and businesses create, improve, schedule and publish social media content using AI."
+    >
+    <meta
+        property="og:title"
+        content="SMU - AI Content Creation, Scheduling & Publishing"
+    >
+    <meta
+        property="og:description"
+        content="SMU helps creators and businesses create, improve, schedule and publish social media content using AI."
+    >
+    <title>SMU - AI Content Creation, Scheduling & Publishing</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet"
+    >
+    <link rel="stylesheet" href="{{ url_for('static', filename='landing.css') }}">
+</head>
+<body class="landing-page">
+    <nav class="navbar navbar-expand-lg landing-nav" aria-label="Primary navigation">
+        <div class="container">
+            <a class="navbar-brand landing-brand" href="{{ url_for('index') }}">
+                <img
+                    src="{{ url_for('static', filename='logo.svg') }}"
+                    alt=""
+                    class="landing-logo"
+                    aria-hidden="true"
+                >
+                <span>SMU</span>
+            </a>
+            <button
+                class="navbar-toggler"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#landingNav"
+                aria-controls="landingNav"
+                aria-expanded="false"
+                aria-label="Toggle navigation"
+            >
+                <span class="navbar-toggler-icon"></span>
+            </button>
 
-{% block title %}SMU{% endblock %}
-
-{% block content %}
-
-<section class="py-5">
-    <div class="row align-items-center g-5">
-        <div class="col-lg-6">
-            <h1 class="display-5 fw-bold mb-3">Create Once. Publish Everywhere.</h1>
-            <p class="lead text-muted mb-4">
-                Create, improve, schedule and manage social content from one workspace.
-            </p>
-            <div class="d-flex flex-wrap gap-3">
-                <a href="{{ url_for('beta_apply') }}" class="btn btn-primary btn-lg">Join Beta</a>
-                <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg">Sign In</a>
+            <div class="collapse navbar-collapse" id="landingNav">
+                <ul class="navbar-nav mx-lg-auto mb-3 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#features">Features</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#how-it-works">How It Works</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#product">Product</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#faq">FAQ</a>
+                    </li>
+                </ul>
+                <div class="d-flex flex-column flex-lg-row gap-2">
+                    {% if current_user.is_authenticated %}
+                        <a class="btn btn-outline-primary" href="{{ url_for('index') }}">
+                            Go to Dashboard
+                        </a>
+                    {% else %}
+                        <a class="btn btn-outline-primary" href="{{ url_for('login') }}">
+                            Log In
+                        </a>
+                        <a class="btn btn-primary" href="{{ url_for('beta_apply') }}">
+                            Join Beta
+                        </a>
+                    {% endif %}
+                </div>
             </div>
         </div>
-        <div class="col-lg-6">
-            <div class="bg-white border rounded-4 shadow-sm p-4">
-                <div class="ratio ratio-4x3 bg-light rounded-3 d-flex align-items-center justify-content-center text-muted">
-                    <div class="text-center p-4">
-                        <div class="h5 fw-bold text-dark">SMU workspace preview</div>
-                        <p class="mb-0">Calendar, studio and publishing screenshots will be added before public launch.</p>
+    </nav>
+
+    <main>
+        <section class="landing-hero">
+            <div class="container">
+                <div class="row align-items-center g-5">
+                    <div class="col-lg-6">
+                        <p class="landing-eyebrow">AI Content Operating System</p>
+                        <h1>Turn One Idea Into Content Everywhere</h1>
+                        <p class="landing-lead">
+                            SMU helps creators and businesses create, improve,
+                            schedule and publish social content from one workspace.
+                            Use AI-generated captions, images and repurposing tools
+                            to move from rough idea to ready-to-review content faster.
+                        </p>
+                        <div class="landing-actions">
+                            <a class="btn btn-primary btn-lg" href="{{ url_for('beta_apply') }}">
+                                Join the Beta
+                            </a>
+                            <a class="btn btn-link btn-lg" href="#how-it-works">
+                                See How It Works
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <div class="product-window" aria-label="SMU product preview">
+                            <div class="window-bar">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <div class="window-content">
+                                <div class="preview-sidebar">
+                                    <div class="preview-logo">SMU</div>
+                                    <div class="preview-link active"></div>
+                                    <div class="preview-link"></div>
+                                    <div class="preview-link"></div>
+                                </div>
+                                <div class="preview-main">
+                                    <div class="preview-header">
+                                        <div>
+                                            <strong>Content Calendar</strong>
+                                            <span>August plan</span>
+                                        </div>
+                                        <span class="preview-pill">Scheduled</span>
+                                    </div>
+                                    <div class="preview-grid">
+                                        <div class="preview-card wide">
+                                            <span>AI Studio</span>
+                                            <strong>Improve launch caption</strong>
+                                        </div>
+                                        <div class="preview-card">
+                                            <span>Image</span>
+                                            <strong>Generated visual ready</strong>
+                                        </div>
+                                        <div class="preview-card">
+                                            <span>Platforms</span>
+                                            <strong>Instagram · Facebook · LinkedIn</strong>
+                                        </div>
+                                        <div class="preview-card wide muted">
+                                            <span>Brand Brief</span>
+                                            <strong>Voice and offer applied</strong>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </div>
-</section>
+        </section>
 
-<section class="py-4">
-    <div class="row g-4">
-        {% for title, body in [
-            ('Plan faster', 'Turn ideas into ready-to-schedule posts from one focused workspace.'),
-            ('Improve quality', 'Use Brand Briefs and AI editing to keep captions consistent.'),
-            ('Stay organised', 'Review scheduled work in the calendar before it goes live.')
-        ] %}
-            <div class="col-md-4">
-                <div class="card border-0 shadow-sm rounded-4 h-100">
-                    <div class="card-body p-4">
-                        <h2 class="h5 fw-bold">{{ title }}</h2>
-                        <p class="text-muted mb-0">{{ body }}</p>
+        <section class="platform-strip" aria-labelledby="platform-heading">
+            <div class="container">
+                <h2 id="platform-heading">Publish across your favourite platforms</h2>
+                <div class="platform-list">
+                    <span>Instagram</span>
+                    <span>Facebook</span>
+                    <span>LinkedIn</span>
+                    <span>Pinterest <small>Coming soon</small></span>
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section" id="features">
+            <div class="container">
+                <div class="section-heading">
+                    <p class="landing-eyebrow">Features</p>
+                    <h2>Create, refine and schedule in one flow</h2>
+                </div>
+                <div class="row g-4">
+                    {% for title, body in [
+                        ("AI Content Creation", "Generate captions and social content from ideas."),
+                        ("AI Images", "Create visual content directly inside SMU."),
+                        ("Content Repurposing", "Turn TikTok content into reusable social posts."),
+                        ("Brand-Aware Content", "Use Brand Briefs and Studio tools to keep content aligned."),
+                        ("Smart Scheduling", "Plan content using SMU's scheduler and calendar."),
+                        ("Multi-Platform Publishing", "Publish through connected social channels from one workflow.")
+                    ] %}
+                        <div class="col-md-6 col-xl-4">
+                            <article class="landing-card">
+                                <div class="card-icon" aria-hidden="true">{{ loop.index }}</div>
+                                <h3>{{ title }}</h3>
+                                <p>{{ body }}</p>
+                            </article>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section alt-section" id="how-it-works">
+            <div class="container">
+                <div class="section-heading">
+                    <p class="landing-eyebrow">How It Works</p>
+                    <h2>From idea to scheduled post</h2>
+                </div>
+                <div class="steps-grid">
+                    {% for title, body in [
+                        ("Start With An Idea", "Enter a topic or repurpose existing content."),
+                        ("Create With AI", "Generate captions and images."),
+                        ("Improve & Review", "Use Studio and Brand tools to refine the post."),
+                        ("Schedule & Publish", "Choose platforms and publish immediately or later.")
+                    ] %}
+                        <article class="step-card">
+                            <span>{{ loop.index }}</span>
+                            <h3>{{ title }}</h3>
+                            <p>{{ body }}</p>
+                        </article>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section" id="product">
+            <div class="container">
+                <div class="section-heading">
+                    <p class="landing-eyebrow">Product</p>
+                    <h2>The main parts of SMU</h2>
+                </div>
+                <div class="row g-4">
+                    {% for title, body in [
+                        ("Dashboard", "See your content pipeline and publishing readiness."),
+                        ("Create Post", "Draft captions, add media and choose platforms."),
+                        ("AI Studio", "Improve captions and review brand alignment."),
+                        ("Calendar", "Plan scheduled content in a monthly view."),
+                        ("Connected Accounts", "Manage platform connections and publishing setup."),
+                        ("Content Packs", "Build reusable campaign content from source material.")
+                    ] %}
+                        <div class="col-md-6 col-xl-4">
+                            <article class="product-card">
+                                <h3>{{ title }}</h3>
+                                <p>{{ body }}</p>
+                            </article>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+
+        <section class="landing-section alt-section">
+            <div class="container">
+                <div class="row align-items-center g-4">
+                    <div class="col-lg-5">
+                        <p class="landing-eyebrow">Why SMU</p>
+                        <h2>Less tool switching. More creating.</h2>
+                    </div>
+                    <div class="col-lg-7">
+                        <div class="value-list">
+                            <span>One content workflow</span>
+                            <span>AI built into creation</span>
+                            <span>Scheduling in the same workspace</span>
+                            <span>Brand-aware improvements</span>
+                            <span>Multi-platform publishing</span>
+                        </div>
                     </div>
                 </div>
             </div>
-        {% endfor %}
-    </div>
-</section>
+        </section>
 
-<section class="py-4">
-    <div class="row g-4">
-        <div class="col-lg-6">
-            <h2 class="h3 fw-bold mb-3">Feature overview</h2>
-            <ul class="list-group shadow-sm">
-                <li class="list-group-item">AI Content Studio for drafting and improving captions.</li>
-                <li class="list-group-item">Brand Briefs and Content Packs for reusable context.</li>
-                <li class="list-group-item">Monthly calendar for scheduled posts.</li>
-                <li class="list-group-item">Connected platform settings for publishing readiness.</li>
-            </ul>
-        </div>
-        <div class="col-lg-6">
-            <h2 class="h3 fw-bold mb-3">How it works</h2>
-            <ol class="list-group list-group-numbered shadow-sm">
-                <li class="list-group-item">Create a Brand Brief.</li>
-                <li class="list-group-item">Generate or upload your post media.</li>
-                <li class="list-group-item">Schedule the post in UK local time.</li>
-                <li class="list-group-item">Publish through your connected workflow.</li>
-            </ol>
-        </div>
-    </div>
-</section>
-
-<section class="py-4">
-    <div class="card border-0 shadow-sm rounded-4">
-        <div class="card-body p-4 p-lg-5 d-flex flex-column flex-lg-row justify-content-between gap-4">
-            <div>
-                <h2 class="h3 fw-bold mb-2">Private beta pricing</h2>
-                <p class="lead mb-1">£0 during the private beta</p>
-                <p class="text-muted mb-0">Limited places while SMU is prepared for wider release.</p>
-            </div>
-            <a href="{{ url_for('beta_apply') }}" class="btn btn-primary btn-lg align-self-lg-center">Apply for beta access</a>
-        </div>
-    </div>
-</section>
-
-<section class="py-4">
-    <h2 class="h3 fw-bold mb-3">FAQ</h2>
-    <div class="accordion" id="landingFaq">
-        {% for question, answer in [
-            ('Is SMU live?', 'SMU is preparing for a private beta release.'),
-            ('Will applying create an account?', 'No. Beta applications are reviewed separately.'),
-            ('Which platforms are planned?', 'Instagram, Facebook, Pinterest and LinkedIn are shown in the beta workspace.'),
-            ('Is legal copy final?', 'Privacy and Terms pages contain beta-ready placeholder copy pending final review.')
-        ] %}
-            <div class="accordion-item">
-                <h3 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#faq{{ loop.index }}">
-                        {{ question }}
-                    </button>
-                </h3>
-                <div id="faq{{ loop.index }}" class="accordion-collapse collapse" data-bs-parent="#landingFaq">
-                    <div class="accordion-body text-muted">{{ answer }}</div>
+        <section class="beta-cta">
+            <div class="container">
+                <div class="beta-panel">
+                    <h2>Help Shape The Future Of SMU</h2>
+                    <p>
+                        Join the private beta and help improve an AI-powered
+                        content platform built for creators and businesses.
+                    </p>
+                    <a class="btn btn-light btn-lg" href="{{ url_for('beta_apply') }}">
+                        Join the Beta
+                    </a>
                 </div>
             </div>
-        {% endfor %}
-    </div>
-</section>
+        </section>
 
-{% endblock %}
+        <section class="landing-section" id="faq">
+            <div class="container">
+                <div class="section-heading">
+                    <p class="landing-eyebrow">FAQ</p>
+                    <h2>Questions before you join</h2>
+                </div>
+                <div class="faq-list">
+                    {% for question, answer in [
+                        ("Who is SMU for?", "Creators, freelancers and businesses that regularly create social content."),
+                        ("What can SMU create?", "Captions, AI-generated images and reusable content workflows."),
+                        ("Can I schedule posts?", "Yes. SMU includes scheduling and a content calendar."),
+                        ("Which platforms are supported?", "SMU currently supports Instagram, Facebook and LinkedIn personal-profile publishing. Pinterest is shown as coming soon."),
+                        ("Does SMU use AI?", "Yes. AI assists content creation and improvement while you remain in control.")
+                    ] %}
+                        <article class="faq-item">
+                            <h3>{{ question }}</h3>
+                            <p>{{ answer }}</p>
+                        </article>
+                    {% endfor %}
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="landing-footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div>
+                    <strong>SMU</strong>
+                    <p>AI content creation, scheduling and publishing.</p>
+                </div>
+                <div>
+                    <h2>Product</h2>
+                    <a href="#features">Features</a>
+                    <a href="#how-it-works">How It Works</a>
+                </div>
+                <div>
+                    <h2>Account</h2>
+                    <a href="{{ url_for('login') }}">Log In</a>
+                    <a href="{{ url_for('beta_apply') }}">Join Beta</a>
+                </div>
+                <div>
+                    <h2>Legal</h2>
+                    <a href="{{ url_for('privacy_policy') }}">Privacy Policy</a>
+                    <a href="{{ url_for('terms_of_service') }}">Terms of Service</a>
+                    <a href="{{ url_for('contact') }}">Contact</a>
+                </div>
+            </div>
+            <div class="footer-bottom">© 2026 SMU</div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
