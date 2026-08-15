@@ -1,12 +1,16 @@
+import logging
 import uuid
+from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import Post
+from smu_core.services.tiktok import TikTokRepurposeError, validate_repurpose_result
 
 
+logger = logging.getLogger(__name__)
 tiktok_bp = Blueprint("tiktok", __name__)
 
 
@@ -20,37 +24,141 @@ def _tiktok_helper(name):
     return helper
 
 
+def _safe_tiktok_hostname(tiktok_url):
+    return urlparse(tiktok_url).hostname or ""
+
+
 @login_required
 def tiktok_repurpose():
     transcript = None
-    generated_content = None
+    repurpose_result = None
     tiktok_url = ""
 
     if request.method == "POST":
         tiktok_url = request.form.get("tiktok_url", "").strip()
 
         if not tiktok_url:
+            logger.warning(
+                "tiktok_repurpose_missing_url",
+                extra={
+                    "smu_context": {
+                        "user_id": current_user.id,
+                        "stage": "input_validation",
+                    },
+                },
+            )
             flash("Please enter a TikTok URL.", "danger")
             return redirect(url_for("tiktok_repurpose"))
 
+        logger.info(
+            "tiktok_repurpose_started",
+            extra={
+                "smu_context": {
+                    "user_id": current_user.id,
+                    "stage": "start",
+                    "url_hostname": _safe_tiktok_hostname(tiktok_url),
+                },
+            },
+        )
+
         try:
             transcript = _tiktok_helper("extract_tiktok_transcript")(tiktok_url)
+
+        except Exception as e:
+            logger.error(
+                "tiktok_transcript_extraction_failed",
+                extra={
+                    "smu_context": {
+                        "user_id": current_user.id,
+                        "stage": "transcript_extraction",
+                        "url_hostname": _safe_tiktok_hostname(tiktok_url),
+                        "exception_class": e.__class__.__name__,
+                    },
+                },
+            )
+            flash(
+                "We couldn't extract usable content from that TikTok. "
+                "Please check the URL and try again.",
+                "danger",
+            )
+            return render_template(
+                "tiktok.html",
+                tiktok_url=tiktok_url,
+                transcript=transcript,
+                repurpose_result=repurpose_result,
+            )
+
+        logger.info(
+            "tiktok_transcript_extracted",
+            extra={
+                "smu_context": {
+                    "user_id": current_user.id,
+                    "stage": "transcript_extraction",
+                    "transcript_length": len(transcript or ""),
+                },
+            },
+        )
+
+        try:
             brand_context = _tiktok_helper("build_brand_context")(current_user.id)
 
-            generated_content = _tiktok_helper("repurpose_tiktok_content")(
-                transcript,
-                brand_context
+            repurpose_result = validate_repurpose_result(
+                _tiktok_helper("repurpose_tiktok_content")(
+                    transcript,
+                    brand_context
+                )
+            )
+
+        except TikTokRepurposeError as e:
+            logger.warning(
+                "tiktok_repurpose_validation_failed",
+                extra={
+                    "smu_context": {
+                        "user_id": current_user.id,
+                        "stage": "repurpose_validation",
+                        "exception_class": e.__class__.__name__,
+                    },
+                },
+            )
+            flash(
+                "We couldn't generate usable social posts from this TikTok. "
+                "Please try again.",
+                "danger",
             )
 
         except Exception as e:
-            print("TikTok repurpose error:", e)
-            flash(f"Failed: {e}", "danger")
+            logger.error(
+                "tiktok_repurpose_unexpected_failure",
+                extra={
+                    "smu_context": {
+                        "user_id": current_user.id,
+                        "stage": "repurpose_processing",
+                        "exception_class": e.__class__.__name__,
+                    },
+                },
+            )
+            flash(
+                "Something went wrong while processing this TikTok. Please try again.",
+                "danger",
+            )
+
+        else:
+            logger.info(
+                "tiktok_repurpose_completed",
+                extra={
+                    "smu_context": {
+                        "user_id": current_user.id,
+                        "stage": "repurpose_processing",
+                        "result": "success",
+                    },
+                },
+            )
 
     return render_template(
         "tiktok.html",
         tiktok_url=tiktok_url,
         transcript=transcript,
-        generated_content=generated_content,
+        repurpose_result=repurpose_result,
     )
 
 
@@ -72,6 +180,25 @@ def create_tiktok_draft():
         styled_prompt = _tiktok_helper("apply_image_style")(image_prompt, image_style)
         image_url = _tiktok_helper("generate_openai_image")(styled_prompt)
 
+    except Exception as e:
+        db.session.rollback()
+        logger.error(
+            "tiktok_single_draft_image_failed",
+            extra={
+                "smu_context": {
+                    "user_id": current_user.id,
+                    "stage": "single_draft_image_generation",
+                    "exception_class": e.__class__.__name__,
+                },
+            },
+        )
+        flash(
+            "We couldn't generate the image for this draft. Please try again.",
+            "danger",
+        )
+        return redirect(url_for("tiktok_repurpose"))
+
+    try:
         post = Post(
             file_url=image_url,
             file_type="image",
@@ -89,11 +216,32 @@ def create_tiktok_draft():
         db.session.commit()
 
         flash("TikTok content image generated and saved as draft.", "success")
+        logger.info(
+            "tiktok_single_draft_created",
+            extra={
+                "smu_context": {
+                    "user_id": current_user.id,
+                    "post_id": post.id,
+                    "stage": "single_draft_creation",
+                    "result": "success",
+                },
+            },
+        )
         return redirect(url_for("view_post", post_id=post.id))
 
     except Exception as e:
-        print("Create TikTok draft error:", e)
-        flash(f"Failed to create draft: {e}", "danger")
+        db.session.rollback()
+        logger.error(
+            "tiktok_single_draft_creation_failed",
+            extra={
+                "smu_context": {
+                    "user_id": current_user.id,
+                    "stage": "single_draft_creation",
+                    "exception_class": e.__class__.__name__,
+                },
+            },
+        )
+        flash("We couldn't create this draft. Please try again.", "danger")
         return redirect(url_for("tiktok_repurpose"))
 
 
@@ -145,6 +293,16 @@ def create_tiktok_carousel_draft():
         slides = slides[:6]
 
         if len(slides) < 2:
+            logger.warning(
+                "tiktok_carousel_validation_failed",
+                extra={
+                    "smu_context": {
+                        "user_id": current_user.id,
+                        "stage": "carousel_validation",
+                        "carousel_item_count": len(slides),
+                    },
+                },
+            )
             flash("Carousel needs at least 2 slides.", "danger")
             return redirect(url_for("tiktok_repurpose"))
 
@@ -217,11 +375,39 @@ Design style:
             "TikTok carousel draft created. Images are generating in the background.",
             "success",
         )
+        logger.info(
+            "tiktok_carousel_draft_created",
+            extra={
+                "smu_context": {
+                    "user_id": current_user.id,
+                    "post_id": first_post.id if first_post else None,
+                    "group_id": group_id,
+                    "stage": "carousel_draft_creation",
+                    "carousel_item_count": len(slides),
+                    "result": "success",
+                },
+            },
+        )
         return redirect(url_for("view_post", post_id=first_post.id))
 
     except Exception as e:
-        print("Create TikTok carousel draft error:", e)
-        flash(f"Failed to create carousel draft: {e}", "danger")
+        db.session.rollback()
+        logger.error(
+            "tiktok_carousel_draft_creation_failed",
+            extra={
+                "smu_context": {
+                    "user_id": current_user.id,
+                    "group_id": locals().get("group_id"),
+                    "stage": "carousel_draft_creation",
+                    "carousel_item_count": len(locals().get("slides", [])),
+                    "exception_class": e.__class__.__name__,
+                },
+            },
+        )
+        flash(
+            "We couldn't create this carousel draft. Please try again.",
+            "danger",
+        )
         return redirect(url_for("tiktok_repurpose"))
 
 

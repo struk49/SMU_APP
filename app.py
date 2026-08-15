@@ -10,7 +10,7 @@ from datetime import datetime
 import pytz
 import requests
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session, abort, has_app_context
 from flask_login import (
     UserMixin,
     login_user,
@@ -36,12 +36,14 @@ from smu_core.models.feedback import Feedback
 from smu_core.models.post import Post
 from smu_core.models.post_revision import PostRevision
 from smu_core.services import captions as captions_service
+from smu_core.services import carousel_generation as carousel_generation_service
 from smu_core.services import content as content_service
 from smu_core.services import images as images_service
 from smu_core.services import linkedin_publishing as linkedin_publishing_service
 from smu_core.services import media as media_service
 from smu_core.services import publishing as publishing_service
 from smu_core.services import scheduler as scheduler_service
+from smu_core.services import tiktok as tiktok_service
 from smu_core.services import time_utils
 
 load_dotenv()
@@ -675,49 +677,12 @@ def repurpose_tiktok_content(
     transcript,
     brand_context=""
 ):
-    if not OPENAI_API_KEY:
-        raise Exception("OPENAI_API_KEY is missing from your .env file")
-
-    prompt = f"""
-You are a social media content repurposing assistant.
-
-Turn this TikTok transcript into content for Instagram and Facebook.
-
-Brand Brief:
-{brand_context}
-
-Return the result in this exact format:
-
-INSTAGRAM_CAPTION:
-...
-
-FACEBOOK_CAPTION:
-...
-
-CAROUSEL_IDEA:
-Slide 1:
-Slide 2:
-Slide 3:
-Slide 4:
-Slide 5:
-Slide 6:
-
-IMAGE_PROMPT:
-...
-
-HASHTAGS:
-...
-
-Transcript:
-{transcript}
-"""
-
-    response = openai_client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt,
+    return tiktok_service.repurpose_tiktok_content(
+        transcript,
+        brand_context,
+        openai_api_key=OPENAI_API_KEY,
+        openai_client=openai_client,
     )
-
-    return response.output_text
 
 
 def check_scheduled_posts():
@@ -733,43 +698,18 @@ def check_scheduled_posts():
 
 
 def generate_pending_carousel_images():
+    def run_worker():
+        return carousel_generation_service.generate_pending_carousel_images(
+            post_model=Post,
+            db_session=db.session,
+            image_generator=generate_openai_image,
+        )
+
+    if has_app_context():
+        return run_worker()
+
     with app.app_context():
-        post = None
-
-        try:
-            post = (
-                Post.query.filter_by(status="generating", file_type="image")
-                .order_by(Post.created_at.asc(), Post.sort_order.asc())
-                .first()
-            )
-
-            if not post:
-                return
-
-            print(f"Generating image for post {post.id}")
-
-            image_url = generate_openai_image(post.prompt)
-
-            post.file_url = image_url
-            post.status = "draft"
-
-            db.session.commit()
-
-            print(f"✅ Generated image for post {post.id}")
-
-        except Exception as e:
-            db.session.rollback()
-
-            print("Background image generation error:", e)
-
-            if post:
-                try:
-                    post.status = "generation_failed"
-                    db.session.commit()
-                    print(f"Marked post {post.id} as generation_failed")
-                except Exception as inner_error:
-                    db.session.rollback()
-                    print("Failed to mark post as failed:", inner_error)
+        return run_worker()
 
 
 def generate_content_pack(source_text, brand_context=""):
@@ -1221,7 +1161,26 @@ def publish_post_to_make(post, user_id):
         build_single_payload_func=build_single_payload,
         log_single_image_diagnostics_func=log_single_image_diagnostics,
         get_user_connected_accounts_func=get_user_connected_accounts,
-        publish_linkedin_text_post_func=publish_linkedin_text_post,
+        prepare_linkedin_post_func=prepare_linkedin_post,
+        publish_prepared_linkedin_post_func=publish_prepared_linkedin_post,
+    )
+
+
+def prepare_linkedin_post(post, connected_account):
+    return linkedin_publishing_service.prepare_post_for_publish(
+        post,
+        connected_account,
+    )
+
+
+def publish_prepared_linkedin_post(prepared_post):
+    return linkedin_publishing_service.publish_prepared_post(prepared_post)
+
+
+def publish_linkedin_post(post, connected_account):
+    return linkedin_publishing_service.publish_post(
+        post,
+        connected_account,
     )
 
 

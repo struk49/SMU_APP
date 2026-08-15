@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 
@@ -63,6 +65,35 @@ def test_requested_subtitles_are_preferred(module, monkeypatch):
     block_real_caption_fetch(module, monkeypatch)
 
     assert extract(module) == "Requested"
+
+
+def test_transcript_extraction_logs_safe_fallback_metadata(
+    module, monkeypatch, caplog
+):
+    set_tiktok_info(
+        module,
+        monkeypatch,
+        {
+            "title": "Title fallback",
+            "description": "Description fallback",
+        },
+    )
+    block_real_caption_fetch(module, monkeypatch)
+    caplog.set_level(logging.INFO, logger="smu_core.services.content")
+
+    assert extract(module) == "Description fallback"
+
+    assert "Description fallback" not in caplog.text
+    assert "Title fallback" not in caplog.text
+    assert "https://www.tiktok.com/@user/video/123" not in caplog.text
+    contexts = [
+        getattr(record, "smu_context", {})
+        for record in caplog.records
+        if record.message == "tiktok_transcript_final_diagnostics"
+    ]
+    assert contexts
+    assert contexts[0]["fallback_source"] == "description"
+    assert contexts[0]["final_transcript_length"] == len("Description fallback")
 
 
 def test_subtitles_are_used_when_requested_subtitles_are_absent(module, monkeypatch):

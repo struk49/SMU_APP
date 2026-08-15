@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+
+{% block title %}About SMU – AI Content Creation & Publishing{% endblock %}
+
+{% block content %}
+
+<section class="py-4 py-lg-5">
+    <div class="row align-items-center g-4 g-lg-5">
+        <div class="col-lg-7">
+            <p class="text-uppercase text-primary fw-semibold small mb-2">About</p>
+            <h1 class="display-5 fw-bold mb-3">About SMU</h1>
+            <p class="lead text-muted mb-4">
+                SMU is an AI-powered content workspace that helps creators and businesses create,
+                improve, schedule and publish social media content from one place.
+            </p>
+            <p class="text-muted mb-4">
+                SMU is currently in private beta and actively evolving with feedback from early users.
+            </p>
+            <div class="d-flex flex-column flex-sm-row gap-3">
+                <a class="btn btn-primary btn-lg" href="{{ url_for('beta_apply') }}">Join the Beta</a>
+                <a class="btn btn-outline-primary btn-lg" href="{{ url_for('landing_page') }}#features">Explore Features</a>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="border rounded-3 p-4 bg-white shadow-sm">
+                <h2 class="h5 fw-bold mb-3">Product focus</h2>
+                <ul class="list-unstyled mb-0 d-grid gap-3 text-muted">
+                    <li>One workspace for planning, creation, scheduling and publishing.</li>
+                    <li>Brand tools that help keep social content aligned.</li>
+                    <li>Practical AI assistance with human review before publishing.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="border rounded-3 p-4 bg-white h-100 shadow-sm">
+                <h2 class="h4 fw-bold mb-3">Why SMU Exists</h2>
+                <p class="text-muted mb-0">
+                    Content creation often means switching between separate tools for writing,
+                    images, repurposing, scheduling, publishing and brand consistency. SMU's goal
+                    is to bring these workflows together so regular content work feels simpler and
+                    easier to manage.
+                </p>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="border rounded-3 p-4 bg-white h-100 shadow-sm">
+                <h2 class="h4 fw-bold mb-3">Who SMU Is For</h2>
+                <p class="text-muted mb-3">
+                    SMU is designed for people who create and publish content regularly without
+                    wanting to manage lots of disconnected tools.
+                </p>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for audience in ["Content creators", "Freelancers", "Small businesses", "Social media managers", "Agencies"] %}
+                        <span class="badge text-bg-light border">{{ audience }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="mb-4">
+        <p class="text-uppercase text-primary fw-semibold small mb-2">Available Today</p>
+        <h2 class="h3 fw-bold mb-2">What SMU Can Do Today</h2>
+        <p class="text-muted mb-0">These are current product capabilities available in the app.</p>
+    </div>
+    <div class="row g-3">
+        {% for capability in [
+            "AI-assisted caption and content creation",
+            "AI image generation",
+            "Brand Briefs",
+            "Content Packs",
+            "TikTok repurposing",
+            "AI Studio and caption improvement",
+            "Content scheduling",
+            "Content calendar",
+            "Connected Accounts",
+            "Instagram publishing",
+            "Facebook publishing",
+            "LinkedIn personal-profile text publishing",
+            "LinkedIn personal-profile single-image publishing"
+        ] %}
+            <div class="col-md-6 col-xl-4">
+                <div class="border rounded-3 p-3 bg-white h-100 shadow-sm">
+                    <span class="fw-semibold">{{ capability }}</span>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="border rounded-3 p-4 p-lg-5 bg-white shadow-sm">
+        <h2 class="h3 fw-bold mb-4">How SMU Works</h2>
+        <div class="row g-3">
+            {% for title, body in [
+                ("Idea", "Start from a topic, prompt or existing content."),
+                ("Create", "Generate captions and visual content."),
+                ("Improve", "Use Studio and Brand tools to refine the work."),
+                ("Schedule", "Choose when content should be published."),
+                ("Publish", "Send content through connected platforms.")
+            ] %}
+                <div class="col-md">
+                    <div class="h-100 border rounded-3 p-3">
+                        <div class="small text-primary fw-semibold mb-2">Step {{ loop.index }}</div>
+                        <h3 class="h5 fw-bold mb-2">{{ title }}</h3>
+                        <p class="text-muted mb-0">{{ body }}</p>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="border rounded-3 p-4 bg-white h-100 shadow-sm">
+                <h2 class="h4 fw-bold mb-3">Platform Approach</h2>
+                <p class="text-muted mb-3">
+                    SMU connects to supported social platforms so users can publish content they
+                    choose. Current publishing support includes Instagram, Facebook and LinkedIn
+                    personal profiles.
+                </p>
+                <p class="text-muted mb-0">
+                    Platform capabilities depend on third-party APIs and permissions.
+                </p>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="border rounded-3 p-4 bg-white h-100 shadow-sm">
+                <h2 class="h4 fw-bold mb-3">AI That Assists, Not Replaces</h2>
+                <p class="text-muted mb-0">
+                    AI helps generate ideas, captions and images, but users remain in control.
+                    SMU is built around review before publishing, and Brand tools help keep content
+                    aligned. AI output should be treated as assistance rather than guaranteed fact.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="row g-4">
+        <div class="col-lg-6">
+            <div class="border rounded-3 p-4 bg-white h-100 shadow-sm">
+                <h2 class="h4 fw-bold mb-3">Privacy And Trust</h2>
+                <p class="text-muted mb-3">
+                    Users control what they create and publish. Connected accounts can be
+                    disconnected, and SMU does not require social-network passwords.
+                </p>
+                <p class="text-muted mb-0">
+                    Data handling is explained in the
+                    <a href="{{ url_for('privacy_policy') }}">Privacy Policy</a>.
+                </p>
+            </div>
+        </div>
+        <div class="col-lg-6">
+            <div class="border rounded-3 p-4 bg-white h-100 shadow-sm">
+                <h2 class="h4 fw-bold mb-3">Built With Beta Users</h2>
+                <p class="text-muted mb-3">
+                    SMU is currently in private beta. Beta users can provide feedback, features may
+                    evolve, and approved users can create accounts.
+                </p>
+                <a class="btn btn-primary" href="{{ url_for('beta_apply') }}">Join the Beta</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="border rounded-3 p-4 p-lg-5 bg-white shadow-sm">
+        <p class="text-uppercase text-primary fw-semibold small mb-2">Future Direction</p>
+        <h2 class="h3 fw-bold mb-3">Where SMU Is Going</h2>
+        <p class="text-muted mb-4">
+            The long-term direction is an AI Content Operating System. Future direction may include
+            AI Content Planning, AI Research, Analytics, AI Memory, broader platform publishing and
+            workflow automation.
+        </p>
+        <div class="d-flex flex-wrap align-items-center gap-2 text-muted">
+            <span>One idea</span>
+            <span aria-hidden="true">→</span>
+            <span>AI assists creation</span>
+            <span aria-hidden="true">→</span>
+            <span>content is improved</span>
+            <span aria-hidden="true">→</span>
+            <span>content is scheduled</span>
+            <span aria-hidden="true">→</span>
+            <span>content is published</span>
+            <span aria-hidden="true">→</span>
+            <span>performance is analysed later</span>
+            <span aria-hidden="true">→</span>
+            <span>future content improves later</span>
+        </div>
+    </div>
+</section>
+
+<section class="py-4">
+    <div class="text-center border rounded-3 p-4 p-lg-5 bg-white shadow-sm">
+        <h2 class="h3 fw-bold mb-3">Questions about SMU?</h2>
+        <p class="text-muted mb-4">
+            Learn more about privacy, terms, or send a question through the contact page.
+        </p>
+        <div class="d-flex flex-column flex-sm-row justify-content-center gap-3">
+            <a class="btn btn-primary" href="{{ url_for('contact') }}">Contact SMU</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('privacy_policy') }}">Privacy Policy</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('terms_of_service') }}">Terms of Service</a>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

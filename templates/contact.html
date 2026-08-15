@@ -4,31 +4,70 @@
 
 {% block content %}
 
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="card border-0 shadow-sm rounded-4">
-            <div class="card-body p-4 p-lg-5">
-                <h1 class="h3 fw-bold mb-2">Contact SMU</h1>
-                <p class="text-muted mb-4">Send a private beta question or support note.</p>
+<section class="py-4 py-lg-5">
+    <div class="row align-items-start g-4 g-lg-5">
+        <div class="col-lg-5">
+            <p class="text-uppercase text-primary fw-semibold small mb-2">Contact</p>
+            <h1 class="display-6 fw-bold mb-3">Contact SMU</h1>
+            <p class="lead text-muted mb-4">
+                Have a question, found a bug, or want to share feedback? We'd love to hear from you.
+            </p>
 
-                <form method="POST">
+            <div class="border rounded-3 p-3 p-md-4 bg-white shadow-sm mb-4">
+                <h2 class="h5 fw-bold mb-3">What we can help with</h2>
+                <div class="d-grid gap-3">
+                    <div>
+                        <h3 class="h6 fw-semibold mb-1">Support</h3>
+                        <p class="text-muted mb-0">Questions about your SMU workspace or beta access.</p>
+                    </div>
+                    <div>
+                        <h3 class="h6 fw-semibold mb-1">Bug Report</h3>
+                        <p class="text-muted mb-0">Something that is not working as expected.</p>
+                    </div>
+                    <div>
+                        <h3 class="h6 fw-semibold mb-1">Feature Request</h3>
+                        <p class="text-muted mb-0">Ideas that would make SMU more useful for your workflow.</p>
+                    </div>
+                    <div>
+                        <h3 class="h6 fw-semibold mb-1">Beta Feedback</h3>
+                        <p class="text-muted mb-0">Early product feedback from private beta users.</p>
+                    </div>
+                    <div>
+                        <h3 class="h6 fw-semibold mb-1">Privacy</h3>
+                        <p class="text-muted mb-0">Questions about privacy or how submitted information is used.</p>
+                    </div>
+                </div>
+            </div>
+
+            <p class="text-muted mb-0">Use the form below to contact SMU.</p>
+            <p class="text-muted mb-0">We aim to respond to beta enquiries as soon as practical.</p>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="border rounded-3 p-3 p-md-4 p-lg-5 bg-white shadow-sm">
+                <h2 class="h4 fw-bold mb-3">Send a message</h2>
+                <form method="POST" novalidate>
                     <div class="mb-3">
                         <label class="form-label fw-semibold" for="name">Name</label>
-                        <input id="name" name="name" class="form-control" maxlength="120" required>
+                        <input id="name" name="name" class="form-control" maxlength="120" autocomplete="name" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-semibold" for="email">Email</label>
-                        <input id="email" type="email" name="email" class="form-control" maxlength="150" required>
+                        <input id="email" type="email" name="email" class="form-control" maxlength="150" autocomplete="email" required>
                     </div>
-                    <div class="mb-4">
+                    <div class="mb-3">
                         <label class="form-label fw-semibold" for="message">Message</label>
-                        <textarea id="message" name="message" class="form-control" rows="5" maxlength="2000" required></textarea>
+                        <textarea id="message" name="message" class="form-control" rows="7" maxlength="2000" required></textarea>
                     </div>
+                    <p class="small text-muted mb-4">
+                        Information submitted through this form is used to respond to your enquiry.
+                        Read the <a href="{{ url_for('privacy_policy') }}">Privacy Policy</a>.
+                    </p>
                     <button type="submit" class="btn btn-primary btn-lg">Send Message</button>
                 </form>
             </div>
         </div>
     </div>
-</div>
+</section>
 
 {% endblock %}

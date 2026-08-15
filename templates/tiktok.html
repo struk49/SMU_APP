@@ -54,17 +54,36 @@
 </div>
 {% endif %}
 
-{% if generated_content %}
+{% if repurpose_result %}
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-4">
 
         <h2 class="h5 fw-bold mb-3">Generated Content</h2>
 
-        <textarea
-            id="generatedContent"
-            class="form-control mb-4"
-            rows="18"
-        >{{ generated_content }}</textarea>
+        <div class="mb-3">
+            <label class="form-label fw-semibold" for="instagramCaption">Instagram Caption</label>
+            <textarea id="instagramCaption" class="form-control" rows="5">{{ repurpose_result.instagram_caption }}</textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-semibold" for="facebookCaption">Facebook Caption</label>
+            <textarea id="facebookCaption" class="form-control" rows="5">{{ repurpose_result.facebook_caption }}</textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-semibold" for="carouselIdea">Carousel Idea</label>
+            <textarea id="carouselIdea" class="form-control" rows="7">{{ repurpose_result.carousel_idea }}</textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-semibold" for="imagePrompt">Image Prompt</label>
+            <textarea id="imagePrompt" class="form-control" rows="4">{{ repurpose_result.image_prompt }}</textarea>
+        </div>
+
+        <div class="mb-4">
+            <label class="form-label fw-semibold" for="hashtags">Hashtags</label>
+            <textarea id="hashtags" class="form-control" rows="3">{{ repurpose_result.hashtags }}</textarea>
+        </div>
 
         <div class="alert alert-info">
             Review the generated content. Then choose whether to create a single image draft or a carousel draft.
@@ -92,7 +111,6 @@
 
             <div class="col-md-6">
                 <form method="POST" action="{{ url_for('create_tiktok_draft') }}">
-                    <input type="hidden" name="generated_content" class="generatedContentHidden">
                     <input type="hidden" name="caption" class="captionHidden">
                     <input type="hidden" name="image_prompt" class="imagePromptHidden">
                     <input type="hidden" name="image_style" class="imageStyleHidden">
@@ -105,7 +123,6 @@
 
             <div class="col-md-6">
                 <form method="POST" action="{{ url_for('create_tiktok_carousel_draft') }}">
-                    <input type="hidden" name="generated_content" class="generatedContentHidden">
                     <input type="hidden" name="caption" class="captionHidden">
                     <input type="hidden" name="image_prompt" class="imagePromptHidden">
                     <input type="hidden" name="carousel_idea" class="carouselIdeaHidden">
@@ -124,61 +141,28 @@
 {% endif %}
 
 <script>
-function extractSection(text, sectionName) {
-    const sections = [
-        "INSTAGRAM_CAPTION:",
-        "FACEBOOK_CAPTION:",
-        "CAROUSEL_IDEA:",
-        "IMAGE_PROMPT:",
-        "HASHTAGS:"
-    ];
-
-    const startLabel = sectionName + ":";
-    const startIndex = text.indexOf(startLabel);
-
-    if (startIndex === -1) {
-        return "";
-    }
-
-    const contentStart = startIndex + startLabel.length;
-    let contentEnd = text.length;
-
-    sections.forEach(function(label) {
-        const index = text.indexOf(label, contentStart);
-
-        if (index !== -1 && index < contentEnd) {
-            contentEnd = index;
-        }
-    });
-
-    return text.substring(contentStart, contentEnd).trim();
-}
-
 function prepareDraftFields() {
-    const generatedContentEl = document.getElementById("generatedContent");
+    const instagramCaptionEl = document.getElementById("instagramCaption");
+    const hashtagsEl = document.getElementById("hashtags");
+    const imagePromptEl = document.getElementById("imagePrompt");
+    const carouselIdeaEl = document.getElementById("carouselIdea");
     const imageStyleSelect = document.getElementById("imageStyleSelect");
 
-    if (!generatedContentEl) {
+    if (!instagramCaptionEl || !hashtagsEl || !imagePromptEl || !carouselIdeaEl) {
         return;
     }
 
-    const fullText = generatedContentEl.value;
     const selectedStyle = imageStyleSelect ? imageStyleSelect.value : "";
-
-    const instagramCaption = extractSection(fullText, "INSTAGRAM_CAPTION");
-    const hashtags = extractSection(fullText, "HASHTAGS");
-    const imagePrompt = extractSection(fullText, "IMAGE_PROMPT");
-    const carouselIdea = extractSection(fullText, "CAROUSEL_IDEA");
+    const instagramCaption = instagramCaptionEl.value.trim();
+    const hashtags = hashtagsEl.value.trim();
+    const imagePrompt = imagePromptEl.value.trim();
+    const carouselIdea = carouselIdeaEl.value.trim();
 
     let finalCaption = instagramCaption;
 
     if (hashtags) {
         finalCaption += "\n\n" + hashtags;
     }
-
-    document.querySelectorAll(".generatedContentHidden").forEach(function(input) {
-        input.value = fullText;
-    });
 
     document.querySelectorAll(".captionHidden").forEach(function(input) {
         input.value = finalCaption;
@@ -200,12 +184,19 @@ function prepareDraftFields() {
 document.addEventListener("DOMContentLoaded", function() {
     prepareDraftFields();
 
-    const generatedContentEl = document.getElementById("generatedContent");
+    const structuredContentInputs = [
+        document.getElementById("instagramCaption"),
+        document.getElementById("hashtags"),
+        document.getElementById("imagePrompt"),
+        document.getElementById("carouselIdea")
+    ];
     const imageStyleSelect = document.getElementById("imageStyleSelect");
 
-    if (generatedContentEl) {
-        generatedContentEl.addEventListener("input", prepareDraftFields);
-    }
+    structuredContentInputs.forEach(function(input) {
+        if (input) {
+            input.addEventListener("input", prepareDraftFields);
+        }
+    });
 
     if (imageStyleSelect) {
         imageStyleSelect.addEventListener("change", prepareDraftFields);

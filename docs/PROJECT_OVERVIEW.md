@@ -6,6 +6,8 @@ and product credibility, while the authenticated workspace remains the core app
 experience.
 New account registration is currently limited to approved private-beta
 applicants.
+Public About, Privacy Policy, Terms of Service and Contact pages are available
+for beta readiness.
 
 ## Current capabilities
 - User authentication and user-owned posts

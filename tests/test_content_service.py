@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 import app as smu_app
@@ -319,7 +321,9 @@ def test_caption_url_fetch_uses_existing_timeout_without_real_network():
     assert calls == {"url": "https://caption.test/file.vtt", "timeout": 10}
 
 
-def test_tiktok_diagnostics_are_safe(capsys):
+def test_tiktok_diagnostics_are_safe(caplog):
+    caplog.set_level(logging.INFO, logger="smu_core.services.content")
+
     extract_with_info(
         {
             "title": "SECRET TITLE",
@@ -330,14 +334,27 @@ def test_tiktok_diagnostics_are_safe(capsys):
         }
     )
 
-    output = capsys.readouterr().out
+    output = caplog.text
+    reached_contexts = [
+        getattr(record, "smu_context", {})
+        for record in caplog.records
+        if record.message == "tiktok_transcript_helper_reached"
+    ]
+    final_contexts = [
+        getattr(record, "smu_context", {})
+        for record in caplog.records
+        if record.message == "tiktok_transcript_final_diagnostics"
+    ]
 
-    assert "www.tiktok.com" in output
     assert "https://www.tiktok.com/@user/video/123" not in output
     assert "token=secret" not in output
     assert "SECRET TITLE" not in output
     assert "SECRET DESCRIPTION" not in output
     assert "SECRET TRANSCRIPT" not in output
+    assert reached_contexts
+    assert reached_contexts[0]["url_hostname"] == "www.tiktok.com"
+    assert final_contexts
+    assert final_contexts[0]["final_transcript_length"] == len("SECRET TRANSCRIPT")
 
 
 def test_generate_content_pack_prompt_model_and_missing_key_behaviour():

@@ -1,5 +1,6 @@
 import html as html_parser
 import json
+import logging
 import re
 from urllib.parse import urlparse
 
@@ -7,6 +8,7 @@ import requests
 from yt_dlp import YoutubeDL
 
 
+logger = logging.getLogger(__name__)
 NO_TIKTOK_TRANSCRIPT_ERROR = "No transcript or usable text found for this TikTok."
 PLACEHOLDER_IMAGE_URL = "https://res.cloudinary.com/demo/image/upload/w_1080,h_1080,c_fill,b_rgb:111111/l_text:Arial_60_bold:Generating%20Image,co_rgb:ffffff/sample.jpg"
 
@@ -69,11 +71,14 @@ def extract_tiktok_transcript(
 ):
     requests_get = requests_get or requests.get
     hostname = urlparse(tiktok_url).hostname or ""
-    print(
-        "TikTok transcript diagnostics:",
-        {
-            "helper_reached": True,
-            "url_hostname": hostname,
+    logger.info(
+        "tiktok_transcript_helper_reached",
+        extra={
+            "smu_context": {
+                "helper_reached": True,
+                "url_hostname": hostname,
+                "stage": "transcript_extraction",
+            },
         },
     )
 
@@ -177,13 +182,16 @@ def extract_tiktok_transcript(
                 caption_entry_format(entry) for entry in entries
             ]
 
-        print(
-            "TikTok transcript diagnostics:",
-            {
-                "caption_source": source_name,
-                "available_languages": available_languages,
-                "caption_entries_per_language": entry_counts,
-                "available_formats_per_language": available_formats,
+        logger.info(
+            "tiktok_caption_source_diagnostics",
+            extra={
+                "smu_context": {
+                    "caption_source": source_name,
+                    "available_languages": available_languages,
+                    "caption_entries_per_language": entry_counts,
+                    "available_formats_per_language": available_formats,
+                    "stage": "caption_source_inspection",
+                },
             },
         )
 
@@ -241,25 +249,31 @@ def extract_tiktok_transcript(
             byte_length = 0
             parsed_length = 0
             exception_class = e.__class__.__name__
-            print(
-                "TikTok transcript diagnostics:",
-                {
-                    "caption_parse_exception_class": exception_class,
-                    "caption_format": caption_format,
+            logger.warning(
+                "tiktok_caption_candidate_parse_failed",
+                extra={
+                    "smu_context": {
+                        "caption_parse_exception_class": exception_class,
+                        "caption_format": caption_format,
+                        "stage": "caption_parsing",
+                    },
                 },
             )
 
-        print(
-            "TikTok transcript diagnostics:",
-            {
-                "caption_candidate_source": source_name,
-                "caption_candidate_language": language,
-                "caption_candidate_index": index,
-                "caption_candidate_format": caption_format,
-                "downloaded_caption_byte_length": byte_length,
-                "parsed_caption_fragment_count": fragment_count,
-                "parsed_caption_length": parsed_length,
-                "caption_candidate_exception_class": exception_class,
+        logger.info(
+            "tiktok_caption_candidate_diagnostics",
+            extra={
+                "smu_context": {
+                    "caption_candidate_source": source_name,
+                    "caption_candidate_language": language,
+                    "caption_candidate_index": index,
+                    "caption_candidate_format": caption_format,
+                    "downloaded_caption_byte_length": byte_length,
+                    "parsed_caption_fragment_count": fragment_count,
+                    "parsed_caption_length": parsed_length,
+                    "caption_candidate_exception_class": exception_class,
+                    "stage": "caption_candidate",
+                },
             },
         )
 
@@ -336,18 +350,25 @@ def extract_tiktok_transcript(
         with youtube_dl_cls(ydl_opts) as ydl:
             info = ydl.extract_info(tiktok_url, download=False)
     except Exception as e:
-        print(
-            "TikTok transcript diagnostics:",
-            {
-                "extract_info_exception_class": e.__class__.__name__,
+        logger.error(
+            "tiktok_extract_info_failed",
+            extra={
+                "smu_context": {
+                    "extract_info_exception_class": e.__class__.__name__,
+                    "stage": "extract_info",
+                    "url_hostname": hostname,
+                },
             },
         )
         raise
 
-    print(
-        "TikTok transcript diagnostics:",
-        {
-            "extract_info_returned_info": info is not None,
+    logger.info(
+        "tiktok_extract_info_completed",
+        extra={
+            "smu_context": {
+                "extract_info_returned_info": info is not None,
+                "stage": "extract_info",
+            },
         },
     )
 
@@ -361,14 +382,17 @@ def extract_tiktok_transcript(
     subtitles = info.get("subtitles", {})
     has_caption_metadata = bool(requested_subtitles or subtitles or automatic_captions)
 
-    print(
-        "TikTok transcript diagnostics:",
-        {
-            "title_present": bool(title),
-            "description_present": bool(description),
-            "caption_metadata_present": has_caption_metadata,
-            "cleaned_title_length": len(cleaned_title),
-            "cleaned_description_length": len(cleaned_description),
+    logger.info(
+        "tiktok_metadata_diagnostics",
+        extra={
+            "smu_context": {
+                "title_present": bool(title),
+                "description_present": bool(description),
+                "caption_metadata_present": has_caption_metadata,
+                "cleaned_title_length": len(cleaned_title),
+                "cleaned_description_length": len(cleaned_description),
+                "stage": "metadata_inspection",
+            },
         },
     )
 
@@ -389,22 +413,28 @@ def extract_tiktok_transcript(
         parsed_caption_length = selected_caption["parsed_length"]
         fallback_used = parsed_caption_length == 0
 
-        print(
-            "TikTok transcript diagnostics:",
-            {
+        logger.info(
+            "tiktok_caption_candidate_selected",
+            extra={
+                "smu_context": {
                 "caption_candidate_chosen_index": selected_caption["index"],
                 "caption_candidate_chosen_reason": "longest_usable_parsed_caption",
+                    "stage": "caption_selection",
+                },
             },
         )
 
-    print(
-        "TikTok transcript diagnostics:",
-        {
-            "caption_source_selected": caption_source,
-            "caption_language": caption_language,
-            "caption_format": caption_format,
-            "parsed_caption_length": parsed_caption_length,
-            "fallback_used": fallback_used,
+    logger.info(
+        "tiktok_caption_selection_diagnostics",
+        extra={
+            "smu_context": {
+                "caption_source_selected": caption_source,
+                "caption_language": caption_language,
+                "caption_format": caption_format,
+                "parsed_caption_length": parsed_caption_length,
+                "fallback_used": fallback_used,
+                "stage": "caption_selection",
+            },
         },
     )
 
@@ -422,11 +452,14 @@ def extract_tiktok_transcript(
                 fallback_source = "title"
 
     final_transcript_length = len(clean_transcript_text(transcript))
-    print(
-        "TikTok transcript diagnostics:",
-        {
-            "final_transcript_length": final_transcript_length,
-            "fallback_source": fallback_source,
+    logger.info(
+        "tiktok_transcript_final_diagnostics",
+        extra={
+            "smu_context": {
+                "final_transcript_length": final_transcript_length,
+                "fallback_source": fallback_source,
+                "stage": "transcript_result",
+            },
         },
     )
 

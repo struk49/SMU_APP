@@ -3,6 +3,7 @@ import sys
 from datetime import timedelta
 
 import pytest
+from flask import g, has_app_context
 
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
@@ -63,6 +64,9 @@ def create_user(module, email="owner@example.com"):
 
 
 def login(client, user):
+    if has_app_context():
+        g.pop("_login_user", None)
+
     with client.session_transaction() as session:
         session["_user_id"] = str(user.id)
         session["_fresh"] = True

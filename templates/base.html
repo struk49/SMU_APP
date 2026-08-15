@@ -80,6 +80,10 @@
                             Home
                         </a>
 
+                        <a href="{{ url_for('about_page') }}" class="app-nav-link">
+                            About
+                        </a>
+
                         <a href="{{ url_for('beta_apply') }}" class="app-nav-link">
                             Join Beta
                         </a>
@@ -125,9 +129,11 @@
         <div class="container text-center text-muted small">
             SMU v1.0.0-rc1 · © podgeaisolutions
             <span class="mx-2">·</span>
+            <a href="{{ url_for('about_page') }}" class="text-muted">About</a>
+            <span class="mx-1">·</span>
             <a href="{{ url_for('privacy_policy') }}" class="text-muted">Privacy Policy</a>
             <span class="mx-1">·</span>
-            <a href="{{ url_for('terms_of_service') }}" class="text-muted">Terms</a>
+            <a href="{{ url_for('terms_of_service') }}" class="text-muted">Terms of Service</a>
             <span class="mx-1">·</span>
             <a href="{{ url_for('contact') }}" class="text-muted">Contact</a>
         </div>

@@ -2,6 +2,7 @@
 
 __all__ = [
     "captions",
+    "carousel_generation",
     "content",
     "images",
     "linkedin_publishing",
@@ -9,5 +10,6 @@ __all__ = [
     "platforms",
     "publishing",
     "scheduler",
+    "tiktok",
     "time_utils",
 ]

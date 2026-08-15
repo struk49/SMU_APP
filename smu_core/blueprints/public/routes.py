@@ -28,6 +28,10 @@ def landing_page():
     return render_template("landing.html")
 
 
+def about_page():
+    return render_template("about.html")
+
+
 def privacy_policy():
     return render_template("privacy.html")
 
@@ -88,6 +92,7 @@ def register_public_routes(state):
     app = state.app
     routes = [
         ("/landing", "landing_page", landing_page, None),
+        ("/about", "about_page", about_page, None),
         ("/privacy", "privacy_policy", privacy_policy, None),
         ("/terms", "terms_of_service", terms_of_service, None),
         ("/maintenance", "maintenance", maintenance, None),
