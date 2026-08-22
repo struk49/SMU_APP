@@ -3,6 +3,9 @@
 {% block title %}About SMU – AI Content Creation & Publishing{% endblock %}
 
 {% block content %}
+{% set user_has_access = current_user.is_authenticated and has_product_access(current_user) %}
+{% set primary_cta_label = "Go to Dashboard" if user_has_access else ("Choose Your Plan" if current_user.is_authenticated else "Get Started") %}
+{% set primary_cta_url = url_for('index') if user_has_access else (url_for('pricing') if current_user.is_authenticated else url_for('register')) %}
 
 <section class="py-4 py-lg-5">
     <div class="row align-items-center g-4 g-lg-5">
@@ -10,14 +13,15 @@
             <p class="text-uppercase text-primary fw-semibold small mb-2">About</p>
             <h1 class="display-5 fw-bold mb-3">About SMU</h1>
             <p class="lead text-muted mb-4">
-                SMU is an AI-powered content workspace that helps creators and businesses create,
-                improve, schedule and publish social media content from one place.
+                SMU is an AI-powered social-media content workspace for creators and businesses.
             </p>
             <p class="text-muted mb-4">
-                SMU is currently in private beta and actively evolving with feedback from early users.
+                Create, repurpose, improve, schedule and publish social content from one place.
+                SMU brings ideas, TikTok videos, existing content, captions, media creation and
+                scheduling into one practical workflow.
             </p>
             <div class="d-flex flex-column flex-sm-row gap-3">
-                <a class="btn btn-primary btn-lg" href="{{ url_for('beta_apply') }}">Join the Beta</a>
+                <a class="btn btn-primary btn-lg" href="{{ primary_cta_url }}">{{ primary_cta_label }}</a>
                 <a class="btn btn-outline-primary btn-lg" href="{{ url_for('landing_page') }}#features">Explore Features</a>
             </div>
         </div>
@@ -25,7 +29,7 @@
             <div class="border rounded-3 p-4 bg-white shadow-sm">
                 <h2 class="h5 fw-bold mb-3">Product focus</h2>
                 <ul class="list-unstyled mb-0 d-grid gap-3 text-muted">
-                    <li>One workspace for planning, creation, scheduling and publishing.</li>
+                    <li>One workspace for creation, repurposing, scheduling and publishing.</li>
                     <li>Brand tools that help keep social content aligned.</li>
                     <li>Practical AI assistance with human review before publishing.</li>
                 </ul>
@@ -72,19 +76,22 @@
     </div>
     <div class="row g-3">
         {% for capability in [
+            "AI Content Studio",
             "AI-assisted caption and content creation",
             "AI image generation",
-            "Brand Briefs",
+            "Brand Brief",
+            "Brand Coach",
             "Content Packs",
             "TikTok repurposing",
+            "Revision history",
+            "Carousel creation",
             "AI Studio and caption improvement",
             "Content scheduling",
             "Content calendar",
             "Connected Accounts",
-            "Instagram publishing",
-            "Facebook publishing",
-            "LinkedIn personal-profile text publishing",
-            "LinkedIn personal-profile single-image publishing"
+            "Instagram publishing workflows",
+            "Facebook publishing workflows",
+            "LinkedIn personal-profile text and single-image workflows"
         ] %}
             <div class="col-md-6 col-xl-4">
                 <div class="border rounded-3 p-3 bg-white h-100 shadow-sm">
@@ -125,8 +132,8 @@
                 <h2 class="h4 fw-bold mb-3">Platform Approach</h2>
                 <p class="text-muted mb-3">
                     SMU connects to supported social platforms so users can publish content they
-                    choose. Current publishing support includes Instagram, Facebook and LinkedIn
-                    personal profiles.
+                    choose. Current publishing support includes Instagram workflows, Facebook
+                    workflows and LinkedIn personal-profile text and single-image workflows.
                 </p>
                 <p class="text-muted mb-0">
                     Platform capabilities depend on third-party APIs and permissions.
@@ -157,18 +164,24 @@
                 </p>
                 <p class="text-muted mb-0">
                     Data handling is explained in the
-                    <a href="{{ url_for('privacy_policy') }}">Privacy Policy</a>.
+                    <a href="{{ url_for('privacy_policy') }}">Privacy Policy</a> and
+                    <a href="{{ url_for('terms_of_service') }}">Terms of Service</a>.
                 </p>
             </div>
         </div>
         <div class="col-lg-6">
             <div class="border rounded-3 p-4 bg-white h-100 shadow-sm">
-                <h2 class="h4 fw-bold mb-3">Built With Beta Users</h2>
+                <h2 class="h4 fw-bold mb-3">Built Around Real Content Workflows</h2>
                 <p class="text-muted mb-3">
-                    SMU is currently in private beta. Beta users can provide feedback, features may
-                    evolve, and approved users can create accounts.
+                    SMU is being built around the way creators and businesses actually create
+                    content: starting with an idea or existing piece of content, improving it,
+                    turning it into platform-ready posts, and managing the publishing workflow from
+                    one place.
                 </p>
-                <a class="btn btn-primary" href="{{ url_for('beta_apply') }}">Join the Beta</a>
+                <p class="text-muted mb-0">
+                    The product will keep improving based on how people use it and the feedback
+                    they provide.
+                </p>
             </div>
         </div>
     </div>
@@ -203,12 +216,14 @@
 
 <section class="py-4">
     <div class="text-center border rounded-3 p-4 p-lg-5 bg-white shadow-sm">
-        <h2 class="h3 fw-bold mb-3">Questions about SMU?</h2>
+        <h2 class="h3 fw-bold mb-3">Bring your content workflow together with SMU.</h2>
         <p class="text-muted mb-4">
-            Learn more about privacy, terms, or send a question through the contact page.
+            Create more from your ideas and manage the path from draft to publishing in one place.
         </p>
         <div class="d-flex flex-column flex-sm-row justify-content-center gap-3">
-            <a class="btn btn-primary" href="{{ url_for('contact') }}">Contact SMU</a>
+            <a class="btn btn-primary" href="{{ primary_cta_url }}">{{ primary_cta_label }}</a>
+            <a class="btn btn-outline-primary" href="{{ url_for('pricing') }}">Pricing</a>
+            <a class="btn btn-outline-secondary" href="{{ url_for('contact') }}">Contact SMU</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('privacy_policy') }}">Privacy Policy</a>
             <a class="btn btn-outline-secondary" href="{{ url_for('terms_of_service') }}">Terms of Service</a>
         </div>

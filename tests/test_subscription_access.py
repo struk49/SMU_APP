@@ -159,7 +159,7 @@ def test_dashboard_blocks_unpaid_but_preserves_anonymous_landing_and_active_dash
     active_response = client.get("/")
 
     assert anonymous.status_code == 200
-    assert "Turn One Idea Into Content Everywhere" in anonymous.get_data(as_text=True)
+    assert "Turn one idea into content for every platform." in anonymous.get_data(as_text=True)
     assert unpaid_response.status_code == 302
     assert unpaid_response.location.endswith("/pricing")
     assert active_response.status_code == 200

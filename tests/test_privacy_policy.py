@@ -21,6 +21,10 @@ def test_privacy_page_renders_for_anonymous_user(client, app):
     assert "Last Updated:" in html
     assert "Contents" in html
     assert "Information We Collect" in html
+    lowered = html.lower()
+    assert "private beta" not in lowered
+    assert "join beta" not in lowered
+    assert "beta access" not in lowered
 
 
 def test_privacy_page_footer_contains_privacy_policy_link(client):

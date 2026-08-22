@@ -6,7 +6,7 @@ the authenticated workspace remains the core app experience. In the default
 subscription mode, users can register and log in, then need an active Stripe
 subscription before using product features.
 Public About, Privacy Policy, Terms of Service and Contact pages are available
-for beta readiness.
+for paid-launch readiness and public trust.
 
 ## Current capabilities
 - User authentication and user-owned posts

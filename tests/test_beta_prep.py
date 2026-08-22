@@ -42,6 +42,8 @@ def test_onboarding_progress_shows_when_incomplete(client, module):
 
     assert response.status_code == 200
     assert "Welcome checklist" in html
+    assert "Complete the basics to get started with SMU." in html
+    assert "beta-ready" not in html.lower()
     assert "0%" in html
 
 
@@ -81,6 +83,8 @@ def test_help_page_renders_sections(client, module):
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
+    assert "Quick answers for getting around SMU." in html
+    assert "SMU Beta" not in html
 
     for heading in [
         "Getting Started",
@@ -100,7 +104,7 @@ def test_feedback_endpoint_stores_feedback(client, module):
     response = client.post(
         "/feedback",
         json={
-            "message": "The beta checklist helped.",
+            "message": "The getting started checklist helped.",
             "page_url": "/calendar",
         },
     )
@@ -109,7 +113,7 @@ def test_feedback_endpoint_stores_feedback(client, module):
     assert response.status_code == 200
     assert response.get_json() == {"success": True}
     assert feedback is not None
-    assert feedback.message == "The beta checklist helped."
+    assert feedback.message == "The getting started checklist helped."
     assert feedback.page_url == "/calendar"
 
 

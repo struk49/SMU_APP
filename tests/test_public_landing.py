@@ -21,35 +21,37 @@ def test_root_landing_page_is_public(client):
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Turn One Idea Into Content Everywhere" in html
-    assert "Join the Beta" in html
+    assert "Turn one idea into content for every platform." in html
+    assert "AI-powered content workspace" in html
 
 
 def test_landing_page_endpoint_remains_public(client):
     response = client.get("/landing")
 
     assert response.status_code == 200
-    assert "Turn One Idea Into Content Everywhere" in response.get_data(as_text=True)
+    assert "Turn one idea into content for every platform." in response.get_data(as_text=True)
 
 
 def test_landing_ctas_point_to_real_routes(client):
     html = client.get("/").get_data(as_text=True)
 
-    assert 'href="/beta/apply"' in html
+    assert 'href="/register"' in html
     assert 'href="/login"' in html
     assert 'href="#how-it-works"' in html
+    assert 'href="#pricing-preview"' in html
 
 
 def test_landing_sections_render_current_product_capabilities(client):
     html = client.get("/").get_data(as_text=True)
 
-    assert "AI Content Creation" in html
-    assert "AI Images" in html
-    assert "Content Repurposing" in html
-    assert "Brand-Aware Content" in html
-    assert "Smart Scheduling" in html
-    assert "Multi-Platform Publishing" in html
-    assert "LinkedIn personal-profile publishing" in html
+    assert "TikTok Repurposing" in html
+    assert "AI Studio" in html
+    assert "Content Packs" in html
+    assert "Brand Brief" in html
+    assert "Instagram" in html
+    assert "Facebook" in html
+    assert "LinkedIn" in html
+    assert "Personal-profile text and single-image posts" in html
 
 
 def test_landing_does_not_require_login(client):
@@ -90,6 +92,19 @@ def test_authenticated_landing_shows_dashboard_cta(client, module):
     assert 'href="/"' in html
 
 
+def test_unpaid_authenticated_landing_shows_pricing_cta(client, app, module):
+    app.config["REGISTRATION_MODE"] = "subscription"
+    user = create_user(module, email="landing-unpaid@example.com")
+    login(client, user)
+
+    response = client.get("/landing")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Choose Your Plan" in html
+    assert 'href="/pricing"' in html
+
+
 def test_no_dead_internal_links_introduced(client, module):
     html = client.get("/").get_data(as_text=True)
     rules = {rule.rule for rule in module.app.url_map.iter_rules()}
@@ -108,3 +123,21 @@ def test_future_features_are_not_claimed_as_available(client):
     assert "AI Memory" not in html
     assert "LinkedIn MultiImage" not in html
     assert "Pinterest <small>Coming soon</small>" in html
+
+
+def test_landing_no_longer_uses_beta_marketing_copy(client):
+    html = client.get("/").get_data(as_text=True).lower()
+
+    assert "join beta" not in html
+    assert "private beta" not in html
+    assert "beta access" not in html
+    assert "apply for beta" not in html
+
+
+def test_landing_legal_links_remain(client):
+    html = client.get("/").get_data(as_text=True)
+
+    assert 'href="/about"' in html
+    assert 'href="/contact"' in html
+    assert 'href="/privacy"' in html
+    assert 'href="/terms"' in html

@@ -22,8 +22,11 @@ def test_contact_page_renders_for_anonymous_user(client, app):
     assert "Support" in html
     assert "Bug Report" in html
     assert "Feature Request" in html
-    assert "Beta Feedback" in html
+    assert "Product Feedback" in html
     assert "Privacy" in html
+    lowered = html.lower()
+    assert "private beta" not in lowered
+    assert "beta access" not in lowered
     assert 'name="name"' in html
     assert 'name="email"' in html
     assert 'name="message"' in html

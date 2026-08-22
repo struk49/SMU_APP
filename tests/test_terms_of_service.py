@@ -23,7 +23,11 @@ def test_terms_page_renders_for_anonymous_user(client, app):
     assert recorded == ["terms.html"]
     assert "SMU Terms of Service" in html
     assert "Last Updated:" in html
-    assert "private beta" in html
+    assert "Service Access" in html
+    lowered = html.lower()
+    assert "private beta" not in lowered
+    assert "join beta" not in lowered
+    assert "beta access" not in lowered
 
 
 def test_terms_page_contains_required_sections(client):
@@ -32,6 +36,7 @@ def test_terms_page_contains_required_sections(client):
     assert "User Content" in html
     assert "AI Generated Content" in html
     assert "Social Media Publishing" in html
+    assert "Service Access" in html
     assert "Acceptable Use" in html
     assert "Third-Party Services" in html
     assert "Consumer Rights" in html
@@ -45,6 +50,7 @@ def test_terms_page_contains_core_legal_positioning(client):
     assert "You retain ownership of content" in text
     assert "AI features may produce inaccurate" in text
     assert "third-party APIs" in text
+    assert "paid subscription plans" in text
     assert "Nothing in these Terms affects rights" in text
     assert "laws of England and Wales" in text
 

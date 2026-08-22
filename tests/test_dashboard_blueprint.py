@@ -50,8 +50,8 @@ def test_dashboard_root_renders_public_landing_for_anonymous_users(client):
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Turn One Idea Into Content Everywhere" in html
-    assert "Join the Beta" in html
+    assert "Turn one idea into content for every platform." in html
+    assert "Get Started" in html
 
 
 def test_dashboard_renders_same_template_and_context_keys(client, app, module):
