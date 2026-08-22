@@ -11,16 +11,23 @@
                 <div class="text-center mb-4">
                     <h1 class="h3 fw-bold">Create your SMU account</h1>
 
-                    <p class="text-muted">
-                        SMU is currently in private beta. Registration is
-                        available to approved beta users.
-                    </p>
-                    <a
-                        href="{{ url_for('beta_apply') }}"
-                        class="fw-semibold text-decoration-none"
-                    >
-                        Apply for Beta Access
-                    </a>
+                    {% if registration_mode == "beta" %}
+                        <p class="text-muted">
+                            SMU is currently in private beta. Registration is
+                            available to approved beta users.
+                        </p>
+                        <a
+                            href="{{ url_for('beta_apply') }}"
+                            class="fw-semibold text-decoration-none"
+                        >
+                            Apply for Beta Access
+                        </a>
+                    {% else %}
+                        <p class="text-muted">
+                            Create your account, then choose a subscription to
+                            start using SMU.
+                        </p>
+                    {% endif %}
                 </div>
 
                 <form method="POST">

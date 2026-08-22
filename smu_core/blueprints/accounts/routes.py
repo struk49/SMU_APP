@@ -15,6 +15,7 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import ConnectedAccount
+from smu_core.services.access import has_product_access, subscription_required
 from smu_core.services.platforms import linkedin_oauth
 
 
@@ -53,6 +54,11 @@ def connected_accounts():
     accounts = _get_or_create_current_user_accounts()
 
     if request.method == "POST":
+        user = current_user._get_current_object()
+        if not has_product_access(user):
+            flash("An active SMU subscription is required to use this feature.", "warning")
+            return redirect(url_for("pricing"))
+
         accounts.instagram_connected = (
             request.form.get("instagram_connected") == "on"
         )
@@ -112,6 +118,7 @@ def connected_accounts():
 
 
 @login_required
+@subscription_required
 def linkedin_connect():
     client_id = current_app.config.get("LINKEDIN_CLIENT_ID", "")
     client_secret = current_app.config.get("LINKEDIN_CLIENT_SECRET", "")
@@ -138,6 +145,7 @@ def linkedin_connect():
 
 
 @login_required
+@subscription_required
 def linkedin_callback():
     expected_state = session.pop("linkedin_oauth_state", None)
     returned_state = request.args.get("state", "")
@@ -197,6 +205,7 @@ def linkedin_callback():
 
 
 @login_required
+@subscription_required
 def linkedin_disconnect():
     accounts = _get_or_create_current_user_accounts()
     _clear_linkedin_state(accounts)

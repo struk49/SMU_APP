@@ -1,6 +1,7 @@
 """Service modules for SMU application behaviour."""
 
 __all__ = [
+    "billing",
     "captions",
     "carousel_generation",
     "content",

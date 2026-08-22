@@ -4,7 +4,7 @@
 
 SMU is a Flask application backed by SQLAlchemy. Local development uses SQLite
 by default, with `DATABASE_URL` support for hosted databases. The app integrates
-with OpenAI, Cloudinary, Make.com, TikTok/yt-dlp and APScheduler.
+with OpenAI, Cloudinary, Make.com, TikTok/yt-dlp, Stripe and APScheduler.
 
 Not every integration is required for every local task. The app can start with
 development fallbacks, but specific features require their own credentials.
@@ -104,6 +104,12 @@ The current code reads these environment variables.
 | `LINKEDIN_CLIENT_ID` | Required for LinkedIn OAuth | LinkedIn Developer app client ID | `86abc...` | empty string | No |
 | `LINKEDIN_CLIENT_SECRET` | Required for LinkedIn OAuth | LinkedIn Developer app client secret | `...` | empty string | Yes |
 | `LINKEDIN_REDIRECT_URI` | Optional if external URL generation is correct | Absolute LinkedIn OAuth callback URL registered in LinkedIn Developer Portal | `https://smu.example.com/accounts/linkedin/callback` | generated from `url_for(..., _external=True)` | No |
+| `STRIPE_SECRET_KEY` | Required for subscription Checkout | Stripe server-side API key in test mode | `sk_test_...` | empty string | Yes |
+| `STRIPE_PUBLISHABLE_KEY` | Optional for later billing UI | Stripe publishable key safe for browser use | `pk_test_...` | empty string | No |
+| `STRIPE_WEBHOOK_SECRET` | Required for Stripe webhook verification | Signing secret for `/billing/webhook` | `whsec_...` | empty string | Yes |
+| `STRIPE_PRICE_ID` | Required for subscription Checkout | Stripe recurring monthly Price ID | `price_...` | empty string | No |
+| `REGISTRATION_MODE` | Optional | Account-registration/access mode: `subscription`, `beta` or `open` | `subscription` | `subscription` | No |
+| `SMU_MONTHLY_PRICE_DISPLAY` | Optional | Human-readable pricing label shown on `/pricing` | `Monthly subscription` | `Monthly subscription` | No |
 
 Do not put real values in documentation or commits.
 
@@ -196,6 +202,35 @@ The redirect URL must also be registered in the LinkedIn Developer Portal.
 SMU requests only `openid profile w_member_social` for MVP personal-profile
 publishing. Tokens are stored per user in Connected Accounts and are not used
 for live publishing until the LinkedIn publishing slice is explicitly wired.
+
+## Stripe Billing Configuration
+
+Stripe billing uses:
+
+```dotenv
+STRIPE_SECRET_KEY=
+STRIPE_PUBLISHABLE_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRICE_ID=
+```
+
+Use Stripe test-mode values for local development and beta testing. SMU creates
+Stripe-hosted Checkout Sessions for one recurring subscription Price and stores
+subscription state on the `User` record only after verified webhook events.
+
+Webhook setup:
+
+- endpoint path: `/billing/webhook`
+- required events:
+  - `checkout.session.completed`
+  - `invoice.paid`
+  - `invoice.payment_failed`
+  - `customer.subscription.updated`
+  - `customer.subscription.deleted`
+
+Do not put Stripe secret keys, webhook secrets or real webhook payloads in logs,
+documentation or commits. The success URL is not used as proof of payment;
+Stripe webhook state is authoritative.
 
 ## Database Configuration
 

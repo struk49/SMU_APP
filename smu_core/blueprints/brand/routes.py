@@ -3,12 +3,14 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import BrandBrief
+from smu_core.services.access import subscription_required
 
 
 brand_bp = Blueprint("brand", __name__)
 
 
 @login_required
+@subscription_required
 def brand_brief():
     brief = BrandBrief.query.filter_by(user_id=current_user.id).first()
 

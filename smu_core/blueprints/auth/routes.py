@@ -4,6 +4,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from smu_core.extensions import db
 from smu_core.models import User
+from smu_core.services.access import has_product_access, registration_mode
 from smu_core.services.beta_access import is_email_approved_for_beta
 
 
@@ -18,7 +19,10 @@ def _log_event(event_name, **fields):
 
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for("index"))
+        user = current_user._get_current_object()
+        return redirect(url_for("index" if has_product_access(user) else "pricing"))
+
+    mode = registration_mode()
 
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -39,12 +43,16 @@ def register():
             flash("An account with that email already exists.", "danger")
             return redirect(url_for("register"))
 
-        if not is_email_approved_for_beta(email):
+        if mode == "beta" and not is_email_approved_for_beta(email):
             flash(
                 "SMU is currently in private beta. Apply for access using the Join Beta form.",
                 "warning",
             )
-            return render_template("register.html", email=email), 403
+            return render_template(
+                "register.html",
+                email=email,
+                registration_mode=mode,
+            ), 403
 
         user = User(
             email=email,
@@ -57,14 +65,15 @@ def register():
         login_user(user)
 
         flash("Account created successfully.", "success")
-        return redirect(url_for("index"))
+        return redirect(url_for("pricing" if mode == "subscription" else "index"))
 
-    return render_template("register.html")
+    return render_template("register.html", registration_mode=mode)
 
 
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("index"))
+        user = current_user._get_current_object()
+        return redirect(url_for("index" if has_product_access(user) else "pricing"))
 
     if request.method == "POST":
         email = request.form.get("email", "").strip().lower()
@@ -88,7 +97,7 @@ def login():
         )
 
         flash("Logged in successfully.", "success")
-        return redirect(url_for("index"))
+        return redirect(url_for("index" if has_product_access(user) else "pricing"))
 
     return render_template("login.html")
 

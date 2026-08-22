@@ -9,6 +9,10 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(150), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=utc_now)
+    stripe_customer_id = db.Column(db.String(255), nullable=True)
+    stripe_subscription_id = db.Column(db.String(255), nullable=True)
+    subscription_status = db.Column(db.String(50), nullable=True)
+    subscription_current_period_end = db.Column(db.DateTime, nullable=True)
 
     brand_brief = db.relationship(
         "BrandBrief",

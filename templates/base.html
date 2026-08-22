@@ -36,29 +36,35 @@
 
                 <div class="app-nav-links">
                     {% if current_user.is_authenticated %}
-                        <a href="{{ url_for('index') }}" class="app-nav-link">
-                            Dashboard
-                        </a>
+                        {% if has_product_access(current_user) %}
+                            <a href="{{ url_for('index') }}" class="app-nav-link">
+                                Dashboard
+                            </a>
 
-                        <a href="{{ url_for('create_post') }}" class="app-nav-link">
-                            Create
-                        </a>
+                            <a href="{{ url_for('create_post') }}" class="app-nav-link">
+                                Create
+                            </a>
 
-                        <a href="{{ url_for('tiktok_repurpose') }}" class="app-nav-link">
-                            TikTok
-                        </a>
+                            <a href="{{ url_for('tiktok_repurpose') }}" class="app-nav-link">
+                                TikTok
+                            </a>
 
-                        <a href="{{ url_for('content_pack') }}" class="app-nav-link">
-                            Content Pack
-                        </a>
+                            <a href="{{ url_for('content_pack') }}" class="app-nav-link">
+                                Content Pack
+                            </a>
 
-                        <a href="{{ url_for('calendar_view') }}" class="app-nav-link">
-                            Calendar
-                        </a>
+                            <a href="{{ url_for('calendar_view') }}" class="app-nav-link">
+                                Calendar
+                            </a>
 
-                        <a href="{{ url_for('brand_brief') }}" class="app-nav-link">
-                            Brand Brief
-                        </a>
+                            <a href="{{ url_for('brand_brief') }}" class="app-nav-link">
+                                Brand Brief
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('pricing') }}" class="app-nav-link">
+                                Pricing
+                            </a>
+                        {% endif %}
 
                         <a href="{{ url_for('connected_accounts') }}" class="app-nav-link">
                             Accounts
@@ -78,6 +84,10 @@
                     {% else %}
                         <a href="{{ url_for('landing_page') }}" class="app-nav-link">
                             Home
+                        </a>
+
+                        <a href="{{ url_for('pricing') }}" class="app-nav-link">
+                            Pricing
                         </a>
 
                         <a href="{{ url_for('about_page') }}" class="app-nav-link">

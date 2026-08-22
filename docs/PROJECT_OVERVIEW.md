@@ -1,11 +1,10 @@
 # SMU Project Overview
 
 SMU is an AI-powered social-media content workspace for creators and businesses.
-The application now includes a public landing page for private beta recruitment
-and product credibility, while the authenticated workspace remains the core app
-experience.
-New account registration is currently limited to approved private-beta
-applicants.
+The application includes a public landing page for product credibility, while
+the authenticated workspace remains the core app experience. In the default
+subscription mode, users can register and log in, then need an active Stripe
+subscription before using product features.
 Public About, Privacy Policy, Terms of Service and Contact pages are available
 for beta readiness.
 
@@ -23,6 +22,8 @@ for beta readiness.
 - Single-image and carousel payloads
 - Make.com webhook publishing
 - Post scheduling with APScheduler
+- Stripe Checkout subscription foundation
+- Subscription-gated product access
 
 ## Stack
 - Python / Flask
@@ -35,3 +36,4 @@ for beta readiness.
 - Cloudinary
 - Make.com
 - Render
+- Stripe

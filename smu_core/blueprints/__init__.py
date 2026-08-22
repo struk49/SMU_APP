@@ -3,6 +3,7 @@
 from smu_core.blueprints.accounts import accounts_bp
 from smu_core.blueprints.auth import auth_bp
 from smu_core.blueprints.beta import beta_bp
+from smu_core.blueprints.billing import billing_bp
 from smu_core.blueprints.brand import brand_bp
 from smu_core.blueprints.calendar import calendar_bp
 from smu_core.blueprints.content_pack import content_pack_bp
@@ -17,6 +18,7 @@ __all__ = [
     "accounts_bp",
     "auth_bp",
     "beta_bp",
+    "billing_bp",
     "brand_bp",
     "calendar_bp",
     "content_pack_bp",

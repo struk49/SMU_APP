@@ -8,6 +8,7 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import Post
+from smu_core.services.access import subscription_required
 
 
 calendar_bp = Blueprint("calendar", __name__)
@@ -34,6 +35,7 @@ def _calendar_helper(name):
 
 
 @login_required
+@subscription_required
 def calendar_view():
     session["calendar_viewed"] = True
     return render_template("calendar.html")
@@ -276,6 +278,7 @@ def build_calendar_event(post):
 
 
 @login_required
+@subscription_required
 def calendar_events():
     try:
         start_utc = parse_calendar_range_datetime(
@@ -302,6 +305,7 @@ def calendar_events():
 
 
 @login_required
+@subscription_required
 def calendar_summary():
     try:
         start_utc = parse_calendar_range_datetime(
@@ -321,6 +325,7 @@ def calendar_summary():
 
 
 @login_required
+@subscription_required
 def calendar_reschedule_event(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -351,6 +356,7 @@ def calendar_reschedule_event(post_id):
 
 
 @login_required
+@subscription_required
 def calendar_duplicate_event(post_id):
     post = Post.query.filter_by(
         id=post_id,

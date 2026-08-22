@@ -1,8 +1,9 @@
-from flask import Blueprint, current_app, render_template, request
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 
 from smu_core.extensions import db
 from smu_core.models import Post
+from smu_core.services.access import has_product_access
 
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -21,6 +22,11 @@ def _dashboard_helper(name):
 def index():
     if not current_user.is_authenticated:
         return render_template("landing.html")
+
+    user = current_user._get_current_object()
+    if not has_product_access(user):
+        flash("An active SMU subscription is required to use this feature.", "warning")
+        return redirect(url_for("pricing"))
 
     status_filter = request.args.get("status", "all")
     type_filter = request.args.get("type", "all")

@@ -5,6 +5,7 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import Post
+from smu_core.services.access import subscription_required
 
 
 content_pack_bp = Blueprint("content_pack", __name__)
@@ -21,6 +22,7 @@ def _content_pack_helper(name):
 
 
 @login_required
+@subscription_required
 def content_pack():
     source_text = ""
     content_pack_result = None
@@ -60,6 +62,7 @@ def content_pack():
 
 
 @login_required
+@subscription_required
 def create_content_pack_carousel():
     content_pack_result = request.form.get("content_pack_result", "").strip()
     image_style = request.form.get("image_style", "").strip()
@@ -166,6 +169,7 @@ Design:
 
 
 @login_required
+@subscription_required
 def create_content_pack_platform_draft():
     content_pack_result = request.form.get("content_pack_result", "").strip()
     platform = request.form.get("platform", "").strip()

@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import BrandBrief, Post, PostRevision
+from smu_core.services.access import subscription_required
 from smu_core.services.time_utils import utc_now
 
 
@@ -104,6 +105,7 @@ def _studio_helper(name):
 
 
 @login_required
+@subscription_required
 def create_post():
     default_scheduled_time = ""
 
@@ -342,6 +344,7 @@ User Request:
 
 
 @login_required
+@subscription_required
 def schedule_post(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -429,6 +432,7 @@ def schedule_post(post_id):
 
 
 @login_required
+@subscription_required
 def send_to_make(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -488,6 +492,7 @@ def send_to_make(post_id):
 
 
 @login_required
+@subscription_required
 def send_carousel_to_make(group_id):
     posts = _manual_publish_helper("get_ordered_carousel_posts")(
         group_id,
@@ -532,6 +537,7 @@ def send_carousel_to_make(group_id):
 
 
 @login_required
+@subscription_required
 def rewrite_caption(post_id):
     post = Post.query.get_or_404(post_id)
 
@@ -565,6 +571,7 @@ def rewrite_caption(post_id):
 
 
 @login_required
+@subscription_required
 def rewrite_carousel_caption(group_id):
     posts = _caption_helper("get_ordered_carousel_posts")(
         group_id,
@@ -603,6 +610,7 @@ def rewrite_carousel_caption(group_id):
 
 
 @login_required
+@subscription_required
 def improve_post(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -635,6 +643,7 @@ def improve_post(post_id):
 
 
 @login_required
+@subscription_required
 def use_improved_caption(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -662,6 +671,7 @@ def use_improved_caption(post_id):
 
 
 @login_required
+@subscription_required
 def use_custom_caption(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -687,6 +697,7 @@ def use_custom_caption(post_id):
 
 
 @login_required
+@subscription_required
 def discard_improved_caption(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -703,6 +714,7 @@ def discard_improved_caption(post_id):
 
 
 @login_required
+@subscription_required
 def studio_action(post_id, action):
     post = Post.query.filter_by(
         id=post_id,
@@ -755,6 +767,7 @@ def studio_action(post_id, action):
 
 
 @login_required
+@subscription_required
 def post_studio(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -802,6 +815,7 @@ def post_studio(post_id):
 
 
 @login_required
+@subscription_required
 def studio_regrade(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -838,6 +852,7 @@ def studio_regrade(post_id):
 
 
 @login_required
+@subscription_required
 def restore_revision(post_id, revision_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -866,6 +881,7 @@ def restore_revision(post_id, revision_id):
 
 
 @login_required
+@subscription_required
 def ai_editor(post_id):
     post = Post.query.filter_by(
         id=post_id,
@@ -896,6 +912,7 @@ def ai_editor(post_id):
 
 
 @login_required
+@subscription_required
 def view_post(post_id):
     post = Post.query.get_or_404(post_id)
 
@@ -915,6 +932,7 @@ def view_post(post_id):
 
 
 @login_required
+@subscription_required
 def edit_post(post_id):
     post = Post.query.get_or_404(post_id)
 
@@ -963,6 +981,7 @@ def edit_post(post_id):
 
 
 @login_required
+@subscription_required
 def edit_carousel(group_id):
     posts = _post_edit_helper("get_ordered_carousel_posts")(
         group_id,
@@ -1014,6 +1033,7 @@ def edit_carousel(group_id):
 
 
 @login_required
+@subscription_required
 def duplicate_post(post_id):
     original = Post.query.get_or_404(post_id)
 
@@ -1055,6 +1075,7 @@ def duplicate_post(post_id):
 
 
 @login_required
+@subscription_required
 def duplicate_carousel(group_id):
     original_posts = _post_delete_duplicate_helper("get_ordered_carousel_posts")(
         group_id,
@@ -1103,6 +1124,7 @@ def duplicate_carousel(group_id):
 
 
 @login_required
+@subscription_required
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
 
@@ -1132,6 +1154,7 @@ def delete_post(post_id):
 
 
 @login_required
+@subscription_required
 def delete_carousel(group_id):
     posts = _post_delete_duplicate_helper("get_ordered_carousel_posts")(
         group_id,

@@ -1,11 +1,17 @@
 from contextlib import contextmanager
 from urllib.parse import parse_qs, urlparse
 
+import pytest
 from flask import template_rendered, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import app as smu_app
 from conftest import create_user, login as login_client
+
+
+@pytest.fixture(autouse=True)
+def beta_registration_mode(app):
+    app.config["REGISTRATION_MODE"] = "beta"
 
 
 @contextmanager
@@ -167,7 +173,7 @@ def test_valid_login_authenticates_user(client, module):
     )
 
     assert response.status_code == 302
-    assert response.location.endswith("/")
+    assert response.location.endswith("/pricing")
     with client.session_transaction() as session:
         assert session["_user_id"] == str(user.id)
 
@@ -191,7 +197,8 @@ def test_invalid_login_does_not_authenticate(client, module):
         assert "_user_id" not in session
 
 
-def test_login_next_parameter_behaviour_is_preserved(client, module):
+@pytest.mark.parametrize("next_path", ["/calendar", "/tiktok"])
+def test_unpaid_login_next_cannot_bypass_subscription_gate(client, module, next_path):
     user = module.User(
         email="next-auth@example.com",
         password_hash=generate_password_hash("correct-password"),
@@ -200,16 +207,33 @@ def test_login_next_parameter_behaviour_is_preserved(client, module):
     module.db.session.commit()
 
     response = client.post(
-        "/login?next=/calendar",
+        f"/login?next={next_path}",
         data={"email": "next-auth@example.com", "password": "correct-password"},
     )
 
     assert response.status_code == 302
-    assert response.location.endswith("/")
+    assert response.location.endswith("/pricing")
+    with client.session_transaction() as session:
+        assert session["_user_id"] == str(user.id)
 
 
-def test_authenticated_register_and_login_redirect_to_dashboard(client, module):
+def test_authenticated_unpaid_register_and_login_redirect_to_pricing(client, module):
     user = create_user(module, email="already-auth@example.com")
+    login_client(client, user)
+
+    register_response = client.get("/register")
+    login_response = client.get("/login")
+
+    assert register_response.status_code == 302
+    assert register_response.location.endswith("/pricing")
+    assert login_response.status_code == 302
+    assert login_response.location.endswith("/pricing")
+
+
+def test_authenticated_active_register_and_login_redirect_to_dashboard(client, module):
+    user = create_user(module, email="already-active-auth@example.com")
+    user.subscription_status = "active"
+    module.db.session.commit()
     login_client(client, user)
 
     register_response = client.get("/register")

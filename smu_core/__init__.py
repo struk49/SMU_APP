@@ -34,9 +34,16 @@ def create_app(config_object=None):
     login_manager.login_view = "login"
     login_manager.login_message_category = "warning"
 
+    from smu_core.services.access import has_product_access
+
+    @app.context_processor
+    def inject_access_helpers():
+        return {"has_product_access": has_product_access}
+
     from smu_core.blueprints.accounts import accounts_bp
     from smu_core.blueprints.auth import auth_bp
     from smu_core.blueprints.beta import beta_bp
+    from smu_core.blueprints.billing import billing_bp
     from smu_core.blueprints.brand import brand_bp
     from smu_core.blueprints.calendar import calendar_bp
     from smu_core.blueprints.content_pack import content_pack_bp
@@ -49,6 +56,7 @@ def create_app(config_object=None):
     app.register_blueprint(accounts_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(beta_bp)
+    app.register_blueprint(billing_bp)
     app.register_blueprint(brand_bp)
     app.register_blueprint(calendar_bp)
     app.register_blueprint(content_pack_bp)

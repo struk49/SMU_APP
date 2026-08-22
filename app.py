@@ -182,6 +182,20 @@ with app.app_context():
             if column_name not in account_columns:
                 conn.execute(db.text(alter_sql))
 
+        user_columns = [
+            col["name"] for col in inspector.get_columns("user")
+        ]
+        user_column_sql = {
+            "stripe_customer_id": 'ALTER TABLE "user" ADD COLUMN stripe_customer_id VARCHAR(255)',
+            "stripe_subscription_id": 'ALTER TABLE "user" ADD COLUMN stripe_subscription_id VARCHAR(255)',
+            "subscription_status": 'ALTER TABLE "user" ADD COLUMN subscription_status VARCHAR(50)',
+            "subscription_current_period_end": 'ALTER TABLE "user" ADD COLUMN subscription_current_period_end TIMESTAMP',
+        }
+
+        for column_name, alter_sql in user_column_sql.items():
+            if column_name not in user_columns:
+                conn.execute(db.text(alter_sql))
+
         conn.commit()
 
 def get_file_type(filename: str) -> str:

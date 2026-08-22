@@ -1,6 +1,12 @@
+import pytest
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from conftest import create_user, login
+
+
+@pytest.fixture(autouse=True)
+def beta_registration_mode(app):
+    app.config["REGISTRATION_MODE"] = "beta"
 
 
 PRIVATE_BETA_MESSAGE = (
@@ -178,19 +184,19 @@ def test_existing_user_login_still_works_without_beta_application(client, module
     )
 
     assert response.status_code == 302
-    assert response.location.endswith("/")
+    assert response.location.endswith("/pricing")
     with client.session_transaction() as session:
         assert session["_user_id"] == str(user.id)
 
 
-def test_authenticated_users_keep_register_redirect(client, module):
+def test_authenticated_unpaid_user_register_redirects_to_pricing(client, module):
     user = create_user(module, email="already@example.com")
     login(client, user)
 
     response = client.get("/register")
 
     assert response.status_code == 302
-    assert response.location.endswith("/")
+    assert response.location.endswith("/pricing")
 
 
 def test_admin_approval_action_permits_registration(client, app, module):

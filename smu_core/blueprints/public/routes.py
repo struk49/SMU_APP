@@ -1,10 +1,11 @@
 import re
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
-from flask_login import login_required
+from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import ContactMessage
+from smu_core.services.access import has_product_access
 
 
 public_bp = Blueprint("public", __name__)
@@ -26,6 +27,18 @@ def _log_event(event_name, **fields):
 
 def landing_page():
     return render_template("landing.html")
+
+
+def pricing():
+    user = current_user._get_current_object() if current_user.is_authenticated else None
+    return render_template(
+        "pricing.html",
+        has_access=has_product_access(user),
+        price_display=current_app.config.get(
+            "SMU_MONTHLY_PRICE_DISPLAY",
+            "Monthly subscription",
+        ),
+    )
 
 
 def about_page():
@@ -92,6 +105,7 @@ def register_public_routes(state):
     app = state.app
     routes = [
         ("/landing", "landing_page", landing_page, None),
+        ("/pricing", "pricing", pricing, None),
         ("/about", "about_page", about_page, None),
         ("/privacy", "privacy_policy", privacy_policy, None),
         ("/terms", "terms_of_service", terms_of_service, None),

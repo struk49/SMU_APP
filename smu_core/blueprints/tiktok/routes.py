@@ -7,6 +7,7 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import Post
+from smu_core.services.access import subscription_required
 from smu_core.services.tiktok import TikTokRepurposeError, validate_repurpose_result
 
 
@@ -29,6 +30,7 @@ def _safe_tiktok_hostname(tiktok_url):
 
 
 @login_required
+@subscription_required
 def tiktok_repurpose():
     transcript = None
     repurpose_result = None
@@ -163,6 +165,7 @@ def tiktok_repurpose():
 
 
 @login_required
+@subscription_required
 def create_tiktok_draft():
     caption = request.form.get("caption", "").strip()
     image_prompt = request.form.get("image_prompt", "").strip()
@@ -246,6 +249,7 @@ def create_tiktok_draft():
 
 
 @login_required
+@subscription_required
 def create_tiktok_carousel_draft():
     caption = request.form.get("caption", "").strip()
     image_prompt = request.form.get("image_prompt", "").strip()

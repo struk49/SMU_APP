@@ -6,7 +6,16 @@ from conftest import create_accounts, create_post, create_user, login
 from smu_core.models import User
 
 
-EXPECTED_COLUMNS = ["id", "email", "password_hash", "created_at"]
+EXPECTED_COLUMNS = [
+    "id",
+    "email",
+    "password_hash",
+    "created_at",
+    "stripe_customer_id",
+    "stripe_subscription_id",
+    "subscription_status",
+    "subscription_current_period_end",
+]
 
 
 def test_user_model_remains_compatible(module):
@@ -19,6 +28,10 @@ def test_user_model_remains_compatible(module):
     assert User.__table__.c.email.unique is True
     assert User.__table__.c.email.nullable is False
     assert User.__table__.c.password_hash.nullable is False
+    assert User.__table__.c.stripe_customer_id.nullable is True
+    assert User.__table__.c.stripe_subscription_id.nullable is True
+    assert User.__table__.c.subscription_status.nullable is True
+    assert User.__table__.c.subscription_current_period_end.nullable is True
 
 
 def test_user_loader_returns_correct_user(app, module):
