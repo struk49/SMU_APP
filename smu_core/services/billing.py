@@ -151,14 +151,33 @@ def construct_webhook_event(
         raise
 
 
-def process_webhook_event(event, *, user_model, db_session):
+def process_webhook_event(
+    event,
+    *,
+    user_model,
+    db_session,
+    stripe_module=None,
+    secret_key=None,
+):
     event_type = _get(event, "type")
     obj = _get(_get(event, "data", {}), "object", {})
 
     if event_type == "checkout.session.completed":
-        return process_checkout_completed(obj, user_model=user_model, db_session=db_session)
+        return process_checkout_completed(
+            obj,
+            user_model=user_model,
+            db_session=db_session,
+            stripe_module=stripe_module,
+            secret_key=secret_key,
+        )
     if event_type == "invoice.paid":
-        return process_invoice_paid(obj, user_model=user_model, db_session=db_session)
+        return process_invoice_paid(
+            obj,
+            user_model=user_model,
+            db_session=db_session,
+            stripe_module=stripe_module,
+            secret_key=secret_key,
+        )
     if event_type == "invoice.payment_failed":
         return process_invoice_payment_failed(obj, user_model=user_model, db_session=db_session)
     if event_type == "customer.subscription.updated":
@@ -169,7 +188,14 @@ def process_webhook_event(event, *, user_model, db_session):
     return None
 
 
-def process_checkout_completed(session, *, user_model, db_session):
+def process_checkout_completed(
+    session,
+    *,
+    user_model,
+    db_session,
+    stripe_module=None,
+    secret_key=None,
+):
     user = _user_from_checkout_session(session, user_model=user_model, db_session=db_session)
     if not user:
         return None
@@ -177,6 +203,11 @@ def process_checkout_completed(session, *, user_model, db_session):
     customer_id = _get(session, "customer")
     subscription = _get(session, "subscription")
     subscription_id = _object_id(subscription)
+    subscription = _resolve_subscription_object(
+        subscription,
+        stripe_module=stripe_module,
+        secret_key=secret_key,
+    )
 
     if customer_id:
         user.stripe_customer_id = customer_id
@@ -188,7 +219,14 @@ def process_checkout_completed(session, *, user_model, db_session):
     return user
 
 
-def process_invoice_paid(invoice, *, user_model, db_session):
+def process_invoice_paid(
+    invoice,
+    *,
+    user_model,
+    db_session,
+    stripe_module=None,
+    secret_key=None,
+):
     user = _user_from_customer_or_subscription(
         invoice,
         user_model=user_model,
@@ -199,6 +237,12 @@ def process_invoice_paid(invoice, *, user_model, db_session):
 
     _apply_customer_and_subscription_ids(user, invoice)
     subscription = _get(invoice, "subscription")
+    if not isinstance(subscription, str) or _subscription_metadata_incomplete(user):
+        subscription = _resolve_subscription_object(
+            subscription,
+            stripe_module=stripe_module,
+            secret_key=secret_key,
+        )
     _apply_subscription_object(user, subscription)
     if user.subscription_status in INVOICE_PAID_ACTIVATABLE_STATUSES:
         user.subscription_status = "active"
@@ -337,6 +381,23 @@ def _apply_customer_and_subscription_ids(user, obj):
         user.stripe_customer_id = customer_id
     if subscription_id:
         user.stripe_subscription_id = subscription_id
+
+
+def _resolve_subscription_object(subscription, *, stripe_module=None, secret_key=None):
+    if not isinstance(subscription, str):
+        return subscription
+
+    stripe = _stripe_module(stripe_module)
+    if secret_key:
+        stripe.api_key = secret_key
+    return stripe.Subscription.retrieve(subscription)
+
+
+def _subscription_metadata_incomplete(user):
+    return (
+        user.subscription_status in INVOICE_PAID_ACTIVATABLE_STATUSES
+        and user.subscription_current_period_end is None
+    )
 
 
 def _apply_subscription_object(user, subscription):

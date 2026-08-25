@@ -141,6 +141,7 @@ def billing_webhook():
             event,
             user_model=User,
             db_session=db.session,
+            secret_key=current_app.config.get("STRIPE_SECRET_KEY", ""),
         )
     except billing_service.BillingConfigurationError:
         current_app.logger.warning("Stripe webhook configuration missing.")

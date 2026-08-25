@@ -24,6 +24,19 @@ class FakePortalSession:
         return type("Session", (), {"url": "https://billing.stripe.test/session"})()
 
 
+class FakeSubscription:
+    calls = []
+    responses = {}
+    error = None
+
+    @classmethod
+    def retrieve(cls, subscription_id):
+        cls.calls.append(subscription_id)
+        if cls.error:
+            raise cls.error
+        return cls.responses[subscription_id]
+
+
 class FakeStripe:
     api_key = None
 
@@ -32,6 +45,8 @@ class FakeStripe:
 
     class billing_portal:
         Session = FakePortalSession
+
+    Subscription = FakeSubscription
 
 
 class AttrObject:
@@ -43,6 +58,9 @@ def reset_fake_stripe():
     FakeStripe.api_key = None
     FakeCheckoutSession.calls = []
     FakePortalSession.calls = []
+    FakeSubscription.calls = []
+    FakeSubscription.responses = {}
+    FakeSubscription.error = None
 
 
 def test_active_subscription_statuses():
@@ -248,12 +266,127 @@ def test_checkout_completed_stores_customer_and_subscription(app, module):
     assert updated.subscription_current_period_end.tzinfo is None
 
 
+def test_checkout_completed_retrieves_subscription_id_for_initial_period(app, module):
+    reset_fake_stripe()
+    user = create_user(module)
+    FakeSubscription.responses["sub_live_123"] = {
+        "id": "sub_live_123",
+        "customer": "cus_live_123",
+        "status": "active",
+        "cancel_at_period_end": False,
+        "cancel_at": None,
+        "items": {
+            "data": [
+                {
+                    "current_period_end": 1790294400,
+                },
+            ],
+        },
+    }
+
+    updated = billing.process_checkout_completed(
+        {
+            "customer": "cus_live_123",
+            "subscription": "sub_live_123",
+            "metadata": {
+                "smu_user_id": str(user.id),
+            },
+        },
+        user_model=module.User,
+        db_session=module.db.session,
+        stripe_module=FakeStripe,
+        secret_key="sk_live_test",
+    )
+
+    assert FakeStripe.api_key == "sk_live_test"
+    assert FakeSubscription.calls == ["sub_live_123"]
+    assert updated.stripe_customer_id == "cus_live_123"
+    assert updated.stripe_subscription_id == "sub_live_123"
+    assert updated.subscription_status == "active"
+    assert updated.subscription_current_period_end == datetime(2026, 9, 25)
+    assert updated.subscription_cancel_at_period_end is False
+    assert billing.has_active_subscription(updated) is True
+
+
+def test_checkout_completed_uses_expanded_subscription_without_retrieve(app, module):
+    reset_fake_stripe()
+    user = create_user(module)
+
+    updated = billing.process_checkout_completed(
+        {
+            "customer": "cus_live_123",
+            "subscription": {
+                "id": "sub_live_123",
+                "customer": "cus_live_123",
+                "status": "active",
+                "cancel_at_period_end": False,
+                "items": {
+                    "data": [
+                        {
+                            "current_period_end": 1790294400,
+                        },
+                    ],
+                },
+            },
+            "metadata": {
+                "smu_user_id": str(user.id),
+            },
+        },
+        user_model=module.User,
+        db_session=module.db.session,
+        stripe_module=FakeStripe,
+        secret_key="sk_live_test",
+    )
+
+    assert FakeSubscription.calls == []
+    assert updated.stripe_subscription_id == "sub_live_123"
+    assert updated.subscription_status == "active"
+    assert updated.subscription_current_period_end == datetime(2026, 9, 25)
+
+
+def test_checkout_completed_retrieve_failure_is_not_silently_accepted(app, module):
+    reset_fake_stripe()
+    user = create_user(module)
+    FakeSubscription.error = RuntimeError("stripe unavailable")
+
+    with pytest.raises(RuntimeError, match="stripe unavailable"):
+        billing.process_checkout_completed(
+            {
+                "customer": "cus_live_123",
+                "subscription": "sub_live_123",
+                "metadata": {
+                    "smu_user_id": str(user.id),
+                },
+            },
+            user_model=module.User,
+            db_session=module.db.session,
+            stripe_module=FakeStripe,
+            secret_key="sk_live_test",
+        )
+
+    assert FakeSubscription.calls == ["sub_live_123"]
+
+
 def test_invoice_paid_updates_existing_subscription(app, module):
     user = create_user(module)
     user.stripe_customer_id = "cus_123"
     user.stripe_subscription_id = "sub_123"
     user.subscription_status = "past_due"
     module.db.session.commit()
+    reset_fake_stripe()
+    FakeSubscription.responses["sub_123"] = {
+        "id": "sub_123",
+        "customer": "cus_123",
+        "status": "active",
+        "cancel_at_period_end": False,
+        "items": {
+            "data": [
+                {
+                    "current_period_end": 1790294400,
+                },
+            ],
+        },
+    }
 
     updated = billing.process_invoice_paid(
         {
@@ -262,10 +395,75 @@ def test_invoice_paid_updates_existing_subscription(app, module):
         },
         user_model=module.User,
         db_session=module.db.session,
+        stripe_module=FakeStripe,
+        secret_key="sk_live_test",
     )
 
     assert updated.id == user.id
     assert updated.subscription_status == "active"
+    assert updated.subscription_current_period_end == datetime(2026, 9, 25)
+
+
+def test_invoice_paid_retrieves_subscription_when_period_metadata_missing(app, module):
+    reset_fake_stripe()
+    user = create_user(module)
+    user.stripe_customer_id = "cus_live_123"
+    user.stripe_subscription_id = "sub_live_123"
+    user.subscription_status = "past_due"
+    module.db.session.commit()
+    FakeSubscription.responses["sub_live_123"] = {
+        "id": "sub_live_123",
+        "customer": "cus_live_123",
+        "status": "active",
+        "cancel_at_period_end": False,
+        "items": {
+            "data": [
+                {
+                    "current_period_end": 1790294400,
+                },
+            ],
+        },
+    }
+
+    updated = billing.process_invoice_paid(
+        {
+            "customer": "cus_live_123",
+            "subscription": "sub_live_123",
+        },
+        user_model=module.User,
+        db_session=module.db.session,
+        stripe_module=FakeStripe,
+        secret_key="sk_live_test",
+    )
+
+    assert FakeSubscription.calls == ["sub_live_123"]
+    assert updated.subscription_status == "active"
+    assert updated.subscription_current_period_end == datetime(2026, 9, 25)
+
+
+def test_invoice_paid_does_not_retrieve_when_period_metadata_exists(app, module):
+    reset_fake_stripe()
+    user = create_user(module)
+    user.stripe_customer_id = "cus_live_123"
+    user.stripe_subscription_id = "sub_live_123"
+    user.subscription_status = "active"
+    user.subscription_current_period_end = datetime(2026, 9, 25)
+    module.db.session.commit()
+
+    updated = billing.process_invoice_paid(
+        {
+            "customer": "cus_live_123",
+            "subscription": "sub_live_123",
+        },
+        user_model=module.User,
+        db_session=module.db.session,
+        stripe_module=FakeStripe,
+        secret_key="sk_live_test",
+    )
+
+    assert FakeSubscription.calls == []
+    assert updated.subscription_status == "active"
+    assert updated.subscription_current_period_end == datetime(2026, 9, 25)
 
 
 def test_invoice_paid_does_not_reactivate_canceled_subscription(app, module):
@@ -595,7 +793,15 @@ def test_subscription_deleted_marks_canceled(app, module):
 
 
 def test_duplicate_event_processing_is_idempotent(app, module):
+    reset_fake_stripe()
     user = create_user(module)
+    FakeSubscription.responses["sub_123"] = {
+        "id": "sub_123",
+        "customer": "cus_123",
+        "status": "active",
+        "cancel_at_period_end": False,
+        "current_period_end": 1893456000,
+    }
     event_session = {
         "client_reference_id": str(user.id),
         "metadata": {"smu_user_id": str(user.id)},
@@ -607,11 +813,15 @@ def test_duplicate_event_processing_is_idempotent(app, module):
         event_session,
         user_model=module.User,
         db_session=module.db.session,
+        stripe_module=FakeStripe,
+        secret_key="sk_test_123",
     )
     billing.process_checkout_completed(
         event_session,
         user_model=module.User,
         db_session=module.db.session,
+        stripe_module=FakeStripe,
+        secret_key="sk_test_123",
     )
 
     users = module.User.query.filter_by(stripe_customer_id="cus_123").all()

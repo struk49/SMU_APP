@@ -52,6 +52,13 @@ Authenticated users can start Stripe-hosted Checkout through
 The success page only tells the user that Stripe is confirming the subscription.
 It does not activate access.
 
+Live initial checkout may produce only `checkout.session.completed` and
+`invoice.paid` webhooks, without an immediate `customer.subscription.updated`
+event. When those webhooks contain only a subscription ID, SMU retrieves the
+authoritative Stripe Subscription object and persists the initial status,
+current period end and scheduled-cancellation state immediately. The renewal
+display therefore does not depend on a later subscription update event.
+
 ## Billing Page And Customer Portal
 
 Authenticated users can open `GET /billing` whether or not they currently have
@@ -132,6 +139,11 @@ then the first usable subscription item period for the current one-plan setup.
 Scheduled cancellation is detected from either `cancel_at_period_end=true` or a
 valid `cancel_at` timestamp. `canceled_at` is not used by itself as a future
 scheduled-cancellation signal.
+
+`checkout.session.completed` and `invoice.paid` may also retrieve and apply the
+full Stripe Subscription object when Stripe sends only a subscription ID. Stripe
+remains authoritative; SMU does not trust browser return pages for billing
+state.
 
 `customer.subscription.deleted` marks the subscription canceled and clears
 `subscription_cancel_at_period_end` because the subscription has actually ended.

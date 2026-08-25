@@ -422,7 +422,12 @@ def test_webhook_does_not_require_login_and_processes_verified_event(
                     "client_reference_id": str(user.id),
                     "metadata": {"smu_user_id": str(user.id)},
                     "customer": "cus_123",
-                    "subscription": "sub_123",
+                    "subscription": {
+                        "id": "sub_123",
+                        "customer": "cus_123",
+                        "status": "active",
+                        "current_period_end": 1893456000,
+                    },
                 }
             },
         }
