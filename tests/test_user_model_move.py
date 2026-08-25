@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -34,6 +36,18 @@ def test_user_model_remains_compatible(module):
     assert User.__table__.c.subscription_status.nullable is True
     assert User.__table__.c.subscription_current_period_end.nullable is True
     assert User.__table__.c.subscription_cancel_at_period_end.nullable is False
+
+
+def test_subscription_cancel_boolean_patch_uses_database_safe_default():
+    app_source = Path(smu_app.__file__).read_text(encoding="utf-8")
+    alter_sql = next(
+        line
+        for line in app_source.splitlines()
+        if '"subscription_cancel_at_period_end":' in line
+    )
+
+    assert "BOOLEAN DEFAULT FALSE NOT NULL" in alter_sql
+    assert "BOOLEAN DEFAULT 0" not in alter_sql
 
 
 def test_user_loader_returns_correct_user(app, module):

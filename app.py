@@ -190,7 +190,7 @@ with app.app_context():
             "stripe_subscription_id": 'ALTER TABLE "user" ADD COLUMN stripe_subscription_id VARCHAR(255)',
             "subscription_status": 'ALTER TABLE "user" ADD COLUMN subscription_status VARCHAR(50)',
             "subscription_current_period_end": 'ALTER TABLE "user" ADD COLUMN subscription_current_period_end TIMESTAMP',
-            "subscription_cancel_at_period_end": 'ALTER TABLE "user" ADD COLUMN subscription_cancel_at_period_end BOOLEAN DEFAULT 0 NOT NULL',
+            "subscription_cancel_at_period_end": 'ALTER TABLE "user" ADD COLUMN subscription_cancel_at_period_end BOOLEAN DEFAULT FALSE NOT NULL',
         }
 
         for column_name, alter_sql in user_column_sql.items():
