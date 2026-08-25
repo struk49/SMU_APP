@@ -198,6 +198,45 @@ def test_unpaid_users_cannot_bypass_product_routes_by_direct_url(client, app, mo
         assert response.location.endswith("/pricing")
 
 
+def test_billing_page_and_portal_remain_accessible_to_blocked_subscribers(
+    client,
+    app,
+    module,
+    monkeypatch,
+):
+    app.config.update(
+        REGISTRATION_MODE="subscription",
+        STRIPE_SECRET_KEY="sk_test_123",
+        SERVER_NAME="smu.test",
+    )
+    user = create_user(module, email="past-due-billing@example.com")
+    user.subscription_status = "past_due"
+    user.stripe_customer_id = "cus_past_due"
+    module.db.session.commit()
+    login(client, user)
+
+    monkeypatch.setattr(
+        billing,
+        "create_customer_portal_session",
+        lambda user_arg, **kwargs: type(
+            "Session",
+            (),
+            {"url": "https://billing.stripe.test/session"},
+        )(),
+    )
+
+    dashboard = client.get("/")
+    billing_page = client.get("/billing")
+    portal = client.post("/billing/portal")
+
+    assert dashboard.status_code == 302
+    assert dashboard.location.endswith("/pricing")
+    assert billing_page.status_code == 200
+    assert "Payment issue" in billing_page.get_data(as_text=True)
+    assert portal.status_code == 302
+    assert portal.location == "https://billing.stripe.test/session"
+
+
 def test_connected_accounts_view_remains_available_but_changes_are_gated(
     client,
     app,

@@ -7,14 +7,31 @@
     <div class="row justify-content-center">
         <div class="col-lg-8">
             <h1 class="h2 mb-3">Subscription checkout complete</h1>
-            <p class="text-muted">
-                Stripe is confirming your subscription. This usually only takes a
-                moment, and SMU will update your account from Stripe's secure
-                webhook confirmation.
-            </p>
-            <a href="{{ url_for('index') }}" class="btn btn-primary">
-                Return to Dashboard
-            </a>
+            {% if subscription.access_active %}
+                <p class="text-muted">
+                    Your subscription is confirmed and SMU access is active.
+                </p>
+                <a href="{{ url_for('index') }}" class="btn btn-primary">
+                    Go to Dashboard
+                </a>
+            {% else %}
+                <p class="text-muted">
+                    We're confirming your subscription. This usually only takes a
+                    moment, and SMU will update your account from Stripe's secure
+                    webhook confirmation.
+                </p>
+                <div class="d-flex flex-column flex-sm-row gap-2">
+                    <a href="{{ url_for('billing_success') }}" class="btn btn-primary">
+                        Refresh Status
+                    </a>
+                    <a href="{{ url_for('billing_account') }}" class="btn btn-outline-primary">
+                        Billing
+                    </a>
+                    <a href="{{ url_for('pricing') }}" class="btn btn-outline-secondary">
+                        Pricing
+                    </a>
+                </div>
+            {% endif %}
         </div>
     </div>
 </section>

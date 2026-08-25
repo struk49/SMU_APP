@@ -16,6 +16,20 @@ def _log_event(event_name, **fields):
 
 
 @login_required
+def billing_account():
+    user = current_user._get_current_object()
+    subscription = billing_service.get_subscription_display(user)
+    return render_template(
+        "billing.html",
+        subscription=subscription,
+        price_display=current_app.config.get(
+            "SMU_MONTHLY_PRICE_DISPLAY",
+            "Monthly subscription",
+        ),
+    )
+
+
+@login_required
 def billing_checkout():
     user = current_user._get_current_object()
 
@@ -40,8 +54,72 @@ def billing_checkout():
 
 
 @login_required
+def billing_portal():
+    user = current_user._get_current_object()
+    subscription = billing_service.get_subscription_display(user)
+
+    if not user.stripe_customer_id:
+        _log_event(
+            "stripe_customer_portal_unavailable",
+            user_id=user.id,
+            stripe_customer_configured=False,
+            subscription_display_state=subscription["status_label"],
+        )
+        flash(
+            "No billing account is available yet. Choose a plan to get started.",
+            "warning",
+        )
+        return redirect(url_for("billing_account"))
+
+    try:
+        portal_session = billing_service.create_customer_portal_session(
+            user,
+            secret_key=current_app.config.get("STRIPE_SECRET_KEY", ""),
+            return_url=url_for("billing_account", _external=True),
+        )
+    except billing_service.BillingConfigurationError as exc:
+        current_app.logger.warning(
+            "Stripe portal configuration missing: %s",
+            exc.__class__.__name__,
+        )
+        _log_event(
+            "stripe_customer_portal_unavailable",
+            user_id=user.id,
+            stripe_customer_configured=True,
+            subscription_display_state=subscription["status_label"],
+        )
+        flash("We couldn't open billing management right now. Please try again.", "warning")
+        return redirect(url_for("billing_account"))
+    except Exception as exc:
+        current_app.logger.warning(
+            "Stripe portal session creation failed: %s",
+            exc.__class__.__name__,
+        )
+        _log_event(
+            "stripe_customer_portal_unavailable",
+            user_id=user.id,
+            stripe_customer_configured=True,
+            subscription_display_state=subscription["status_label"],
+        )
+        flash("We couldn't open billing management right now. Please try again.", "warning")
+        return redirect(url_for("billing_account"))
+
+    _log_event(
+        "stripe_customer_portal_session_created",
+        user_id=user.id,
+        stripe_customer_configured=True,
+        subscription_display_state=subscription["status_label"],
+    )
+    return redirect(portal_session.url)
+
+
+@login_required
 def billing_success():
-    return render_template("billing_success.html")
+    user = current_user._get_current_object()
+    return render_template(
+        "billing_success.html",
+        subscription=billing_service.get_subscription_display(user),
+    )
 
 
 @login_required
@@ -92,7 +170,9 @@ def billing_webhook():
 def register_billing_routes(state):
     app = state.app
     routes = [
+        ("/billing", "billing_account", billing_account, ["GET"]),
         ("/billing/checkout", "billing_checkout", billing_checkout, ["POST"]),
+        ("/billing/portal", "billing_portal", billing_portal, ["POST"]),
         ("/billing/success", "billing_success", billing_success, ["GET"]),
         ("/billing/cancel", "billing_cancel", billing_cancel, ["GET"]),
         ("/billing/webhook", "billing_webhook", billing_webhook, ["POST"]),

@@ -15,6 +15,7 @@ EXPECTED_COLUMNS = [
     "stripe_subscription_id",
     "subscription_status",
     "subscription_current_period_end",
+    "subscription_cancel_at_period_end",
 ]
 
 
@@ -32,6 +33,7 @@ def test_user_model_remains_compatible(module):
     assert User.__table__.c.stripe_subscription_id.nullable is True
     assert User.__table__.c.subscription_status.nullable is True
     assert User.__table__.c.subscription_current_period_end.nullable is True
+    assert User.__table__.c.subscription_cancel_at_period_end.nullable is False
 
 
 def test_user_loader_returns_correct_user(app, module):

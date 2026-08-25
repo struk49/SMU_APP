@@ -13,6 +13,11 @@ class User(UserMixin, db.Model):
     stripe_subscription_id = db.Column(db.String(255), nullable=True)
     subscription_status = db.Column(db.String(50), nullable=True)
     subscription_current_period_end = db.Column(db.DateTime, nullable=True)
+    subscription_cancel_at_period_end = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=False,
+    )
 
     brand_brief = db.relationship(
         "BrandBrief",

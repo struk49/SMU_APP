@@ -24,6 +24,7 @@ for paid-launch readiness and public trust.
 - Post scheduling with APScheduler
 - Stripe Checkout subscription foundation
 - Subscription-gated product access
+- Stripe Customer Portal billing management
 
 ## Stack
 - Python / Flask

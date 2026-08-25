@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from smu_core.extensions import db
 from smu_core.models import ContactMessage
 from smu_core.services.access import has_product_access
+from smu_core.services import billing as billing_service
 
 
 public_bp = Blueprint("public", __name__)
@@ -34,6 +35,11 @@ def pricing():
     return render_template(
         "pricing.html",
         has_access=has_product_access(user),
+        subscription=(
+            billing_service.get_subscription_display(user)
+            if user
+            else None
+        ),
         price_display=current_app.config.get(
             "SMU_MONTHLY_PRICE_DISPLAY",
             "Monthly subscription",

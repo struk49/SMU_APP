@@ -21,15 +21,38 @@
                             <h2 class="h3 fw-bold mb-0">{{ price_display }}</h2>
                         </div>
                         {% if current_user.is_authenticated and has_access %}
-                            <a href="{{ url_for('index') }}" class="btn btn-primary">
-                                Go to Dashboard
-                            </a>
+                            <div class="d-flex flex-column flex-sm-row gap-2">
+                                <span class="btn btn-outline-success disabled" aria-disabled="true">
+                                    Current Plan
+                                </span>
+                                <form method="POST" action="{{ url_for('billing_portal') }}">
+                                    <button type="submit" class="btn btn-primary">
+                                        Manage Billing
+                                    </button>
+                                </form>
+                                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                                    Go to Dashboard
+                                </a>
+                            </div>
                         {% elif current_user.is_authenticated %}
-                            <form method="POST" action="{{ url_for('billing_checkout') }}">
-                                <button type="submit" class="btn btn-primary">
-                                    Subscribe with Stripe
-                                </button>
-                            </form>
+                            <div class="d-flex flex-column flex-sm-row gap-2">
+                                {% if subscription and subscription.has_customer %}
+                                    <form method="POST" action="{{ url_for('billing_portal') }}">
+                                        <button type="submit" class="btn btn-primary">
+                                            Manage Billing
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                <form method="POST" action="{{ url_for('billing_checkout') }}">
+                                    <button type="submit" class="btn btn-primary">
+                                        {% if subscription and subscription.raw_status == "canceled" %}
+                                            Subscribe Again
+                                        {% else %}
+                                            Subscribe with Stripe
+                                        {% endif %}
+                                    </button>
+                                </form>
+                            </div>
                         {% else %}
                             <div class="d-flex gap-2">
                                 <a href="{{ url_for('register') }}" class="btn btn-primary">

@@ -19,8 +19,55 @@ class BillingWebhookError(RuntimeError):
     """Raised when a Stripe webhook cannot be verified or parsed."""
 
 
+class BillingCustomerPortalError(RuntimeError):
+    """Raised when a Stripe Customer Portal session cannot be created."""
+
+
 def has_active_subscription(user):
     return getattr(user, "subscription_status", None) in ACTIVE_SUBSCRIPTION_STATUSES
+
+
+def get_subscription_display(user):
+    status = getattr(user, "subscription_status", None)
+    status_label = {
+        "active": "Active",
+        "trialing": "Trial",
+        "past_due": "Payment issue",
+        "unpaid": "Payment required",
+        "canceled": "Canceled",
+        "incomplete": "Setup incomplete",
+        "incomplete_expired": "Setup expired",
+        "paused": "Paused",
+        None: "No active subscription",
+    }.get(status, "Subscription unavailable")
+
+    access_active = has_active_subscription(user)
+    period_end = getattr(user, "subscription_current_period_end", None)
+    cancel_at_period_end = bool(
+        getattr(user, "subscription_cancel_at_period_end", False)
+    )
+    period_label = None
+    cancellation_label = None
+    cancellation_date_label = None
+    if period_end and status in ACTIVE_SUBSCRIPTION_STATUSES:
+        formatted_period_end = period_end.strftime("%d %B %Y")
+        if cancel_at_period_end:
+            cancellation_date_label = formatted_period_end
+            cancellation_label = f"Cancels on {formatted_period_end}"
+        else:
+            period_label = f"Renews on {formatted_period_end}"
+
+    return {
+        "raw_status": status,
+        "status_label": status_label,
+        "access_active": access_active,
+        "access_label": "Active" if access_active else "Inactive",
+        "cancel_at_period_end": cancel_at_period_end,
+        "period_label": period_label,
+        "cancellation_label": cancellation_label,
+        "cancellation_date_label": cancellation_date_label,
+        "has_customer": bool(getattr(user, "stripe_customer_id", None)),
+    }
 
 
 def create_checkout_session(
@@ -57,6 +104,27 @@ def create_checkout_session(
         params["customer_email"] = user.email
 
     return stripe.checkout.Session.create(**params)
+
+
+def create_customer_portal_session(
+    user,
+    *,
+    secret_key,
+    return_url,
+    stripe_module=None,
+):
+    if not secret_key:
+        raise BillingConfigurationError("Stripe secret key is not configured.")
+    if not getattr(user, "stripe_customer_id", None):
+        raise BillingCustomerPortalError("Stripe customer ID is not configured.")
+
+    stripe = _stripe_module(stripe_module)
+    stripe.api_key = secret_key
+
+    return stripe.billing_portal.Session.create(
+        customer=user.stripe_customer_id,
+        return_url=return_url,
+    )
 
 
 def construct_webhook_event(
@@ -184,6 +252,7 @@ def process_subscription_deleted(subscription, *, user_model, db_session):
 
     _apply_customer_and_subscription_ids(user, subscription)
     _apply_subscription_object(user, subscription)
+    user.subscription_cancel_at_period_end = False
     user.subscription_status = "canceled"
     db_session.commit()
     return user
@@ -275,12 +344,44 @@ def _apply_subscription_object(user, subscription):
         return
 
     status = _get(subscription, "status")
-    period_end = _get(subscription, "current_period_end")
+    period_end = _get_subscription_period_end(subscription)
+    cancel_at_period_end = _get(subscription, "cancel_at_period_end")
+    cancel_at = _get(subscription, "cancel_at")
 
     if status:
         user.subscription_status = status
     if period_end:
         user.subscription_current_period_end = _datetime_from_unix(period_end)
+    if cancel_at_period_end is not None or cancel_at is not None:
+        user.subscription_cancel_at_period_end = (
+            _subscription_has_scheduled_cancellation(subscription)
+        )
+
+
+def _subscription_has_scheduled_cancellation(subscription):
+    if _get(subscription, "cancel_at_period_end") is True:
+        return True
+
+    cancel_at = _get(subscription, "cancel_at")
+    if cancel_at is None:
+        return False
+
+    return _datetime_from_unix(cancel_at) is not None
+
+
+def _get_subscription_period_end(subscription):
+    period_end = _get(subscription, "current_period_end")
+    if period_end:
+        return period_end
+
+    items = _get(subscription, "items", {}) or {}
+    item_data = _get(items, "data", []) or []
+    for item in item_data:
+        item_period_end = _get(item, "current_period_end")
+        if item_period_end:
+            return item_period_end
+
+    return None
 
 
 def _datetime_from_unix(value):

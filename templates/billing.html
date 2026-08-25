@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}Billing · SMU{% endblock %}
+
+{% block content %}
+<section class="py-4 py-lg-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-9 col-xl-8">
+            <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
+                <div>
+                    <p class="text-uppercase text-primary fw-semibold small mb-2">Billing</p>
+                    <h1 class="h2 fw-bold mb-1">Subscription and billing</h1>
+                    <p class="text-muted mb-0">
+                        Manage your SMU subscription through Stripe's secure billing tools.
+                    </p>
+                </div>
+                {% if subscription.access_active %}
+                    <a href="{{ url_for('index') }}" class="btn btn-outline-primary align-self-md-start">
+                        Go to Dashboard
+                    </a>
+                {% endif %}
+            </div>
+
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4 p-lg-5">
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+                        <div>
+                            <p class="text-uppercase text-muted small fw-semibold mb-1">Plan</p>
+                            <h2 class="h4 fw-bold mb-2">SMU Pro</h2>
+                            <p class="text-muted mb-0">{{ price_display }}</p>
+                        </div>
+                        <div class="text-md-end">
+                            <p class="text-uppercase text-muted small fw-semibold mb-1">Access</p>
+                            {% if subscription.access_active %}
+                                <span class="badge bg-success fs-6">Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary fs-6">Inactive</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="border rounded-3 p-3 h-100">
+                                <div class="text-muted small mb-1">Subscription status</div>
+                                <div class="fw-semibold">{{ subscription.status_label }}</div>
+                                {% if subscription.period_label %}
+                                    <div class="text-muted mt-1">{{ subscription.period_label }}</div>
+                                {% endif %}
+                                {% if subscription.cancellation_label %}
+                                    <div class="text-muted mt-1">{{ subscription.cancellation_label }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="border rounded-3 p-3 h-100">
+                                <div class="text-muted small mb-1">Billing account</div>
+                                <div class="fw-semibold">
+                                    {% if subscription.has_customer %}
+                                        Available
+                                    {% else %}
+                                        Not created yet
+                                    {% endif %}
+                                </div>
+                                <div class="text-muted mt-1">
+                                    Stripe manages payment methods and subscription changes.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if subscription.raw_status == "past_due" %}
+                        <div class="alert alert-warning mt-4 mb-0">
+                            There is a payment issue. Product access may be unavailable until billing is resolved.
+                        </div>
+                    {% endif %}
+                    {% if subscription.cancellation_label %}
+                        <div class="alert alert-info mt-4 mb-0">
+                            Your subscription is active until {{ subscription.cancellation_date_label }}.
+                            You can manage or reverse the scheduled cancellation in Stripe.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm rounded-4">
+                <div class="card-body p-4 p-lg-5">
+                    <h2 class="h4 fw-bold mb-3">Billing actions</h2>
+                    <div class="d-flex flex-column flex-sm-row gap-3">
+                        {% if subscription.has_customer %}
+                            <form method="POST" action="{{ url_for('billing_portal') }}">
+                                <button type="submit" class="btn btn-primary">
+                                    Manage Subscription
+                                </button>
+                            </form>
+                        {% endif %}
+
+                        {% if not subscription.access_active %}
+                            <form method="POST" action="{{ url_for('billing_checkout') }}">
+                                <button type="submit" class="btn btn-primary">
+                                    {% if subscription.raw_status == "canceled" %}
+                                        Subscribe Again
+                                    {% else %}
+                                        Subscribe with Stripe
+                                    {% endif %}
+                                </button>
+                            </form>
+                        {% endif %}
+
+                        <a href="{{ url_for('pricing') }}" class="btn btn-outline-secondary">
+                            View Pricing
+                        </a>
+                    </div>
+                    <p class="text-muted small mb-0 mt-3">
+                        Stripe is authoritative for subscription updates. Returning from Stripe does not change
+                        your SMU access until Stripe confirms the update by webhook.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
