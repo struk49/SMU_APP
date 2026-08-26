@@ -82,6 +82,43 @@ def test_dashboard_renders_same_template_and_context_keys(client, app, module):
     assert "No posts yet" in response.get_data(as_text=True)
 
 
+def test_authenticated_navbar_uses_horizontal_logo_and_grouped_links(client, module):
+    user = create_user(module)
+    login(client, user)
+
+    with module.app.test_request_context():
+        accounts_path = url_for("connected_accounts")
+
+    response = client.get("/")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "smu-horizontal-logo.png" in html
+    assert "SMU Create Edit Publish" in html
+    assert "navbar navbar-expand-xl" in html
+    assert "container-fluid px-3 px-lg-4" in html
+    assert "navbar-nav app-nav-links ms-xl-auto" in html
+    assert 'data-bs-target="#primaryNavbar"' in html
+    assert 'aria-controls="primaryNavbar"' in html
+    assert "Dashboard" in html
+    assert "Create" in html
+    assert "Content" in html
+    assert "Publish" in html
+    assert "TikTok" in html
+    assert "Content Pack" in html
+    assert "Brand Brief" in html
+    assert "Calendar" in html
+    assert "Accounts" in html
+    assert "Account" in html
+    assert user.email in html
+    assert "Logout" in html
+    assert 'href="/tiktok"' in html
+    assert 'href="/content-pack"' in html
+    assert 'href="/brand-brief"' in html
+    assert 'href="/calendar"' in html
+    assert f'href="{accounts_path}"' in html
+
+
 def test_dashboard_only_shows_current_user_posts(client, app, module):
     owner = create_user(module, email="owner@example.com")
     other = create_user(module, email="other@example.com")

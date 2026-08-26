@@ -18,99 +18,209 @@
 </head>
 
 <body>
-    <nav class="app-navbar">
-        <div class="container-fluid px-4">
-            <div class="d-flex align-items-center justify-content-between">
-                <a
-                    href="{{ url_for('index') if current_user.is_authenticated else url_for('landing_page') }}"
-                    class="app-brand"
+    <nav class="app-navbar navbar navbar-expand-xl">
+        <div class="container-fluid px-3 px-lg-4">
+            {% set active_endpoint = request.endpoint %}
+            {% set content_endpoints = [
+                'tiktok_repurpose',
+                'create_tiktok_draft',
+                'create_tiktok_carousel_draft',
+                'content_pack',
+                'brand_brief',
+                'calendar_view',
+                'calendar_events',
+                'calendar_reschedule',
+                'calendar_duplicate',
+            ] %}
+            {% set publish_endpoints = [
+                'connected_accounts',
+                'linkedin_connect',
+                'linkedin_callback',
+            ] %}
+            {% set create_endpoints = [
+                'create_post',
+                'ai_editor',
+                'post_studio',
+                'studio_action',
+                'studio_regrade',
+            ] %}
+            {% set billing_endpoints = [
+                'billing_account',
+                'billing_checkout',
+                'billing_portal',
+                'billing_success',
+                'billing_cancel',
+                'pricing',
+            ] %}
+            <a
+                href="{{ url_for('index') if current_user.is_authenticated else url_for('landing_page') }}"
+                class="navbar-brand app-brand me-3"
+            >
+                <img
+                    src="{{ url_for('static', filename='smu-horizontal-logo.png') }}"
+                    alt="SMU Create Edit Publish"
+                    class="brand-logo-horizontal"
                 >
-                    <img
-                        src="{{ url_for('static', filename='logo.svg') }}"
-                        alt=""
-                        class="brand-logo"
-                        aria-hidden="true"
-                    >
-                    <span>SMU</span>
-                </a>
+            </a>
 
-                <div class="app-nav-links">
+            <button
+                class="navbar-toggler app-nav-toggle"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#primaryNavbar"
+                aria-controls="primaryNavbar"
+                aria-expanded="false"
+                aria-label="Toggle navigation"
+            >
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse app-nav-collapse" id="primaryNavbar">
+                <ul class="navbar-nav app-nav-links ms-xl-auto mb-2 mb-xl-0">
                     {% if current_user.is_authenticated %}
                         {% if has_product_access(current_user) %}
-                            <a href="{{ url_for('index') }}" class="app-nav-link">
-                                Dashboard
-                            </a>
+                            <li class="nav-item">
+                                <a
+                                    href="{{ url_for('index') }}"
+                                    class="app-nav-link nav-link {{ 'active' if active_endpoint == 'index' else '' }}"
+                                >
+                                    Dashboard
+                                </a>
+                            </li>
 
-                            <a href="{{ url_for('create_post') }}" class="app-nav-link">
-                                Create
-                            </a>
+                            <li class="nav-item">
+                                <a
+                                    href="{{ url_for('create_post') }}"
+                                    class="app-nav-link nav-link {{ 'active' if active_endpoint in create_endpoints else '' }}"
+                                >
+                                    Create
+                                </a>
+                            </li>
 
-                            <a href="{{ url_for('tiktok_repurpose') }}" class="app-nav-link">
-                                TikTok
-                            </a>
+                            <li class="nav-item dropdown">
+                                <button
+                                    class="app-nav-link app-nav-button nav-link dropdown-toggle {{ 'active' if active_endpoint in content_endpoints else '' }}"
+                                    id="contentNavButton"
+                                    type="button"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                    aria-controls="contentNavMenu"
+                                >
+                                    Content
+                                </button>
+                                <ul
+                                    class="dropdown-menu app-dropdown-menu"
+                                    id="contentNavMenu"
+                                    aria-labelledby="contentNavButton"
+                                >
+                                    <li><a class="dropdown-item" href="{{ url_for('tiktok_repurpose') }}">TikTok</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('content_pack') }}">Content Pack</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('brand_brief') }}">Brand Brief</a></li>
+                                    <li><a class="dropdown-item" href="{{ url_for('calendar_view') }}">Calendar</a></li>
+                                </ul>
+                            </li>
 
-                            <a href="{{ url_for('content_pack') }}" class="app-nav-link">
-                                Content Pack
-                            </a>
-
-                            <a href="{{ url_for('calendar_view') }}" class="app-nav-link">
-                                Calendar
-                            </a>
-
-                            <a href="{{ url_for('brand_brief') }}" class="app-nav-link">
-                                Brand Brief
-                            </a>
+                            <li class="nav-item dropdown">
+                                <button
+                                    class="app-nav-link app-nav-button nav-link dropdown-toggle {{ 'active' if active_endpoint in publish_endpoints else '' }}"
+                                    id="publishNavButton"
+                                    type="button"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false"
+                                    aria-controls="publishNavMenu"
+                                >
+                                    Publish
+                                </button>
+                                <ul
+                                    class="dropdown-menu app-dropdown-menu"
+                                    id="publishNavMenu"
+                                    aria-labelledby="publishNavButton"
+                                >
+                                    <li><a class="dropdown-item" href="{{ url_for('connected_accounts') }}">Accounts</a></li>
+                                </ul>
+                            </li>
                         {% else %}
-                            <a href="{{ url_for('pricing') }}" class="app-nav-link">
-                                Pricing
-                            </a>
+                            <li class="nav-item">
+                                <a
+                                    href="{{ url_for('pricing') }}"
+                                    class="app-nav-link nav-link {{ 'active' if active_endpoint == 'pricing' else '' }}"
+                                >
+                                    Pricing
+                                </a>
+                            </li>
                         {% endif %}
 
-                        <a href="{{ url_for('billing_account') }}" class="app-nav-link">
-                            Billing
-                        </a>
+                        <li class="nav-item">
+                            <a
+                                href="{{ url_for('billing_account') }}"
+                                class="app-nav-link nav-link {{ 'active' if active_endpoint in billing_endpoints else '' }}"
+                            >
+                                Billing
+                            </a>
+                        </li>
 
-                        <a href="{{ url_for('connected_accounts') }}" class="app-nav-link">
-                            Accounts
-                        </a>
+                        <li class="nav-item">
+                            <a
+                                href="{{ url_for('help_centre') }}"
+                                class="app-nav-link nav-link {{ 'active' if active_endpoint == 'help_centre' else '' }}"
+                            >
+                                Help
+                            </a>
+                        </li>
 
-                        <a href="{{ url_for('help_centre') }}" class="app-nav-link">
-                            Help
-                        </a>
-
-                        <span class="app-user">
-                            {{ current_user.email }}
-                        </span>
-
-                        <a href="{{ url_for('logout') }}" class="app-logout">
-                            Logout
-                        </a>
+                        <li class="nav-item dropdown">
+                            <button
+                                class="app-nav-link app-nav-button app-account-button nav-link dropdown-toggle"
+                                id="accountNavButton"
+                                type="button"
+                                data-bs-toggle="dropdown"
+                                aria-expanded="false"
+                                aria-controls="accountNavMenu"
+                            >
+                                Account
+                            </button>
+                            <ul
+                                class="dropdown-menu dropdown-menu-lg-end app-dropdown-menu"
+                                id="accountNavMenu"
+                                aria-labelledby="accountNavButton"
+                            >
+                                <li><span class="dropdown-item-text app-user">{{ current_user.email }}</span></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item app-logout-link" href="{{ url_for('logout') }}">Logout</a></li>
+                            </ul>
+                        </li>
                     {% else %}
-                        <a href="{{ url_for('landing_page') }}" class="app-nav-link">
-                            Home
-                        </a>
+                        <li class="nav-item">
+                            <a href="{{ url_for('landing_page') }}" class="app-nav-link nav-link">
+                                Home
+                            </a>
+                        </li>
 
-                        <a href="{{ url_for('pricing') }}" class="app-nav-link">
-                            Pricing
-                        </a>
+                        <li class="nav-item">
+                            <a href="{{ url_for('pricing') }}" class="app-nav-link nav-link">
+                                Pricing
+                            </a>
+                        </li>
 
-                        <a href="{{ url_for('about_page') }}" class="app-nav-link">
-                            About
-                        </a>
+                        <li class="nav-item">
+                            <a href="{{ url_for('about_page') }}" class="app-nav-link nav-link">
+                                About
+                            </a>
+                        </li>
 
-                        <a href="{{ url_for('pricing') }}" class="app-nav-link">
-                            Pricing
-                        </a>
+                        <li class="nav-item">
+                            <a href="{{ url_for('login') }}" class="app-nav-link nav-link">
+                                Login
+                            </a>
+                        </li>
 
-                        <a href="{{ url_for('login') }}" class="app-nav-link">
-                            Login
-                        </a>
-
-                        <a href="{{ url_for('register') }}" class="app-register">
-                            Get Started
-                        </a>
+                        <li class="nav-item">
+                            <a href="{{ url_for('register') }}" class="app-register nav-link">
+                                Get Started
+                            </a>
+                        </li>
                     {% endif %}
-                </div>
+                </ul>
             </div>
         </div>
     </nav>

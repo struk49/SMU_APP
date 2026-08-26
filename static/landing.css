@@ -46,9 +46,9 @@ html {
     align-items: center;
     color: #ffffff;
     display: inline-flex;
-    font-size: 1.35rem;
-    font-weight: 800;
-    gap: 10px;
+    min-width: 0;
+    padding-bottom: 0;
+    padding-top: 0;
 }
 
 .landing-brand:hover,
@@ -57,9 +57,10 @@ html {
 }
 
 .landing-logo {
-    border-radius: 10px;
-    height: 38px;
-    width: 38px;
+    display: block;
+    height: auto;
+    max-width: 100%;
+    width: clamp(150px, 16vw, 190px);
 }
 
 .landing-nav .navbar-toggler {
@@ -149,9 +150,6 @@ html {
 
 .landing-actions {
     align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px;
 }
 
 .landing-actions .btn-link {
@@ -172,6 +170,7 @@ html {
     box-shadow: 0 28px 70px rgba(0, 0, 0, 0.24);
     color: var(--smu-ink);
     overflow: hidden;
+    max-width: 100%;
 }
 
 .window-bar {
@@ -198,7 +197,7 @@ html {
 
 .window-content {
     display: grid;
-    grid-template-columns: 132px 1fr;
+    grid-template-columns: minmax(108px, 132px) minmax(0, 1fr);
     min-height: 420px;
 }
 
@@ -239,6 +238,7 @@ html {
     gap: 16px;
     justify-content: space-between;
     margin-bottom: 22px;
+    min-width: 0;
 }
 
 .preview-header span {
@@ -253,7 +253,7 @@ html {
     color: #1e40af !important;
     font-weight: 800;
     padding: 8px 12px;
-    white-space: nowrap;
+    white-space: normal;
 }
 
 .preview-grid {
@@ -308,13 +308,6 @@ html {
     padding: 28px 0;
 }
 
-.platform-strip .container {
-    align-items: center;
-    display: flex;
-    gap: 20px;
-    justify-content: space-between;
-}
-
 .platform-strip h2 {
     font-size: 1rem;
     font-weight: 800;
@@ -322,10 +315,7 @@ html {
 }
 
 .platform-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: flex-end;
+    min-width: 0;
 }
 
 .platform-list span {
@@ -423,12 +413,6 @@ html {
     width: 42px;
 }
 
-.steps-grid {
-    display: grid;
-    gap: 18px;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
 .feature-band {
     background: #0f172a;
     color: #ffffff;
@@ -439,17 +423,12 @@ html {
     color: #cbd5e1;
 }
 
-.flow-map {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.flow-map div {
+.flow-map span {
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: 14px;
     color: #ffffff;
+    display: block;
     font-weight: 900;
     padding: 18px;
     text-align: center;
@@ -485,28 +464,22 @@ html {
     text-align: right;
 }
 
-.publish-grid,
-.value-list {
-    display: grid;
-    gap: 12px;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.publish-grid div,
+.publish-item,
 .value-list span {
     background: #ffffff;
     border: 1px solid var(--smu-line);
     border-radius: 14px;
+    display: block;
     font-weight: 800;
     padding: 18px;
 }
 
 .publish-grid strong,
-.publish-grid span {
+.publish-item > span {
     display: block;
 }
 
-.publish-grid span {
+.publish-item > span {
     color: var(--smu-muted);
     font-size: 0.92rem;
     font-weight: 600;
@@ -519,10 +492,7 @@ html {
 }
 
 .pricing-panel {
-    align-items: center;
-    display: grid;
-    gap: 32px;
-    grid-template-columns: 1fr minmax(280px, 420px);
+    min-width: 0;
 }
 
 .pricing-card {
@@ -578,12 +548,6 @@ html {
     padding: 54px 0 28px;
 }
 
-.footer-grid {
-    display: grid;
-    gap: 28px;
-    grid-template-columns: 2fr repeat(3, 1fr);
-}
-
 .footer-grid strong {
     color: #ffffff;
     display: block;
@@ -621,27 +585,16 @@ html {
         padding-top: 64px;
     }
 
-    .platform-strip .container {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
     .platform-list {
         justify-content: flex-start;
-    }
-
-    .steps-grid,
-    .footer-grid,
-    .pricing-panel {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .steps-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
 @media (max-width: 640px) {
+    .landing-logo {
+        width: clamp(120px, 42vw, 140px);
+    }
+
     .window-content {
         grid-template-columns: 1fr;
     }
@@ -660,13 +613,7 @@ html {
         text-align: left;
     }
 
-    .preview-grid,
-    .steps-grid,
-    .flow-map,
-    .publish-grid,
-    .value-list,
-    .footer-grid,
-    .pricing-panel {
+    .preview-grid {
         grid-template-columns: 1fr;
     }
 

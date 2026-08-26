@@ -54,6 +54,20 @@ def test_landing_sections_render_current_product_capabilities(client):
     assert "Personal-profile text and single-image posts" in html
 
 
+def test_landing_uses_bootstrap_responsive_structure(client):
+    html = client.get("/").get_data(as_text=True)
+
+    assert "smu-horizontal-logo.png" in html
+    assert 'class="navbar navbar-expand-xl landing-nav"' in html
+    assert 'class="collapse navbar-collapse" id="landingNav"' in html
+    assert "row align-items-center g-4 g-lg-5" in html
+    assert "col-12 col-lg-6" in html
+    assert "row g-4 row-cols-1 row-cols-md-2 row-cols-xl-5" in html
+    assert "publish-grid row g-3 row-cols-1 row-cols-sm-2" in html
+    assert "pricing-panel row g-4 align-items-center" in html
+    assert "footer-grid row g-4 row-cols-1 row-cols-sm-2 row-cols-lg-4" in html
+
+
 def test_landing_does_not_require_login(client):
     response = client.get("/", follow_redirects=False)
 

@@ -45,75 +45,120 @@ body {
 
 .app-navbar {
     background: linear-gradient(135deg, #050b18, #101827);
-    padding: 18px 0;
+    padding: 14px 0;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
 }
 
+.app-navbar .container-fluid {
+    min-width: 0;
+}
+
 .app-brand {
-    display: flex;
     align-items: center;
-    gap: 12px;
-    color: #ffffff;
-    font-size: 1.4rem;
-    font-weight: 800;
-    text-decoration: none;
-}
-
-.app-brand:hover {
-    color: #ffffff;
-}
-
-.brand-icon {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #2563eb, #7c3aed);
     display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: #ffffff;
-    font-weight: 900;
+    min-width: 0;
+    padding-bottom: 0;
+    padding-top: 0;
+}
+
+.app-brand:hover,
+.app-brand:focus {
+    opacity: 0.92;
+}
+
+.brand-logo-horizontal {
+    display: block;
+    width: clamp(150px, 16vw, 190px);
+    height: auto;
+    max-width: 100%;
+    max-height: 54px;
 }
 
 .app-nav-links {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 4px;
 }
 
 .app-nav-link {
     color: #e5e7eb;
     text-decoration: none;
     font-weight: 600;
-    padding: 10px 14px;
-    border-radius: 12px;
+    padding: 9px 12px;
+    border-radius: 10px;
     transition: 0.2s ease;
 }
 
-.app-nav-link:hover {
+.app-nav-link:hover,
+.app-nav-link:focus,
+.app-nav-link.active {
     color: #ffffff;
     background: rgba(37, 99, 235, 0.18);
+}
+
+.app-nav-button {
+    border: 0;
+    background: transparent;
+}
+
+.app-nav-toggle {
+    border-color: rgba(226, 232, 240, 0.38);
+    padding: 8px 10px;
+}
+
+.app-nav-toggle:focus {
+    box-shadow: 0 0 0 0.2rem rgba(96, 165, 250, 0.35);
+}
+
+.app-nav-toggle .navbar-toggler-icon {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='rgba%28226, 232, 240, 0.95%29' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
+}
+
+.app-nav-collapse {
+    min-width: 0;
+}
+
+.app-dropdown-menu {
+    background: #0f172a;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 8px;
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.28);
+    padding: 8px;
+    min-width: 190px;
+}
+
+.app-dropdown-menu .dropdown-item,
+.app-dropdown-menu .dropdown-item-text {
+    color: #e5e7eb;
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+
+.app-dropdown-menu .dropdown-item:hover,
+.app-dropdown-menu .dropdown-item:focus {
+    color: #ffffff;
+    background: rgba(37, 99, 235, 0.22);
+}
+
+.app-dropdown-menu .dropdown-divider {
+    border-color: rgba(148, 163, 184, 0.24);
 }
 
 .app-user {
     color: #cbd5e1;
     font-size: 0.9rem;
-    margin-left: 12px;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: normal;
 }
 
-.app-logout {
+.app-logout-link {
     color: #ff4d5e;
-    border: 1px solid #ff4d5e;
-    padding: 10px 16px;
-    border-radius: 12px;
-    text-decoration: none;
     font-weight: 700;
-    margin-left: 8px;
 }
 
-.app-logout:hover {
-    background: #ff4d5e;
+.app-dropdown-menu .app-logout-link:hover,
+.app-dropdown-menu .app-logout-link:focus {
+    background: rgba(255, 77, 94, 0.16);
     color: #ffffff;
 }
 
@@ -131,20 +176,34 @@ body {
     color: #ffffff;
 }
 
-@media (max-width: 768px) {
-    .app-navbar .d-flex {
-        flex-direction: column;
-        gap: 16px;
-        align-items: flex-start !important;
+@media (max-width: 991.98px) {
+    .app-navbar {
+        padding: 12px 0;
+    }
+
+    .brand-logo-horizontal {
+        width: clamp(120px, 42vw, 140px);
+        max-height: 44px;
     }
 
     .app-nav-links {
+        gap: 6px;
+        padding-top: 14px;
+    }
+
+    .app-nav-link,
+    .app-register {
+        text-align: left;
+    }
+
+    .app-dropdown-menu {
         width: 100%;
+        margin-top: 4px;
+        box-shadow: none;
     }
 
     .app-user {
-        width: 100%;
-        margin-left: 0;
+        max-width: 100%;
     }
 }
 

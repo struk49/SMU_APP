@@ -28,16 +28,14 @@
     {% set primary_cta_label = "Go to Dashboard" if user_has_access else ("Choose Your Plan" if current_user.is_authenticated else "Get Started") %}
     {% set primary_cta_url = url_for('index') if user_has_access else (url_for('pricing') if current_user.is_authenticated else url_for('register')) %}
 
-    <nav class="navbar navbar-expand-lg landing-nav" aria-label="Primary navigation">
+    <nav class="navbar navbar-expand-xl landing-nav" aria-label="Primary navigation">
         <div class="container">
             <a class="navbar-brand landing-brand" href="{{ url_for('index') }}">
                 <img
-                    src="{{ url_for('static', filename='logo.svg') }}"
-                    alt=""
+                    src="{{ url_for('static', filename='smu-horizontal-logo.png') }}"
+                    alt="SMU Create Edit Publish"
                     class="landing-logo"
-                    aria-hidden="true"
                 >
-                <span>SMU</span>
             </a>
             <button
                 class="navbar-toggler"
@@ -52,14 +50,14 @@
             </button>
 
             <div class="collapse navbar-collapse" id="landingNav">
-                <ul class="navbar-nav mx-lg-auto mb-3 mb-lg-0">
+                <ul class="navbar-nav mx-xl-auto mb-3 mb-xl-0">
                     <li class="nav-item"><a class="nav-link" href="#features">Features</a></li>
                     <li class="nav-item"><a class="nav-link" href="#how-it-works">How It Works</a></li>
                     <li class="nav-item"><a class="nav-link" href="#tiktok">TikTok</a></li>
                     <li class="nav-item"><a class="nav-link" href="#pricing-preview">Pricing</a></li>
                     <li class="nav-item"><a class="nav-link" href="{{ url_for('about_page') }}">About</a></li>
                 </ul>
-                <div class="d-flex flex-column flex-lg-row gap-2">
+                <div class="d-grid d-sm-flex flex-xl-row gap-2">
                     {% if not current_user.is_authenticated %}
                         <a class="btn btn-outline-light" href="{{ url_for('login') }}">
                             Log In
@@ -76,8 +74,8 @@
     <main>
         <section class="landing-hero">
             <div class="container">
-                <div class="row align-items-center g-5">
-                    <div class="col-lg-6">
+                <div class="row align-items-center g-4 g-lg-5">
+                    <div class="col-12 col-lg-6">
                         <p class="landing-eyebrow">AI-powered content workspace</p>
                         <h1>Turn one idea into content for every platform.</h1>
                         <p class="landing-lead">
@@ -90,7 +88,7 @@
                             posts, images and campaigns without juggling
                             multiple tools.
                         </p>
-                        <div class="landing-actions">
+                        <div class="landing-actions d-grid d-sm-flex flex-wrap gap-2">
                             <a class="btn btn-primary btn-lg" href="{{ primary_cta_url }}">
                                 {{ primary_cta_label }}
                             </a>
@@ -99,7 +97,7 @@
                             </a>
                         </div>
                     </div>
-                    <div class="col-lg-6">
+                    <div class="col-12 col-lg-6">
                         <div class="product-window" aria-label="SMU product preview">
                             <div class="window-bar">
                                 <span></span>
@@ -151,12 +149,18 @@
 
         <section class="platform-strip" aria-labelledby="platform-heading">
             <div class="container">
-                <h2 id="platform-heading">Supported publishing workflows</h2>
-                <div class="platform-list">
-                    <span>Instagram</span>
-                    <span>Facebook</span>
-                    <span>LinkedIn personal profiles</span>
-                    <span>Pinterest <small>Coming soon</small></span>
+                <div class="row g-3 align-items-center">
+                    <div class="col-12 col-lg-4">
+                        <h2 id="platform-heading">Supported publishing workflows</h2>
+                    </div>
+                    <div class="col-12 col-lg-8">
+                        <div class="platform-list d-flex flex-wrap gap-2 justify-content-lg-end">
+                            <span>Instagram</span>
+                            <span>Facebook</span>
+                            <span>LinkedIn personal profiles</span>
+                            <span>Pinterest <small>Coming soon</small></span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -200,7 +204,7 @@
                     <p class="landing-eyebrow">How SMU works</p>
                     <h2>From idea to published content</h2>
                 </div>
-                <div class="steps-grid">
+                <div class="row g-4 row-cols-1 row-cols-md-2 row-cols-xl-5">
                     {% for title, body in [
                         ("Create or repurpose", "Start with an idea, existing content or TikTok video."),
                         ("Improve with AI", "Refine captions, hooks, CTAs and tone with AI Studio and Brand Coach."),
@@ -208,11 +212,13 @@
                         ("Schedule", "Organise content on the calendar."),
                         ("Publish", "Send reviewed content to supported social platforms.")
                     ] %}
-                        <article class="step-card">
-                            <span>{{ loop.index }}</span>
-                            <h3>{{ title }}</h3>
-                            <p>{{ body }}</p>
-                        </article>
+                        <div class="col">
+                            <article class="step-card">
+                                <span>{{ loop.index }}</span>
+                                <h3>{{ title }}</h3>
+                                <p>{{ body }}</p>
+                            </article>
+                        </div>
                     {% endfor %}
                 </div>
             </div>
@@ -220,8 +226,8 @@
 
         <section class="feature-band" id="tiktok">
             <div class="container">
-                <div class="row align-items-center g-5">
-                    <div class="col-lg-5">
+                <div class="row align-items-center g-4 g-lg-5">
+                    <div class="col-12 col-lg-5">
                         <p class="landing-eyebrow">TikTok Repurposing</p>
                         <h2>Turn TikTok videos into reusable social content.</h2>
                         <p>
@@ -230,10 +236,10 @@
                             ideas and carousel concepts ready for editing.
                         </p>
                     </div>
-                    <div class="col-lg-7">
-                        <div class="flow-map" aria-label="TikTok repurposing workflow">
+                    <div class="col-12 col-lg-7">
+                        <div class="flow-map row g-3 row-cols-1 row-cols-sm-2 row-cols-lg-3" aria-label="TikTok repurposing workflow">
                             {% for item in ["TikTok URL", "Transcript", "AI repurposing", "Edit", "Create media", "Schedule or publish"] %}
-                                <div>{{ item }}</div>
+                                <div class="col"><span>{{ item }}</span></div>
                             {% endfor %}
                         </div>
                     </div>
@@ -243,8 +249,8 @@
 
         <section class="landing-section" id="studio">
             <div class="container">
-                <div class="row align-items-center g-5">
-                    <div class="col-lg-6">
+                <div class="row align-items-center g-4 g-lg-5">
+                    <div class="col-12 col-lg-6">
                         <div class="studio-panel">
                             <div class="studio-row">
                                 <span>Hook</span>
@@ -264,7 +270,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-lg-6">
+                    <div class="col-12 col-lg-6">
                         <p class="landing-eyebrow">AI Studio</p>
                         <h2>Improve your content without losing your voice.</h2>
                         <p class="section-copy">
@@ -309,8 +315,8 @@
 
         <section class="landing-section publishing-section">
             <div class="container">
-                <div class="row align-items-center g-5">
-                    <div class="col-lg-5">
+                <div class="row align-items-center g-4 g-lg-5">
+                    <div class="col-12 col-lg-5">
                         <p class="landing-eyebrow">Publishing</p>
                         <h2>Create once. Publish from one workspace.</h2>
                         <p>
@@ -319,12 +325,12 @@
                             Facebook and LinkedIn personal profiles.
                         </p>
                     </div>
-                    <div class="col-lg-7">
-                        <div class="publish-grid">
-                            <div><strong>Instagram</strong><span>Single images and carousels</span></div>
-                            <div><strong>Facebook</strong><span>Single-image publishing</span></div>
-                            <div><strong>LinkedIn</strong><span>Personal-profile text and single-image posts</span></div>
-                            <div><strong>Scheduling</strong><span>Plan posts on the content calendar</span></div>
+                    <div class="col-12 col-lg-7">
+                        <div class="publish-grid row g-3 row-cols-1 row-cols-sm-2">
+                            <div class="col"><span class="publish-item"><strong>Instagram</strong><span>Single images and carousels</span></span></div>
+                            <div class="col"><span class="publish-item"><strong>Facebook</strong><span>Single-image publishing</span></span></div>
+                            <div class="col"><span class="publish-item"><strong>LinkedIn</strong><span>Personal-profile text and single-image posts</span></span></div>
+                            <div class="col"><span class="publish-item"><strong>Scheduling</strong><span>Plan posts on the content calendar</span></span></div>
                         </div>
                     </div>
                 </div>
@@ -334,18 +340,18 @@
         <section class="landing-section alt-section">
             <div class="container">
                 <div class="row g-4 align-items-center">
-                    <div class="col-lg-5">
+                    <div class="col-12 col-lg-5">
                         <p class="landing-eyebrow">Brand Brief</p>
                         <h2>Teach SMU how your brand communicates.</h2>
                     </div>
-                    <div class="col-lg-7">
-                        <div class="value-list">
-                            <span>Audience</span>
-                            <span>Offer</span>
-                            <span>Tone of voice</span>
-                            <span>CTA style</span>
-                            <span>Content goals</span>
-                            <span>Words to avoid</span>
+                    <div class="col-12 col-lg-7">
+                        <div class="value-list row g-3 row-cols-1 row-cols-sm-2">
+                            <div class="col"><span>Audience</span></div>
+                            <div class="col"><span>Offer</span></div>
+                            <div class="col"><span>Tone of voice</span></div>
+                            <div class="col"><span>CTA style</span></div>
+                            <div class="col"><span>Content goals</span></div>
+                            <div class="col"><span>Words to avoid</span></div>
                         </div>
                     </div>
                 </div>
@@ -378,8 +384,8 @@
 
         <section class="pricing-preview" id="pricing-preview">
             <div class="container">
-                <div class="pricing-panel">
-                    <div>
+                <div class="pricing-panel row g-4 align-items-center">
+                    <div class="col-12 col-lg-7">
                         <p class="landing-eyebrow">Pricing</p>
                         <h2>SMU Pro</h2>
                         <p>
@@ -387,18 +393,20 @@
                             workspace.
                         </p>
                     </div>
-                    <div class="pricing-card">
-                        <div class="price-label">{{ config.get("SMU_MONTHLY_PRICE_DISPLAY", "Monthly subscription") }}</div>
-                        <ul>
-                            <li>AI content creation</li>
-                            <li>TikTok repurposing</li>
-                            <li>AI Studio and Brand Coach</li>
-                            <li>Content Packs and image generation</li>
-                            <li>Scheduling and supported social publishing</li>
-                        </ul>
-                        <a class="btn btn-primary w-100" href="{{ primary_cta_url }}">
-                            Start with SMU
-                        </a>
+                    <div class="col-12 col-lg-5">
+                        <div class="pricing-card">
+                            <div class="price-label">{{ config.get("SMU_MONTHLY_PRICE_DISPLAY", "Monthly subscription") }}</div>
+                            <ul>
+                                <li>AI content creation</li>
+                                <li>TikTok repurposing</li>
+                                <li>AI Studio and Brand Coach</li>
+                                <li>Content Packs and image generation</li>
+                                <li>Scheduling and supported social publishing</li>
+                            </ul>
+                            <a class="btn btn-primary w-100" href="{{ primary_cta_url }}">
+                                Start with SMU
+                            </a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -444,23 +452,23 @@
 
     <footer class="landing-footer">
         <div class="container">
-            <div class="footer-grid">
-                <div>
+            <div class="footer-grid row g-4 row-cols-1 row-cols-sm-2 row-cols-lg-4">
+                <div class="col">
                     <strong>SMU</strong>
                     <p>AI content creation, scheduling and publishing.</p>
                 </div>
-                <div>
+                <div class="col">
                     <h2>Product</h2>
                     <a href="#features">Features</a>
                     <a href="#how-it-works">How It Works</a>
                     <a href="#pricing-preview">Pricing</a>
                 </div>
-                <div>
+                <div class="col">
                     <h2>Account</h2>
                     <a href="{{ url_for('login') }}">Log In</a>
                     <a href="{{ url_for('register') }}">Get Started</a>
                 </div>
-                <div>
+                <div class="col">
                     <h2>Legal</h2>
                     <a href="{{ url_for('about_page') }}">About</a>
                     <a href="{{ url_for('contact') }}">Contact</a>
