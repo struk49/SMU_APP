@@ -56,7 +56,6 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 app = create_app()
 DATABASE_URL = app.config.get("DATABASE_URL", "")
-print("DATABASE:", app.config["SQLALCHEMY_DATABASE_URI"][:50])
 
 
 def configure_logging():
