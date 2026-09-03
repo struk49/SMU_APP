@@ -4,9 +4,10 @@ from flask import Blueprint, current_app, flash, redirect, render_template, requ
 from flask_login import current_user, login_required
 
 from smu_core.extensions import db
-from smu_core.models import ContactMessage
+from smu_core.models import ContactMessage, UserUsage
 from smu_core.services.access import has_product_access
 from smu_core.services import billing as billing_service
+from smu_core.services import usage as usage_service
 
 
 public_bp = Blueprint("public", __name__)
@@ -32,6 +33,15 @@ def landing_page():
 
 def pricing():
     user = current_user._get_current_object() if current_user.is_authenticated else None
+    usage_summary = (
+        usage_service.usage_summary(
+            user,
+            usage_model=UserUsage,
+            db_session=db.session,
+        )
+        if user
+        else None
+    )
     return render_template(
         "pricing.html",
         has_access=has_product_access(user),
@@ -40,6 +50,8 @@ def pricing():
             if user
             else None
         ),
+        usage_summary=usage_summary,
+        pricing_plans=billing_service.pricing_plan_options(usage_service.get_plan_limits),
         price_display=current_app.config.get(
             "SMU_MONTHLY_PRICE_DISPLAY",
             "Monthly subscription",

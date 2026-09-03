@@ -1,5 +1,6 @@
 import logging
 import uuid
+from dataclasses import fields, is_dataclass
 from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
@@ -8,6 +9,7 @@ from flask_login import current_user, login_required
 from smu_core.extensions import db
 from smu_core.models import Post
 from smu_core.services.access import subscription_required
+from smu_core.services import tiktok as tiktok_service
 from smu_core.services.tiktok import TikTokRepurposeError, validate_repurpose_result
 
 
@@ -22,11 +24,56 @@ def _tiktok_helper(name):
     if not helper:
         raise RuntimeError(f"TikTok helper is not available: {name}")
 
+    logger.info(
+        "tiktok_helper_resolved",
+        extra={
+            "smu_context": {
+                "helper_key": name,
+                "helper_type": type(helper).__name__,
+                "helper_module": getattr(helper, "__module__", ""),
+                "helper_name": getattr(helper, "__name__", ""),
+                "generation_version": tiktok_service.REPURPOSE_GENERATION_VERSION,
+            },
+        },
+    )
     return helper
 
 
 def _safe_tiktok_hostname(tiktok_url):
     return urlparse(tiktok_url).hostname or ""
+
+
+def _repurpose_result_context(result):
+    if result is None:
+        return {
+            "object_type": None,
+            "object_module": None,
+            "is_dataclass": False,
+            "available_field_names": [],
+            "generated_field_lengths": {},
+        }
+
+    if is_dataclass(result):
+        field_names = [field.name for field in fields(result)]
+    elif isinstance(result, dict):
+        field_names = sorted(str(key) for key in result.keys())
+    else:
+        field_names = [
+            field
+            for field in tiktok_service.EXPECTED_REPURPOSE_FIELDS
+            if hasattr(result, field)
+        ]
+
+    return {
+        "object_type": type(result).__name__,
+        "object_module": type(result).__module__,
+        "is_dataclass": is_dataclass(result),
+        "available_field_names": field_names,
+        "generated_field_lengths": {
+            field: len(getattr(result, field, "") or "")
+            for field in tiktok_service.EXPECTED_REPURPOSE_FIELDS
+        },
+    }
 
 
 @login_required
@@ -59,6 +106,9 @@ def tiktok_repurpose():
                     "user_id": current_user.id,
                     "stage": "start",
                     "url_hostname": _safe_tiktok_hostname(tiktok_url),
+                    "service_file": getattr(tiktok_service, "__file__", ""),
+                    "blueprint_file": __file__,
+                    "generation_version": tiktok_service.REPURPOSE_GENERATION_VERSION,
                 },
             },
         )
@@ -156,6 +206,18 @@ def tiktok_repurpose():
                 },
             )
 
+    logger.info(
+        "tiktok_repurpose_render_context",
+        extra={
+            "smu_context": {
+                "user_id": current_user.id if current_user.is_authenticated else None,
+                "stage": "render",
+                "validation_result": repurpose_result is not None,
+                "generation_version": tiktok_service.REPURPOSE_GENERATION_VERSION,
+                **_repurpose_result_context(repurpose_result),
+            },
+        },
+    )
     return render_template(
         "tiktok.html",
         tiktok_url=tiktok_url,
@@ -179,12 +241,32 @@ def create_tiktok_draft():
         flash("No image prompt found. Please generate TikTok content first.", "danger")
         return redirect(url_for("tiktok_repurpose"))
 
+    reserved_image_credit = False
+
     try:
+        user = current_user._get_current_object()
+        if not _tiktok_helper("reserve_ai_image_credits")(user, 1):
+            summary = _tiktok_helper("get_usage_summary")(user)
+            flash(
+                _tiktok_helper("usage_limit_message")(
+                    summary,
+                    "ai_images",
+                ),
+                "warning",
+            )
+            return redirect(url_for("tiktok_repurpose"))
+
+        reserved_image_credit = True
         styled_prompt = _tiktok_helper("apply_image_style")(image_prompt, image_style)
         image_url = _tiktok_helper("generate_openai_image")(styled_prompt)
 
     except Exception as e:
         db.session.rollback()
+        if reserved_image_credit:
+            _tiktok_helper("release_ai_image_credits")(
+                current_user._get_current_object(),
+                1,
+            )
         logger.error(
             "tiktok_single_draft_image_failed",
             extra={
@@ -234,6 +316,11 @@ def create_tiktok_draft():
 
     except Exception as e:
         db.session.rollback()
+        if reserved_image_credit:
+            _tiktok_helper("release_ai_image_credits")(
+                current_user._get_current_object(),
+                1,
+            )
         logger.error(
             "tiktok_single_draft_creation_failed",
             extra={

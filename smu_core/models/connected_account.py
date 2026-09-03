@@ -23,6 +23,10 @@ class ConnectedAccount(db.Model):
     linkedin_refresh_token = db.Column(db.String(1000))
     linkedin_refresh_token_expires_at = db.Column(db.DateTime)
 
+    zernio_profile_id = db.Column(db.String(255))
+    zernio_instagram_account_id = db.Column(db.String(255))
+    zernio_facebook_account_id = db.Column(db.String(255))
+
     make_webhook_single = db.Column(db.String(500))
     make_webhook_carousel = db.Column(db.String(500))
 

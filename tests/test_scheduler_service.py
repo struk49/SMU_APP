@@ -1,4 +1,3 @@
-import ast
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -7,6 +6,7 @@ from conftest import MockMakeResponse, create_accounts, create_carousel, create_
 from smu_core.models import Post
 from smu_core.services import scheduler as scheduler_service
 from smu_core.services.time_utils import utc_now
+from config import Config
 
 
 class RecordingSession:
@@ -28,34 +28,41 @@ def job_ids(scheduler):
         return []
 
 
-def app_scheduler_add_job_calls(module):
-    source = Path(module.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    calls = []
+class RecordingScheduler:
+    def __init__(self):
+        self.running = False
+        self.jobs = {}
+        self.start_calls = 0
+        self.shutdown_calls = 0
 
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        if not isinstance(node.func, ast.Attribute):
-            continue
-        if node.func.attr != "add_job":
-            continue
-        if not isinstance(node.func.value, ast.Name):
-            continue
-        if node.func.value.id != "scheduler":
-            continue
+    def add_job(self, func, **kwargs):
+        self.jobs[kwargs["id"]] = func
 
-        job_id = None
-        for keyword in node.keywords:
-            if keyword.arg == "id" and isinstance(keyword.value, ast.Constant):
-                job_id = keyword.value.value
+    def start(self):
+        self.start_calls += 1
+        self.running = True
 
-        func_arg = node.args[0] if node.args else None
-        func_name = func_arg.id if isinstance(func_arg, ast.Name) else None
+    def shutdown(self, wait=True):
+        self.shutdown_calls += 1
+        self.running = False
 
-        calls.append({"id": job_id, "func": func_name})
+    def get_jobs(self):
+        return [type("Job", (), {"id": job_id})() for job_id in self.jobs]
 
-    return calls
+
+class RecordingLease:
+    def __init__(self, results):
+        self.results = iter(results)
+        self.calls = 0
+        self.releases = 0
+
+    def acquire_or_renew(self):
+        self.calls += 1
+        return next(self.results)
+
+    def release(self):
+        self.releases += 1
+        return True
 
 
 def test_scheduler_service_exports_and_app_compatibility(module):
@@ -77,32 +84,75 @@ def test_app_wrapper_delegates_to_scheduler_service(app, module, monkeypatch):
 
     assert module.check_scheduled_posts() == "done"
     assert calls
-    assert calls[0]["publish_post"] is module.publish_post_to_make
+    assert calls[0]["publish_post"] is module.publish_post
     assert calls[0]["log_event"] is module.log_event
     assert calls[0]["post_model"] is module.Post
     assert calls[0]["db_session"] is module.db.session
     assert callable(calls[0]["now_provider"])
 
 
-def test_apscheduler_jobs_remain_registered_in_app(module):
-    calls = app_scheduler_add_job_calls(module)
-    ids = [call["id"] for call in calls]
-
-    assert "check_scheduled_posts" in ids
-    assert "generate_pending_images" in ids
-    assert ids.count("check_scheduled_posts") == 1
-    assert ids.count("generate_pending_images") == 1
+def test_importing_app_does_not_start_scheduler(module):
     assert module.scheduler is smu_app.scheduler
+    assert module.scheduler.running is False
+    assert job_ids(module.scheduler) == []
 
 
-def test_scheduler_job_uses_app_compatible_callable(module):
-    jobs = {
-        call["id"]: call["func"]
-        for call in app_scheduler_add_job_calls(module)
-    }
+def test_scheduler_owner_starts_once_and_registers_existing_jobs(app, module):
+    app.config["SMU_SCHEDULER_ENABLED"] = True
+    scheduler = RecordingScheduler()
+    lease = RecordingLease([True])
 
-    assert jobs["check_scheduled_posts"] == "check_scheduled_posts"
-    assert module.check_scheduled_posts.__module__ == "app"
+    first = module.start_background_scheduler(scheduler, lease)
+    second = module.start_background_scheduler(scheduler, lease)
+
+    assert first is True
+    assert second is False
+    assert scheduler.start_calls == 1
+    assert sorted(scheduler.jobs) == [
+        "check_scheduled_posts",
+        "generate_pending_images",
+        "scheduler_lease_heartbeat",
+    ]
+
+
+def test_scheduler_disabled_process_does_not_register_or_start_jobs(app, module):
+    app.config["SMU_SCHEDULER_ENABLED"] = False
+    scheduler = RecordingScheduler()
+
+    assert module.start_background_scheduler(scheduler) is False
+    assert scheduler.start_calls == 0
+    assert scheduler.jobs == {}
+
+
+def test_scheduler_defaults_on_for_local_development():
+    assert Config.SMU_SCHEDULER_ENABLED is True
+
+
+def test_jobs_execute_only_while_lease_is_owned(module):
+    calls = []
+    lease = RecordingLease([True, False])
+
+    assert module._run_scheduler_job_if_owner(lambda: calls.append("first"), lease) is None
+    assert module._run_scheduler_job_if_owner(lambda: calls.append("second"), lease) is None
+
+    assert calls == ["first"]
+
+
+def test_local_web_and_scheduler_entry_points_are_separated(module):
+    app_source = Path(module.__file__).read_text(encoding="utf-8")
+    gunicorn_source = Path(module.__file__).with_name("gunicorn.conf.py").read_text(
+        encoding="utf-8"
+    )
+    worker_source = Path(module.__file__).with_name("scheduler_worker.py").read_text(
+        encoding="utf-8"
+    )
+
+    main_block = app_source.split('if __name__ == "__main__":', 1)[1]
+    assert "start_background_scheduler()" in main_block
+    assert "use_reloader=False" in main_block
+    assert "when_ready" not in gunicorn_source
+    assert "start_background_scheduler" not in gunicorn_source
+    assert "start_background_scheduler()" in worker_source
 
 
 def test_due_query_finds_due_single_and_ignores_future_draft_and_sent(app, module):
@@ -472,7 +522,7 @@ def test_app_scheduler_wrapper_preserves_publish_monkeypatch(app, module, monkey
         calls.append((published_post.id, user_id))
         published_post.status = "sent_to_make"
 
-    monkeypatch.setattr(module, "publish_post_to_make", fake_publish)
+    monkeypatch.setattr(module, "publish_post", fake_publish)
 
     module.check_scheduled_posts()
 

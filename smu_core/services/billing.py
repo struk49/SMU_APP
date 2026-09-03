@@ -9,6 +9,18 @@ except ImportError:  # pragma: no cover - exercised when dependency is not insta
 
 ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
 INVOICE_PAID_ACTIVATABLE_STATUSES = {None, "past_due", "unpaid", "incomplete"}
+SUPPORTED_PLANS = ("starter", "pro", "business")
+LEGACY_PRICE_PLAN = "pro"
+PLAN_PRICE_CONFIG_KEYS = {
+    "starter": "STRIPE_PRICE_STARTER",
+    "pro": "STRIPE_PRICE_PRO",
+    "business": "STRIPE_PRICE_BUSINESS",
+}
+PLAN_DISPLAY = {
+    "starter": {"name": "Starter", "price": "£9.99/month"},
+    "pro": {"name": "Pro", "price": "£14.99/month", "badge": "Most Popular"},
+    "business": {"name": "Business", "price": "£19.99/month"},
+}
 
 
 class BillingConfigurationError(RuntimeError):
@@ -25,6 +37,68 @@ class BillingCustomerPortalError(RuntimeError):
 
 def has_active_subscription(user):
     return getattr(user, "subscription_status", None) in ACTIVE_SUBSCRIPTION_STATUSES
+
+
+def is_supported_plan(plan):
+    return (plan or "").strip().lower() in SUPPORTED_PLANS
+
+
+def normalize_checkout_plan(plan):
+    plan = (plan or "").strip().lower()
+    if not is_supported_plan(plan):
+        raise BillingConfigurationError("Unsupported subscription plan.")
+    return plan
+
+
+def plan_price_mapping(config):
+    return {
+        plan: (config.get(config_key, "") or "").strip()
+        for plan, config_key in PLAN_PRICE_CONFIG_KEYS.items()
+    }
+
+
+def price_id_for_plan(plan, config):
+    plan = normalize_checkout_plan(plan)
+    price_id = plan_price_mapping(config).get(plan, "")
+    if not price_id and plan == LEGACY_PRICE_PLAN:
+        price_id = (config.get("STRIPE_PRICE_ID", "") or "").strip()
+
+    if not price_id:
+        raise BillingConfigurationError("Stripe price ID is not configured for this plan.")
+
+    return price_id
+
+
+def plan_for_price_id(price_id, config):
+    price_id = (price_id or "").strip()
+    if not price_id:
+        return None
+
+    for plan, mapped_price_id in plan_price_mapping(config).items():
+        if mapped_price_id and mapped_price_id == price_id:
+            return plan
+
+    legacy_price_id = (config.get("STRIPE_PRICE_ID", "") or "").strip()
+    if legacy_price_id and legacy_price_id == price_id:
+        return LEGACY_PRICE_PLAN
+
+    return None
+
+
+def pricing_plan_options(limit_lookup):
+    plans = []
+    for plan_id in SUPPORTED_PLANS:
+        plan = {
+            "id": plan_id,
+            "limits": limit_lookup(plan_id),
+            **PLAN_DISPLAY[plan_id],
+        }
+        plans.append(plan)
+    return plans
+
+
+def plan_label(plan):
+    return PLAN_DISPLAY.get(plan, PLAN_DISPLAY[LEGACY_PRICE_PLAN])["name"]
 
 
 def get_subscription_display(user):
@@ -75,6 +149,7 @@ def create_checkout_session(
     *,
     secret_key,
     price_id,
+    plan=LEGACY_PRICE_PLAN,
     success_url,
     cancel_url,
     stripe_module=None,
@@ -87,7 +162,8 @@ def create_checkout_session(
     stripe = _stripe_module(stripe_module)
     stripe.api_key = secret_key
 
-    metadata = {"smu_user_id": str(user.id)}
+    checkout_plan = normalize_checkout_plan(plan)
+    metadata = {"smu_user_id": str(user.id), "smu_plan": checkout_plan}
     params = {
         "mode": "subscription",
         "line_items": [{"price": price_id, "quantity": 1}],
@@ -156,6 +232,8 @@ def process_webhook_event(
     *,
     user_model,
     db_session,
+    usage_model=None,
+    config=None,
     stripe_module=None,
     secret_key=None,
 ):
@@ -167,6 +245,8 @@ def process_webhook_event(
             obj,
             user_model=user_model,
             db_session=db_session,
+            usage_model=usage_model,
+            config=config,
             stripe_module=stripe_module,
             secret_key=secret_key,
         )
@@ -175,13 +255,21 @@ def process_webhook_event(
             obj,
             user_model=user_model,
             db_session=db_session,
+            usage_model=usage_model,
+            config=config,
             stripe_module=stripe_module,
             secret_key=secret_key,
         )
     if event_type == "invoice.payment_failed":
         return process_invoice_payment_failed(obj, user_model=user_model, db_session=db_session)
-    if event_type == "customer.subscription.updated":
-        return process_subscription_updated(obj, user_model=user_model, db_session=db_session)
+    if event_type in {"customer.subscription.created", "customer.subscription.updated"}:
+        return process_subscription_updated(
+            obj,
+            user_model=user_model,
+            db_session=db_session,
+            usage_model=usage_model,
+            config=config,
+        )
     if event_type == "customer.subscription.deleted":
         return process_subscription_deleted(obj, user_model=user_model, db_session=db_session)
 
@@ -193,6 +281,8 @@ def process_checkout_completed(
     *,
     user_model,
     db_session,
+    usage_model=None,
+    config=None,
     stripe_module=None,
     secret_key=None,
 ):
@@ -215,6 +305,13 @@ def process_checkout_completed(
         user.stripe_subscription_id = subscription_id
 
     _apply_subscription_object(user, subscription)
+    _sync_usage_plan_from_subscription(
+        user,
+        subscription,
+        usage_model=usage_model,
+        db_session=db_session,
+        config=config,
+    )
     db_session.commit()
     return user
 
@@ -224,6 +321,8 @@ def process_invoice_paid(
     *,
     user_model,
     db_session,
+    usage_model=None,
+    config=None,
     stripe_module=None,
     secret_key=None,
 ):
@@ -244,6 +343,13 @@ def process_invoice_paid(
             secret_key=secret_key,
         )
     _apply_subscription_object(user, subscription)
+    _sync_usage_plan_from_subscription(
+        user,
+        subscription,
+        usage_model=usage_model,
+        db_session=db_session,
+        config=config,
+    )
     if user.subscription_status in INVOICE_PAID_ACTIVATABLE_STATUSES:
         user.subscription_status = "active"
 
@@ -270,7 +376,14 @@ def process_invoice_payment_failed(invoice, *, user_model, db_session):
     return user
 
 
-def process_subscription_updated(subscription, *, user_model, db_session):
+def process_subscription_updated(
+    subscription,
+    *,
+    user_model,
+    db_session,
+    usage_model=None,
+    config=None,
+):
     user = _user_from_customer_or_subscription(
         subscription,
         user_model=user_model,
@@ -281,6 +394,13 @@ def process_subscription_updated(subscription, *, user_model, db_session):
 
     _apply_customer_and_subscription_ids(user, subscription)
     _apply_subscription_object(user, subscription)
+    _sync_usage_plan_from_subscription(
+        user,
+        subscription,
+        usage_model=usage_model,
+        db_session=db_session,
+        config=config,
+    )
     db_session.commit()
     return user
 
@@ -300,6 +420,52 @@ def process_subscription_deleted(subscription, *, user_model, db_session):
     user.subscription_status = "canceled"
     db_session.commit()
     return user
+
+
+def _sync_usage_plan_from_subscription(
+    user,
+    subscription,
+    *,
+    usage_model,
+    db_session,
+    config,
+):
+    if not usage_model or not config:
+        return None
+
+    price_id = _subscription_price_id(subscription)
+    plan = plan_for_price_id(price_id, config)
+    if not plan:
+        return None
+
+    from smu_core.services import usage as usage_service
+
+    return usage_service.set_usage_plan(
+        user,
+        plan,
+        usage_model=usage_model,
+        db_session=db_session,
+    )
+
+
+def _subscription_price_id(subscription):
+    if not subscription or isinstance(subscription, str):
+        return None
+
+    items = _get(subscription, "items", {}) or {}
+    item_data = _get(items, "data", []) or []
+    for item in item_data:
+        price = _get(item, "price")
+        price_id = _object_id(price)
+        if price_id:
+            return price_id
+        item_plan = _get(item, "plan")
+        item_plan_id = _object_id(item_plan)
+        if item_plan_id:
+            return item_plan_id
+
+    plan = _get(subscription, "plan")
+    return _object_id(plan)
 
 
 def _stripe_module(stripe_module=None):

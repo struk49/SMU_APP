@@ -67,7 +67,7 @@
                     {% elif post.status == 'scheduled' %}
                         <span class="badge bg-warning text-dark">Scheduled</span>
                     {% elif post.status == 'sent_to_make' %}
-                        <span class="badge bg-success">Sent to Make</span>
+                        <span class="badge bg-success">Publishing</span>
                     {% elif post.status == 'generating' %}
                         <span class="badge bg-info text-dark">Generating</span>
                     {% elif post.status == 'generation_failed' %}
@@ -186,6 +186,7 @@
                         </a>
 
                         <form method="POST" action="{{ url_for('duplicate_carousel', group_id=post.group_id) }}">
+                            {% include "_csrf.html" %}
                             <button type="submit" class="btn btn-outline-primary w-100">
                                 Duplicate Carousel
                             </button>
@@ -193,8 +194,9 @@
 
                         {% if post.status != 'scheduled' %}
                             <form method="POST" action="{{ url_for('send_carousel_to_make', group_id=post.group_id) }}">
+                                {% include "_csrf.html" %}
                                 <button type="submit" class="btn btn-success w-100">
-                                    Send Carousel to Make
+                                    Publish Carousel
                                 </button>
                             </form>
                         {% endif %}
@@ -206,17 +208,28 @@
                         </a>
 
                         <form method="POST" action="{{ url_for('duplicate_post', post_id=post.id) }}">
+                            {% include "_csrf.html" %}
                             <button type="submit" class="btn btn-outline-primary w-100">
                                 Duplicate Post
                             </button>
                         </form>
 
                         {% if post.status != 'scheduled' %}
-                            <form method="POST" action="{{ url_for('send_to_make', post_id=post.id) }}">
-                                <button type="submit" class="btn btn-success w-100">
-                                    Send to Make
-                                </button>
-                            </form>
+                            {% if direct_publish_available %}
+                                <form method="POST" action="{{ url_for('publish_with_zernio', post_id=post.id) }}">
+                                    {% include "_csrf.html" %}
+                                    <button type="submit" class="btn btn-success w-100">
+                                        Publish Post
+                                    </button>
+                                </form>
+                            {% else %}
+                                <form method="POST" action="{{ url_for('send_to_make', post_id=post.id) }}">
+                                    {% include "_csrf.html" %}
+                                    <button type="submit" class="btn btn-success w-100">
+                                        Publish Post
+                                    </button>
+                                </form>
+                            {% endif %}
                         {% endif %}
 
                     {% endif %}
@@ -226,6 +239,52 @@
             </div>
         </div>
 
+        {% if post.zernio_status or post.zernio_post_id %}
+            <div class="card border-0 shadow-sm rounded-4 mb-4">
+                <div class="card-body p-4">
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-3">
+                        <div>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <h3 class="h5 fw-bold mb-0">Direct Publishing</h3>
+                                <span class="badge bg-info text-dark">Beta</span>
+                            </div>
+                            <div class="text-muted small">
+                                Status:
+                                <span class="fw-semibold text-dark">{{ post.zernio_status or 'Publishing' }}</span>
+                            </div>
+                            {% if post.zernio_platforms %}
+                                <div class="text-muted small">
+                                    Platforms: {{ post.zernio_platforms }}
+                                </div>
+                            {% endif %}
+                            {% if post.zernio_published_url %}
+                                <div class="text-muted small">
+                                    Published post:
+                                    <a href="{{ post.zernio_published_url }}" target="_blank" rel="noopener">
+                                        Open published post
+                                    </a>
+                                </div>
+                            {% endif %}
+                            {% if post.zernio_error %}
+                                <div class="text-danger small mt-2">
+                                    Publishing failed. Please try again or reconnect your social account.
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {% if post.zernio_post_id %}
+                            <form method="POST" action="{{ url_for('refresh_zernio_status', post_id=post.id) }}" class="align-self-md-start">
+                                {% include "_csrf.html" %}
+                                <button type="submit" class="btn btn-outline-secondary">
+                                    Refresh Publishing Status
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
         <!-- SCHEDULE -->
         <div class="card border-0 shadow-sm rounded-4 mb-4">
             <div class="card-body p-4">
@@ -234,6 +293,7 @@
 
                 {% if post.status != 'scheduled' %}
                     <form method="POST" action="{{ url_for('schedule_post', post_id=post.id) }}">
+                        {% include "_csrf.html" %}
                         <div class="mb-2">
                             <input type="datetime-local" name="scheduled_time" class="form-control" required>
                         </div>
@@ -244,7 +304,11 @@
                     </form>
                 {% else %}
                     <div class="alert alert-info mb-0">
-                        Scheduled for {{ post.scheduled_time.strftime('%d %b %Y %H:%M') }}
+                        {% if post.scheduled_time %}
+                            Scheduled for {{ post.scheduled_time.strftime('%d %b %Y %H:%M') }}
+                        {% else %}
+                            Scheduled
+                        {% endif %}
                     </div>
                 {% endif %}
 
@@ -258,6 +322,7 @@
                 <h3 class="h5 fw-bold mb-3 text-danger">Danger Zone</h3>
 
                 <form method="POST" action="{{ url_for('delete_post', post_id=post.id) }}">
+                    {% include "_csrf.html" %}
                     <button type="submit" class="btn btn-outline-danger w-100">
                         Delete Post
                     </button>

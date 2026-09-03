@@ -3,9 +3,10 @@
 import os
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, flash, redirect, request, url_for
+from flask_wtf.csrf import CSRFError
 
-from smu_core.extensions import db, login_manager
+from smu_core.extensions import csrf, db, login_manager
 
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -29,10 +30,16 @@ def create_app(config_object=None):
         app.config.from_object(config_object)
 
     db.init_app(app)
+    csrf.init_app(app)
 
     login_manager.init_app(app)
     login_manager.login_view = "login"
     login_manager.login_message_category = "warning"
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(error):
+        flash("Your session expired. Please try again.", "warning")
+        return redirect(request.referrer or url_for("index"))
 
     from smu_core.services.access import has_product_access
 

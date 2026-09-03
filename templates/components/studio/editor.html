@@ -35,6 +35,7 @@
         {% endif %}
 
         <form method="POST">
+            {% include "_csrf.html" %}
             <textarea
                 id="studio-editor"
                 name="final_caption"

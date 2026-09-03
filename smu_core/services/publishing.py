@@ -5,6 +5,7 @@ from flask_login import current_user
 
 from smu_core.models import ConnectedAccount, Post
 from smu_core.services import linkedin_publishing
+from smu_core.services import zernio
 from smu_core.services.time_utils import utc_now
 
 
@@ -82,6 +83,137 @@ def get_enabled_platforms_for_user(
             enabled_platforms.append(clean_platform)
 
     return enabled_platforms
+
+
+def is_direct_zernio_single_image_candidate(post):
+    selected_platforms = [
+        platform.strip().lower()
+        for platform in (post.platforms or "").split(",")
+        if platform.strip()
+    ]
+
+    return (
+        (post.file_type or "").lower() == "image"
+        and not post.group_id
+        and bool(selected_platforms)
+        and all(platform in zernio.SUPPORTED_POC_PLATFORMS for platform in selected_platforms)
+    )
+
+
+def _zernio_account_id_for_platform(connected_account, platform):
+    account_field_by_platform = {
+        "instagram": "zernio_instagram_account_id",
+        "facebook": "zernio_facebook_account_id",
+    }
+    return getattr(
+        connected_account,
+        account_field_by_platform.get(platform, ""),
+        None,
+    )
+
+
+def has_required_zernio_accounts(post, connected_account):
+    if not connected_account:
+        return False
+
+    selected_platforms = [
+        platform.strip().lower()
+        for platform in (post.platforms or "").split(",")
+        if platform.strip()
+    ]
+
+    return bool(selected_platforms) and all(
+        _zernio_account_id_for_platform(connected_account, platform)
+        for platform in selected_platforms
+    )
+
+
+def store_zernio_result(post, result):
+    post.zernio_post_id = result.provider_post_id or post.zernio_post_id
+    post.zernio_status = result.status
+    post.zernio_platforms = ",".join(result.platforms)
+    post.zernio_published_url = result.published_url
+    post.zernio_error = result.error
+
+
+def publish_post_direct(
+    post,
+    connected_account,
+    *,
+    api_key,
+    base_url=zernio.DEFAULT_BASE_URL,
+    publish_single_image_func=None,
+    now_provider=None,
+):
+    if publish_single_image_func is None:
+        publish_single_image_func = zernio.publish_single_image
+    if now_provider is None:
+        now_provider = utc_now
+
+    if not has_required_zernio_accounts(post, connected_account):
+        raise zernio.ZernioError(
+            "Connect Instagram or Facebook with Zernio before publishing.",
+            stage="publish_post",
+            error_category="missing_account",
+        )
+
+    result = publish_single_image_func(
+        post,
+        connected_account,
+        api_key=api_key,
+        base_url=base_url,
+    )
+
+    result_status = (result.status or "").strip().lower()
+    if result.error or result_status in {"failed", "failure", "error"}:
+        raise zernio.ZernioError(
+            result.error or "Zernio did not accept this post.",
+            stage="publish_post",
+            error_category="provider_failed",
+        )
+
+    store_zernio_result(post, result)
+    post.status = "published" if result_status == "published" else "publishing"
+    post.sent_at = now_provider()
+
+    return result
+
+
+def should_use_direct_zernio_publish(
+    post,
+    user_id,
+    *,
+    get_user_connected_accounts_func=None,
+    get_enabled_platforms_func=None,
+    get_user_make_webhook_func=None,
+):
+    if get_user_connected_accounts_func is None:
+        get_user_connected_accounts_func = get_user_connected_accounts
+    if get_enabled_platforms_func is None:
+        get_enabled_platforms_func = get_enabled_platforms_for_user
+    if get_user_make_webhook_func is None:
+        get_user_make_webhook_func = get_user_make_webhook
+
+    if not is_direct_zernio_single_image_candidate(post):
+        return False
+
+    connected_account = get_user_connected_accounts_func(user_id)
+    if has_required_zernio_accounts(post, connected_account):
+        return True
+
+    selected_platforms = [
+        platform.strip().lower()
+        for platform in (post.platforms or "").split(",")
+        if platform.strip()
+    ]
+    make_enabled_platforms = get_enabled_platforms_func(
+        selected_platforms,
+        user_id=user_id,
+    )
+    return not (
+        make_enabled_platforms
+        and get_user_make_webhook_func("single", user_id=user_id)
+    )
 
 
 def get_user_make_webhook(

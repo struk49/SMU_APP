@@ -1,6 +1,8 @@
 import logging
 from contextlib import contextmanager
+from html import unescape
 
+import pytest
 from flask import template_rendered, url_for
 
 import app as smu_app
@@ -188,6 +190,108 @@ def test_tiktok_post_renders_structured_result_fields(client, app, module, monke
     assert "HASHTAGS:" not in html
 
 
+def test_tiktok_valid_raw_dict_is_validated_before_template(
+    client, app, module, monkeypatch
+):
+    user = create_user(module)
+    login(client, user)
+    raw_result = tiktok_result().__dict__.copy()
+
+    set_tiktok_helper(app, monkeypatch, "extract_tiktok_transcript", lambda url: "Transcript text")
+    set_tiktok_helper(app, monkeypatch, "build_brand_context", lambda user_id: "Brand context")
+    set_tiktok_helper(app, monkeypatch, "repurpose_tiktok_content", lambda *_: raw_result)
+
+    with captured_templates(app) as templates:
+        response = client.post("/tiktok", data={"tiktok_url": "https://tiktok.test/video"})
+
+    assert response.status_code == 200
+    rendered_result = templates[0][1]["repurpose_result"]
+    assert isinstance(rendered_result, TikTokRepurposeResult)
+    assert rendered_result == tiktok_result()
+
+
+def test_tiktok_arbitrary_object_does_not_reach_template(
+    client, app, module, monkeypatch
+):
+    user = create_user(module)
+    login(client, user)
+
+    class ArbitraryResult:
+        instagram_caption = "Instagram caption"
+        facebook_caption = "Facebook caption"
+        carousel_idea = "Carousel idea"
+        image_prompt = "Image prompt"
+        hashtags = "#one #two"
+
+    set_tiktok_helper(app, monkeypatch, "extract_tiktok_transcript", lambda url: "Transcript text")
+    set_tiktok_helper(app, monkeypatch, "build_brand_context", lambda user_id: "Brand context")
+    set_tiktok_helper(app, monkeypatch, "repurpose_tiktok_content", lambda *_: ArbitraryResult())
+
+    with captured_templates(app) as templates:
+        response = client.post(
+            "/tiktok",
+            data={"tiktok_url": "https://tiktok.test/video"},
+            follow_redirects=True,
+        )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert templates[0][1]["repurpose_result"] is None
+    assert "We couldn&#39;t generate usable social posts from this TikTok." in html
+    assert "Generated Content" not in html
+
+
+def test_tiktok_missing_attributes_do_not_render_blank_generated_content(
+    client, app, module, monkeypatch
+):
+    user = create_user(module)
+    login(client, user)
+
+    set_tiktok_helper(app, monkeypatch, "extract_tiktok_transcript", lambda url: "Transcript text")
+    set_tiktok_helper(app, monkeypatch, "build_brand_context", lambda user_id: "Brand context")
+    set_tiktok_helper(
+        app,
+        monkeypatch,
+        "repurpose_tiktok_content",
+        lambda *_: {"instagram_caption": "Only one field"},
+    )
+
+    response = client.post(
+        "/tiktok",
+        data={"tiktok_url": "https://tiktok.test/video"},
+        follow_redirects=True,
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "We couldn&#39;t generate usable social posts from this TikTok." in html
+    assert "Generated Content" not in html
+    assert "Instagram Caption" not in html
+
+
+def test_tiktok_blank_dataclass_values_do_not_render_blank_generated_content(
+    client, app, module, monkeypatch
+):
+    user = create_user(module)
+    login(client, user)
+    blank_result = tiktok_result(instagram_caption="   ")
+
+    set_tiktok_helper(app, monkeypatch, "extract_tiktok_transcript", lambda url: "Transcript text")
+    set_tiktok_helper(app, monkeypatch, "build_brand_context", lambda user_id: "Brand context")
+    set_tiktok_helper(app, monkeypatch, "repurpose_tiktok_content", lambda *_: blank_result)
+
+    response = client.post(
+        "/tiktok",
+        data={"tiktok_url": "https://tiktok.test/video"},
+        follow_redirects=True,
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "We couldn&#39;t generate usable social posts from this TikTok." in html
+    assert "Generated Content" not in html
+
+
 def test_tiktok_malformed_repurpose_result_shows_friendly_error(
     client, app, module, monkeypatch
 ):
@@ -214,6 +318,41 @@ def test_tiktok_malformed_repurpose_result_shows_friendly_error(
     assert "We couldn&#39;t generate usable social posts from this TikTok." in html
     assert "missing other fields" not in html
     assert "TikTok repurpose response was missing a field" not in html
+
+
+@pytest.mark.parametrize(
+    "repurpose_payload",
+    [
+        {"instagram_caption": "missing other fields"},
+        tiktok_result(instagram_caption="   ").__dict__,
+        {**tiktok_result().__dict__, "instagram_caption": ["not", "text"]},
+    ],
+)
+def test_tiktok_invalid_repurpose_fields_do_not_render_empty_content_card(
+    client, app, module, monkeypatch, repurpose_payload
+):
+    user = create_user(module)
+    login(client, user)
+
+    set_tiktok_helper(app, monkeypatch, "extract_tiktok_transcript", lambda url: "Transcript text")
+    set_tiktok_helper(app, monkeypatch, "build_brand_context", lambda user_id: "Brand context")
+    set_tiktok_helper(
+        app,
+        monkeypatch,
+        "repurpose_tiktok_content",
+        lambda *_: repurpose_payload,
+    )
+
+    response = client.post(
+        "/tiktok",
+        data={"tiktok_url": "https://tiktok.test/video"},
+        follow_redirects=True,
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "We couldn&#39;t generate usable social posts from this TikTok." in html
+    assert "Generated Content" not in html
 
 
 def test_tiktok_service_exception_shows_friendly_error_without_raw_details(
@@ -456,10 +595,15 @@ def test_create_tiktok_draft_commit_failure_rolls_back_without_post(
     login(client, user)
     caplog.set_level(logging.INFO, logger="smu_core.blueprints.tiktok.routes")
     rollback_calls = []
+    commit_calls = []
+    original_commit = module.db.session.commit
     original_rollback = module.db.session.rollback
 
-    def fail_commit():
-        raise RuntimeError("database raw detail")
+    def flaky_commit():
+        commit_calls.append("commit")
+        if len(commit_calls) == 3:
+            raise RuntimeError("database raw detail")
+        return original_commit()
 
     def rollback_spy():
         rollback_calls.append("rollback")
@@ -472,7 +616,7 @@ def test_create_tiktok_draft_commit_failure_rolls_back_without_post(
         "generate_openai_image",
         lambda prompt: "https://cdn.test/tiktok.jpg",
     )
-    monkeypatch.setattr(module.db.session, "commit", fail_commit)
+    monkeypatch.setattr(module.db.session, "commit", flaky_commit)
     monkeypatch.setattr(module.db.session, "rollback", rollback_spy)
 
     response = client.post(
@@ -485,11 +629,14 @@ def test_create_tiktok_draft_commit_failure_rolls_back_without_post(
         follow_redirects=True,
     )
     html = response.get_data(as_text=True)
+    text = unescape(html)
+    user_usage = module.UserUsage.query.filter_by(user_id=user.id).one()
 
     assert response.status_code == 200
     assert rollback_calls == ["rollback"]
     assert module.Post.query.count() == 0
-    assert "We couldn&#39;t create this draft. Please try again." in html
+    assert user_usage.ai_images_used == 0
+    assert "We couldn't create this draft. Please try again." in text
     assert "database raw detail" not in html
     assert "database raw detail" not in caplog.text
     contexts = log_contexts(caplog, "tiktok_single_draft_creation_failed")

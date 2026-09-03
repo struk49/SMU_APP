@@ -49,6 +49,7 @@
         <h2 class="h5 fw-bold mb-3">Final Caption</h2>
 
         <form method="POST">
+            {% include "_csrf.html" %}
             <textarea
                 name="final_caption"
                 class="form-control mb-3"

@@ -4,9 +4,9 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="h3 fw-bold mb-1">TikTok Repurpose</h1>
+        <h1 class="h3 fw-bold mb-1">TikTok Repurpose — Beta</h1>
         <p class="text-muted mb-0">
-            Turn a TikTok video into captions, carousel ideas, hashtags, and image prompts.
+            Turn TikTok content into captions, carousel ideas, hashtags and image prompts.
         </p>
     </div>
 
@@ -17,8 +17,12 @@
 
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-4">
+        <div class="alert alert-info mb-4">
+            TikTok URL extraction is currently in beta and availability may vary by video.
+        </div>
 
         <form method="POST" action="{{ url_for('tiktok_repurpose') }}">
+            {% include "_csrf.html" %}
 
             <div class="mb-4">
                 <label class="form-label fw-semibold">TikTok URL</label>
@@ -111,6 +115,7 @@
 
             <div class="col-md-6">
                 <form method="POST" action="{{ url_for('create_tiktok_draft') }}">
+                    {% include "_csrf.html" %}
                     <input type="hidden" name="caption" class="captionHidden">
                     <input type="hidden" name="image_prompt" class="imagePromptHidden">
                     <input type="hidden" name="image_style" class="imageStyleHidden">
@@ -123,6 +128,7 @@
 
             <div class="col-md-6">
                 <form method="POST" action="{{ url_for('create_tiktok_carousel_draft') }}">
+                    {% include "_csrf.html" %}
                     <input type="hidden" name="caption" class="captionHidden">
                     <input type="hidden" name="image_prompt" class="imagePromptHidden">
                     <input type="hidden" name="carousel_idea" class="carouselIdeaHidden">

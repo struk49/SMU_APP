@@ -29,6 +29,11 @@ EXPECTED_COLUMNS = [
     "improved_at",
     "brand_score",
     "brand_feedback",
+    "zernio_post_id",
+    "zernio_status",
+    "zernio_platforms",
+    "zernio_published_url",
+    "zernio_error",
 ]
 
 
@@ -68,6 +73,11 @@ def test_post_columns_defaults_and_nullable_settings_are_unchanged(module):
     assert columns.improved_at.nullable is True
     assert columns.brand_score.nullable is True
     assert columns.brand_feedback.nullable is True
+    assert columns.zernio_post_id.nullable is True
+    assert columns.zernio_status.nullable is True
+    assert columns.zernio_platforms.nullable is True
+    assert columns.zernio_published_url.nullable is True
+    assert columns.zernio_error.nullable is True
 
 
 def test_post_user_revision_relationships_and_cascade_still_work(app, module):

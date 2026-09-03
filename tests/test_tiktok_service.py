@@ -44,6 +44,7 @@ def test_real_tiktok_repurpose_implementation_lives_in_service():
     assert "Turn this TikTok transcript into content for Instagram and Facebook." in service_source
     assert "openai_client.responses.create" not in wrapper_source
     assert "tiktok_service.repurpose_tiktok_content" in wrapper_source
+    assert tiktok_service.REPURPOSE_GENERATION_VERSION == "structured-v1"
 
 
 def test_tiktok_service_returns_validated_structured_result():
@@ -65,7 +66,14 @@ def test_tiktok_service_returns_validated_structured_result():
     assert len(client.calls) == 1
     call = client.calls[0]
     assert call["model"] == "gpt-4.1-mini"
-    assert set(call.keys()) == {"model", "input"}
+    assert set(call.keys()) == {"model", "input", "text"}
+    assert call["input"].count("/human") == 1
+    assert call["text"]["format"] == {
+        "type": "json_schema",
+        "name": "tiktok_repurpose_content",
+        "strict": True,
+        "schema": tiktok_service.REPURPOSE_RESPONSE_SCHEMA,
+    }
     assert "Brand Brief:\nBrand context" in call["input"]
     assert "Transcript:\nTranscript text" in call["input"]
     assert '"instagram_caption"' in call["input"]
@@ -112,6 +120,19 @@ def test_parse_repurpose_result_rejects_missing_empty_or_non_string_fields(paylo
 def test_parse_repurpose_result_rejects_malformed_or_non_object_output(raw_response):
     with pytest.raises(tiktok_service.TikTokRepurposeError):
         tiktok_service.parse_repurpose_result(raw_response)
+
+
+def test_validate_repurpose_result_rejects_blank_dataclass_result():
+    payload = tiktok_service.TikTokRepurposeResult(
+        instagram_caption="",
+        facebook_caption="Facebook caption",
+        carousel_idea="Carousel idea",
+        image_prompt="Image prompt",
+        hashtags="#one #two",
+    )
+
+    with pytest.raises(tiktok_service.TikTokRepurposeError, match="field was empty"):
+        tiktok_service.validate_repurpose_result(payload)
 
 
 def test_parse_repurpose_result_logs_safe_metadata_without_generated_content(caplog):
@@ -186,6 +207,60 @@ def test_tiktok_service_logs_request_metadata_without_sensitive_text(caplog):
     assert completed
     assert started[0]["transcript_length"] == len("Raw transcript fixture with private detail")
     assert started[0]["brand_context_configured"] is True
+    assert started[0]["model"] == "gpt-4.1-mini"
+    assert started[0]["generation_version"] == "structured-v1"
+    assert completed[0]["returned_object_type"] == "TikTokRepurposeResult"
+    assert completed[0]["returned_field_names"] == list(
+        tiktok_service.EXPECTED_REPURPOSE_FIELDS
+    )
+    assert completed[0]["generated_field_lengths"] == {
+        field: len(value) for field, value in STRUCTURED_PAYLOAD.items()
+    }
+
+
+def test_tiktok_repurpose_logs_response_and_parse_shape_without_content(caplog):
+    client = FakeOpenAIClient()
+    caplog.set_level(logging.INFO, logger="smu_core.services.tiktok")
+
+    result = tiktok_service.repurpose_tiktok_content(
+        "Private transcript fixture",
+        "",
+        openai_api_key="test-key",
+        openai_client=client,
+    )
+
+    output = caplog.text
+    response_contexts = [
+        getattr(record, "smu_context", {})
+        for record in caplog.records
+        if record.message == "tiktok_repurpose_response_received"
+    ]
+    parse_contexts = [
+        getattr(record, "smu_context", {})
+        for record in caplog.records
+        if record.message == "tiktok_repurpose_parse_completed"
+    ]
+    validation_contexts = [
+        getattr(record, "smu_context", {})
+        for record in caplog.records
+        if record.message == "tiktok_repurpose_validation_completed"
+    ]
+
+    assert result == tiktok_service.TikTokRepurposeResult(**STRUCTURED_PAYLOAD)
+    assert "Private transcript fixture" not in output
+    assert "Instagram caption" not in output
+    assert "#one #two" not in output
+    assert response_contexts
+    assert response_contexts[0]["response_received"] is True
+    assert response_contexts[0]["output_text_length"] == len(STRUCTURED_OUTPUT)
+    assert parse_contexts
+    assert parse_contexts[0]["parse_success"] is True
+    assert parse_contexts[0]["returned_object_type"] == "dict"
+    assert parse_contexts[0]["returned_field_names"] == sorted(
+        tiktok_service.EXPECTED_REPURPOSE_FIELDS
+    )
+    assert validation_contexts[-1]["validation_success"] is True
+    assert validation_contexts[-1]["returned_object_type"] == "TikTokRepurposeResult"
 
 
 def test_app_wrapper_delegates_to_tiktok_service(monkeypatch):
@@ -220,6 +295,8 @@ def test_tiktok_helper_bridge_remains_late_bound_to_app_wrapper(app, module, mon
 
     helper = app.extensions["smu_tiktok_helpers"]["repurpose_tiktok_content"]
 
+    assert helper.__module__ == "app"
+    assert helper.__name__ == "<lambda>"
     assert helper("Transcript", "Brand") == (
         tiktok_service.TikTokRepurposeResult(**STRUCTURED_PAYLOAD)
     )

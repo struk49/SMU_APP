@@ -1,9 +1,10 @@
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
-from smu_core.extensions import db
-from smu_core.models import User
+from smu_core.extensions import csrf, db
+from smu_core.models import User, UserUsage
 from smu_core.services import billing as billing_service
+from smu_core.services import usage as usage_service
 
 
 billing_bp = Blueprint("billing", __name__)
@@ -19,9 +20,16 @@ def _log_event(event_name, **fields):
 def billing_account():
     user = current_user._get_current_object()
     subscription = billing_service.get_subscription_display(user)
+    usage_summary = usage_service.usage_summary(
+        user,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
     return render_template(
         "billing.html",
         subscription=subscription,
+        usage_summary=usage_summary,
+        current_plan_label=billing_service.plan_label(usage_summary["plan"]),
         price_display=current_app.config.get(
             "SMU_MONTHLY_PRICE_DISPLAY",
             "Monthly subscription",
@@ -32,12 +40,19 @@ def billing_account():
 @login_required
 def billing_checkout():
     user = current_user._get_current_object()
+    selected_plan = (request.form.get("plan") or "pro").strip().lower()
+
+    if billing_service.has_active_subscription(user):
+        flash("You already have an active subscription. Manage billing to change your plan.", "info")
+        return redirect(url_for("billing_account"))
 
     try:
+        price_id = billing_service.price_id_for_plan(selected_plan, current_app.config)
         checkout_session = billing_service.create_checkout_session(
             user,
             secret_key=current_app.config.get("STRIPE_SECRET_KEY", ""),
-            price_id=current_app.config.get("STRIPE_PRICE_ID", ""),
+            price_id=price_id,
+            plan=selected_plan,
             success_url=url_for("billing_success", _external=True),
             cancel_url=url_for("billing_cancel", _external=True),
         )
@@ -141,6 +156,8 @@ def billing_webhook():
             event,
             user_model=User,
             db_session=db.session,
+            usage_model=UserUsage,
+            config=current_app.config,
             secret_key=current_app.config.get("STRIPE_SECRET_KEY", ""),
         )
     except billing_service.BillingConfigurationError:
@@ -176,7 +193,7 @@ def register_billing_routes(state):
         ("/billing/portal", "billing_portal", billing_portal, ["POST"]),
         ("/billing/success", "billing_success", billing_success, ["GET"]),
         ("/billing/cancel", "billing_cancel", billing_cancel, ["GET"]),
-        ("/billing/webhook", "billing_webhook", billing_webhook, ["POST"]),
+        ("/billing/webhook", "billing_webhook", csrf.exempt(billing_webhook), ["POST"]),
     ]
 
     for rule, endpoint, view_func, methods in routes:

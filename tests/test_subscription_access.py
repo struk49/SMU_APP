@@ -159,11 +159,11 @@ def test_dashboard_blocks_unpaid_but_preserves_anonymous_landing_and_active_dash
     active_response = client.get("/")
 
     assert anonymous.status_code == 200
-    assert "Turn one idea into content for every platform." in anonymous.get_data(as_text=True)
+    assert "Turn one idea into social content in minutes" in anonymous.get_data(as_text=True)
     assert unpaid_response.status_code == 302
     assert unpaid_response.location.endswith("/pricing")
     assert active_response.status_code == 200
-    assert "No posts yet" in active_response.get_data(as_text=True)
+    assert "Start with an idea" in active_response.get_data(as_text=True)
 
 
 def test_unpaid_users_cannot_bypass_product_routes_by_direct_url(client, app, module):

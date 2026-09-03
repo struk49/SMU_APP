@@ -148,7 +148,7 @@ def test_public_root_renders_landing_for_unauthenticated_users(client):
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Turn one idea into content for every platform." in response.get_data(as_text=True)
+    assert "Turn one idea into social content in minutes" in response.get_data(as_text=True)
 
 
 def test_user_relationships_still_work(app, module):

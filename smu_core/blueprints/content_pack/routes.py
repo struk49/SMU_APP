@@ -31,12 +31,27 @@ def content_pack():
     if request.method == "POST":
         source_type = request.form.get("source_type", "text")
         source_input = request.form.get("source_input", "").strip()
+        reserved_content_pack_credit = False
 
         if not source_input:
             flash("Please enter a TikTok URL or topic/text.", "danger")
             return redirect(url_for("content_pack"))
 
         try:
+            user = current_user._get_current_object()
+            if not _content_pack_helper("reserve_content_pack_credits")(user):
+                summary = _content_pack_helper("get_usage_summary")(user)
+                flash(
+                    _content_pack_helper("usage_limit_message")(
+                        summary,
+                        "content_packs",
+                    ),
+                    "warning",
+                )
+                return redirect(url_for("content_pack"))
+
+            reserved_content_pack_credit = True
+
             if source_type == "tiktok":
                 source_text = _content_pack_helper("extract_tiktok_transcript")(
                     source_input
@@ -51,6 +66,10 @@ def content_pack():
             )
 
         except Exception as e:
+            if reserved_content_pack_credit:
+                _content_pack_helper("release_content_pack_credits")(
+                    current_user._get_current_object()
+                )
             print("Content pack error:", e)
             flash(f"Failed: {e}", "danger")
 

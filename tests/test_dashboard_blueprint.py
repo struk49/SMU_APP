@@ -50,7 +50,7 @@ def test_dashboard_root_renders_public_landing_for_anonymous_users(client):
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Turn one idea into content for every platform." in html
+    assert "Turn one idea into social content in minutes" in html
     assert "Get Started" in html
 
 
@@ -79,7 +79,7 @@ def test_dashboard_renders_same_template_and_context_keys(client, app, module):
     assert context["type_filter"] == "all"
     assert context["platform_filter"] == "all"
     assert context["search_query"] == ""
-    assert "No posts yet" in response.get_data(as_text=True)
+    assert "Start with an idea" in response.get_data(as_text=True)
 
 
 def test_authenticated_navbar_uses_horizontal_logo_and_grouped_links(client, module):
@@ -95,6 +95,10 @@ def test_authenticated_navbar_uses_horizontal_logo_and_grouped_links(client, mod
     assert response.status_code == 200
     assert "smu-horizontal-logo.png" in html
     assert "SMU Create Edit Publish" in html
+    assert "https://fonts.googleapis.com" in html
+    assert "https://fonts.gstatic.com" in html
+    assert "family=Lato:wght@700&family=Roboto:wght@400;500;700&display=swap" in html
+    assert "@fortawesome/fontawesome-free@6.5.2/css/all.min.css" in html
     assert "navbar navbar-expand-xl" in html
     assert "container-fluid px-3 px-lg-4" in html
     assert "navbar-nav app-nav-links ms-xl-auto" in html
@@ -256,6 +260,27 @@ def test_dashboard_statistics_are_preserved(client, app, module):
     }
 
 
+def test_dashboard_uses_font_awesome_stat_icons(client, module):
+    user = create_user(module)
+    login(client, user)
+
+    response = client.get("/")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "fa-solid fa-plus" in html
+    assert "fa-solid fa-file-lines" in html
+    assert "fa-solid fa-pen-to-square" in html
+    assert "fa-solid fa-calendar-days" in html
+    assert "fa-solid fa-circle-check" in html
+    assert "fa-solid fa-images" in html
+    assert "📄" not in html
+    assert "✏️" not in html
+    assert "⏰" not in html
+    assert "🚀" not in html
+    assert "🖼️" not in html
+
+
 def test_dashboard_onboarding_and_connected_platforms_are_preserved(
     client, app, module
 ):
@@ -284,12 +309,12 @@ def test_dashboard_onboarding_and_connected_platforms_are_preserved(
 
     assert response.status_code == 200
     assert [item["label"] for item in context["onboarding"]["items"]] == [
-        "Brand Brief",
-        "Content Pack",
-        "First Post",
-        "Scheduled Post",
-        "Calendar Viewed",
-        "First Published Post",
+        "Set up Brand Brief",
+        "Create a Content Pack",
+        "Create your first post",
+        "Schedule a post",
+        "View your calendar",
+        "Send your first post",
     ]
     assert context["connected_platforms"] == [
         {"name": "Instagram", "connected": True},

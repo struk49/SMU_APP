@@ -132,6 +132,8 @@ def test_app_wrappers_delegate_with_existing_late_bound_dependencies(monkeypatch
     assert smu_app.get_placeholder_image_url() == "https://cdn.test/placeholder.jpg"
     assert calls["extract"]["youtube_dl_cls"] is smu_app.YoutubeDL
     assert calls["extract"]["requests_get"] is smu_app.requests.get
+    assert calls["extract"]["openai_api_key"] == smu_app.OPENAI_API_KEY
+    assert calls["extract"]["openai_client"] is smu_app.openai_client
     assert calls["generate"]["openai_api_key"] == smu_app.OPENAI_API_KEY
     assert calls["generate"]["openai_client"] is smu_app.openai_client
 
@@ -161,6 +163,7 @@ def test_requested_subtitles_are_preferred_over_other_caption_sources():
         "writesubtitles": True,
         "writeautomaticsub": True,
         "subtitleslangs": ["en"],
+        "socket_timeout": 20,
     }
     assert FakeYoutubeDL.called["download"] is False
 
@@ -370,6 +373,7 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
 
     assert call["model"] == "gpt-4.1-mini"
     assert set(call.keys()) == {"model", "input"}
+    assert call["input"].count("/human") == 1
     assert "Brand Brief:\nBrand context" in call["input"]
     assert "Source content:\nTranscript text" in call["input"]
     assert "INSTAGRAM_CAPTION:" in call["input"]

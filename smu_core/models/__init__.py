@@ -5,7 +5,9 @@ from smu_core.models.connected_account import ConnectedAccount
 from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
 from smu_core.models.post import Post
+from smu_core.models.scheduler_lease import SchedulerLease
 from smu_core.models.post_revision import PostRevision
+from smu_core.models.user_usage import UserUsage
 
 __all__ = [
     "User",
@@ -15,5 +17,7 @@ __all__ = [
     "ContactMessage",
     "Feedback",
     "Post",
+    "SchedulerLease",
     "PostRevision",
+    "UserUsage",
 ]

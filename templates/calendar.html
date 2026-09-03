@@ -199,11 +199,23 @@
         const actionPopover = document.getElementById("calendarActionPopover");
         const toastEl = document.getElementById("calendarToast");
         const toastMessageEl = document.getElementById("calendarToastMessage");
+        const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+        const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute("content") : "";
         let selectedEvent = null;
         const filters = {
             platform: "all",
             status: "all"
         };
+
+        function csrfHeaders(extraHeaders) {
+            const headers = Object.assign({}, extraHeaders || {});
+
+            if (csrfToken) {
+                headers["X-CSRFToken"] = csrfToken;
+            }
+
+            return headers;
+        }
 
         function showToast(message) {
             toastMessageEl.textContent = message;
@@ -237,9 +249,9 @@
         function rescheduleEvent(event, date, revertCallback) {
             fetch(`/calendar/events/${event.id}/reschedule`, {
                 method: "POST",
-                headers: {
+                headers: csrfHeaders({
                     "Content-Type": "application/json"
-                },
+                }),
                 body: JSON.stringify({ date: date })
             })
                 .then(function (response) {
@@ -265,7 +277,8 @@
 
         function duplicateEvent(event) {
             fetch(`/calendar/events/${event.id}/duplicate`, {
-                method: "POST"
+                method: "POST",
+                headers: csrfHeaders()
             })
                 .then(function (response) {
                     if (!response.ok) {

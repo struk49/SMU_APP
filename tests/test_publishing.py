@@ -221,7 +221,7 @@ def test_sent_single_post_cannot_be_sent_again(client, module, monkeypatch):
     with client.session_transaction() as session:
         assert (
             "message",
-            "This post has already been sent to Make.",
+            "This post has already been sent for publishing.",
         ) in session["_flashes"]
 
 
@@ -246,7 +246,7 @@ def test_sent_carousel_cannot_be_sent_again(client, module, monkeypatch):
     with client.session_transaction() as session:
         assert (
             "message",
-            "This post has already been sent to Make.",
+            "This post has already been sent for publishing.",
         ) in session["_flashes"]
 
 

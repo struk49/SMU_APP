@@ -1,4 +1,5 @@
 from urllib.parse import urlparse
+from pathlib import Path
 
 from conftest import create_user, login
 
@@ -21,15 +22,15 @@ def test_root_landing_page_is_public(client):
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Turn one idea into content for every platform." in html
-    assert "AI-powered content workspace" in html
+    assert "Turn one idea into social content in minutes" in html
+    assert "Social media workspace" in html
 
 
 def test_landing_page_endpoint_remains_public(client):
     response = client.get("/landing")
 
     assert response.status_code == 200
-    assert "Turn one idea into content for every platform." in response.get_data(as_text=True)
+    assert "Turn one idea into social content in minutes" in response.get_data(as_text=True)
 
 
 def test_landing_ctas_point_to_real_routes(client):
@@ -38,34 +39,67 @@ def test_landing_ctas_point_to_real_routes(client):
     assert 'href="/register"' in html
     assert 'href="/login"' in html
     assert 'href="#how-it-works"' in html
-    assert 'href="#pricing-preview"' in html
+    assert 'href="/pricing"' in html
 
 
 def test_landing_sections_render_current_product_capabilities(client):
     html = client.get("/").get_data(as_text=True)
 
-    assert "TikTok Repurposing" in html
-    assert "AI Studio" in html
+    assert "Everything you need to turn ideas into content" in html
+    assert "Create" in html
+    assert "Content Packs" in html
+    assert "Publish" in html
+    assert "See SMU in action" in html
+    assert "Create and manage posts" in html
+    assert "Build carousel content" in html
+    assert "TikTok Repurpose — Beta" in html
+    assert "screenshots/dashboard.png" in html
+    assert "screenshots/post-detail.png" in html
+    assert "screenshots/carousel.png" in html
+    assert "screenshots/tiktok-repurpose.png" in html
+    assert "screenshots/brand-brief.png" in html
+    assert html.index("screenshots/brand-brief.png") < html.index("screenshots/post-detail.png")
+    assert html.index("screenshots/post-detail.png") < html.index("screenshots/carousel.png")
+    assert html.index("screenshots/carousel.png") < html.index("screenshots/tiktok-repurpose.png")
     assert "Content Packs" in html
     assert "Brand Brief" in html
-    assert "Instagram" in html
-    assert "Facebook" in html
-    assert "LinkedIn" in html
-    assert "Personal-profile text and single-image posts" in html
+    assert "Calendar scheduling" in html
+    assert "Connected publishing accounts" in html
+    assert "Billing and subscription management" in html
+    assert "£9.99/month" in html
 
 
 def test_landing_uses_bootstrap_responsive_structure(client):
     html = client.get("/").get_data(as_text=True)
 
     assert "smu-horizontal-logo.png" in html
+    assert "https://fonts.googleapis.com" in html
+    assert "https://fonts.gstatic.com" in html
+    assert "family=Lato:wght@700&family=Roboto:wght@400;500;700&display=swap" in html
     assert 'class="navbar navbar-expand-xl landing-nav"' in html
-    assert 'class="collapse navbar-collapse" id="landingNav"' in html
-    assert "row align-items-center g-4 g-lg-5" in html
+    assert 'id="landingNav"' in html
+    assert "collapse navbar-collapse" in html
+    assert "row justify-content-center" in html
+    assert "hero-screenshot-viewport rounded-3" in html
     assert "col-12 col-lg-6" in html
-    assert "row g-4 row-cols-1 row-cols-md-2 row-cols-xl-5" in html
-    assert "publish-grid row g-3 row-cols-1 row-cols-sm-2" in html
-    assert "pricing-panel row g-4 align-items-center" in html
-    assert "footer-grid row g-4 row-cols-1 row-cols-sm-2 row-cols-lg-4" in html
+    assert "card border-0 shadow-sm rounded-4" in html
+    assert "img-fluid w-100 landing-screenshot" in html
+    assert "img-fluid w-100 rounded-3 shadow-sm landing-screenshot" in html
+    assert "row g-4" in html
+    assert "col-12 col-md-6 col-xl-3" in html
+    assert html.count("col-12 col-lg-6") >= 4
+    assert "list-group list-group-flush rounded-4" in html
+    assert "d-grid d-sm-flex" in html
+    assert "justify-content-lg-center" in html
+    assert "gap-2" in html
+
+
+def test_landing_uses_shared_roboto_lato_typography():
+    css = Path("static/landing.css").read_text(encoding="utf-8")
+
+    assert 'font-family: "Roboto", sans-serif;' in css
+    assert 'font-family: "Lato", sans-serif;' in css
+    assert "Inter" not in css
 
 
 def test_landing_does_not_require_login(client):
@@ -91,7 +125,7 @@ def test_authenticated_root_still_shows_dashboard(client, module):
 
     assert response.status_code == 200
     assert "Content Dashboard" in html
-    assert "Turn One Idea Into Content Everywhere" not in html
+    assert "Turn one idea into social content in minutes" not in html
 
 
 def test_authenticated_landing_shows_dashboard_cta(client, module):
@@ -136,7 +170,8 @@ def test_future_features_are_not_claimed_as_available(client):
     assert "AI Research" not in html
     assert "AI Memory" not in html
     assert "LinkedIn MultiImage" not in html
-    assert "Pinterest <small>Coming soon</small>" in html
+    assert "fake Free" not in html
+    assert "Enterprise tiers" not in html
 
 
 def test_landing_no_longer_uses_beta_marketing_copy(client):

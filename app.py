@@ -26,7 +26,7 @@ import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 from smu_core import create_app
-from smu_core.extensions import db, login_manager
+from smu_core.extensions import csrf, db, login_manager
 from smu_core.models.user import User
 from smu_core.models.beta_application import BetaApplication
 from smu_core.models.brand_brief import BrandBrief
@@ -35,6 +35,8 @@ from smu_core.models.contact_message import ContactMessage
 from smu_core.models.feedback import Feedback
 from smu_core.models.post import Post
 from smu_core.models.post_revision import PostRevision
+from smu_core.models.scheduler_lease import SchedulerLease
+from smu_core.models.user_usage import UserUsage
 from smu_core.services import captions as captions_service
 from smu_core.services import carousel_generation as carousel_generation_service
 from smu_core.services import content as content_service
@@ -43,8 +45,10 @@ from smu_core.services import linkedin_publishing as linkedin_publishing_service
 from smu_core.services import media as media_service
 from smu_core.services import publishing as publishing_service
 from smu_core.services import scheduler as scheduler_service
+from smu_core.services.scheduler_lease import SchedulerLeaseCoordinator
 from smu_core.services import tiktok as tiktok_service
 from smu_core.services import time_utils
+from smu_core.services import usage as usage_service
 
 load_dotenv()
 
@@ -164,6 +168,18 @@ with app.app_context():
         if "brand_feedback" not in columns:
             conn.execute(db.text("ALTER TABLE post ADD COLUMN brand_feedback TEXT"))
 
+        post_column_sql = {
+            "zernio_post_id": "ALTER TABLE post ADD COLUMN zernio_post_id VARCHAR(255)",
+            "zernio_status": "ALTER TABLE post ADD COLUMN zernio_status VARCHAR(50)",
+            "zernio_platforms": "ALTER TABLE post ADD COLUMN zernio_platforms VARCHAR(200)",
+            "zernio_published_url": "ALTER TABLE post ADD COLUMN zernio_published_url VARCHAR(500)",
+            "zernio_error": "ALTER TABLE post ADD COLUMN zernio_error TEXT",
+        }
+
+        for column_name, alter_sql in post_column_sql.items():
+            if column_name not in columns:
+                conn.execute(db.text(alter_sql))
+
         account_columns = [
             col["name"] for col in inspector.get_columns("connected_account")
         ]
@@ -176,6 +192,9 @@ with app.app_context():
             "linkedin_display_name": "ALTER TABLE connected_account ADD COLUMN linkedin_display_name VARCHAR(255)",
             "linkedin_refresh_token": "ALTER TABLE connected_account ADD COLUMN linkedin_refresh_token VARCHAR(1000)",
             "linkedin_refresh_token_expires_at": "ALTER TABLE connected_account ADD COLUMN linkedin_refresh_token_expires_at TIMESTAMP",
+            "zernio_profile_id": "ALTER TABLE connected_account ADD COLUMN zernio_profile_id VARCHAR(255)",
+            "zernio_instagram_account_id": "ALTER TABLE connected_account ADD COLUMN zernio_instagram_account_id VARCHAR(255)",
+            "zernio_facebook_account_id": "ALTER TABLE connected_account ADD COLUMN zernio_facebook_account_id VARCHAR(255)",
         }
 
         for column_name, alter_sql in connected_account_column_sql.items():
@@ -196,6 +215,25 @@ with app.app_context():
         for column_name, alter_sql in user_column_sql.items():
             if column_name not in user_columns:
                 conn.execute(db.text(alter_sql))
+
+        if "user_usage" in inspector.get_table_names():
+            usage_columns = [
+                col["name"] for col in inspector.get_columns("user_usage")
+            ]
+            usage_column_sql = {
+                "user_id": "ALTER TABLE user_usage ADD COLUMN user_id INTEGER",
+                "plan": "ALTER TABLE user_usage ADD COLUMN plan VARCHAR(50) DEFAULT 'pro' NOT NULL",
+                "ai_images_used": "ALTER TABLE user_usage ADD COLUMN ai_images_used INTEGER DEFAULT 0 NOT NULL",
+                "content_packs_used": "ALTER TABLE user_usage ADD COLUMN content_packs_used INTEGER DEFAULT 0 NOT NULL",
+                "usage_period_start": "ALTER TABLE user_usage ADD COLUMN usage_period_start TIMESTAMP",
+                "usage_period_end": "ALTER TABLE user_usage ADD COLUMN usage_period_end TIMESTAMP",
+                "created_at": "ALTER TABLE user_usage ADD COLUMN created_at TIMESTAMP",
+                "updated_at": "ALTER TABLE user_usage ADD COLUMN updated_at TIMESTAMP",
+            }
+
+            for column_name, alter_sql in usage_column_sql.items():
+                if column_name not in usage_columns:
+                    conn.execute(db.text(alter_sql))
 
         conn.commit()
 
@@ -348,6 +386,8 @@ def rewrite_caption_with_ai(caption, rewrite_type):
 
     prompt = f"""
 You are a social media copywriter.
+
+/human
 
 Task:
 {instruction}
@@ -552,6 +592,20 @@ app.extensions.setdefault("smu_post_edit_helpers", {}).update({
         *args,
         **kwargs,
     ),
+    "get_usage_summary": lambda *args, **kwargs: get_usage_summary(
+        *args,
+        **kwargs,
+    ),
+    "reserve_ai_image_credits": (
+        lambda *args, **kwargs: reserve_ai_image_credits(*args, **kwargs)
+    ),
+    "release_ai_image_credits": (
+        lambda *args, **kwargs: release_ai_image_credits(*args, **kwargs)
+    ),
+    "usage_limit_message": lambda *args, **kwargs: usage_limit_message(
+        *args,
+        **kwargs,
+    ),
 })
 
 
@@ -588,6 +642,20 @@ app.extensions.setdefault("smu_post_create_helpers", {}).update({
     ),
     "is_instagram_selected": (
         lambda *args, **kwargs: is_instagram_selected(*args, **kwargs)
+    ),
+    "get_usage_summary": lambda *args, **kwargs: get_usage_summary(
+        *args,
+        **kwargs,
+    ),
+    "reserve_ai_image_credits": (
+        lambda *args, **kwargs: reserve_ai_image_credits(*args, **kwargs)
+    ),
+    "release_ai_image_credits": (
+        lambda *args, **kwargs: release_ai_image_credits(*args, **kwargs)
+    ),
+    "usage_limit_message": lambda *args, **kwargs: usage_limit_message(
+        *args,
+        **kwargs,
     ),
 })
 
@@ -685,6 +753,8 @@ def extract_tiktok_transcript(tiktok_url):
         tiktok_url,
         youtube_dl_cls=YoutubeDL,
         requests_get=requests.get,
+        openai_api_key=OPENAI_API_KEY,
+        openai_client=openai_client,
     )
 
 
@@ -703,7 +773,7 @@ def repurpose_tiktok_content(
 def check_scheduled_posts():
     with app.app_context():
         return scheduler_service.check_scheduled_posts(
-            publish_post=publish_post_to_make,
+            publish_post=publish_post,
             log_event=log_event,
             now_provider=time_utils.utc_now,
             post_model=Post,
@@ -713,11 +783,31 @@ def check_scheduled_posts():
 
 
 def generate_pending_carousel_images():
+    def user_for_post(post):
+        if not post.user_id:
+            return None
+
+        return db.session.get(User, post.user_id)
+
+    def reserve_for_post(post, count=1):
+        user = user_for_post(post)
+        if not user:
+            return False
+
+        return reserve_ai_image_credits(user, count)
+
+    def release_for_post(post, count=1):
+        user = user_for_post(post)
+        if user:
+            release_ai_image_credits(user, count)
+
     def run_worker():
         return carousel_generation_service.generate_pending_carousel_images(
             post_model=Post,
             db_session=db.session,
             image_generator=generate_openai_image,
+            reserve_image_credits=reserve_for_post,
+            release_image_credits=release_for_post,
         )
 
     if has_app_context():
@@ -744,6 +834,87 @@ def build_brand_context(user_id):
     return captions_service.build_brand_context(user_id)
 
 
+def get_usage_summary(user):
+    return usage_service.usage_summary(
+        user,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def reserve_ai_image_credits(user, count=1):
+    return usage_service.reserve_image_credits(
+        user,
+        count=count,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def release_ai_image_credits(user, count=1):
+    return usage_service.release_image_credits(
+        user,
+        count=count,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def record_successful_image_usage(user, count=1):
+    return usage_service.record_successful_image_usage(
+        user,
+        count=count,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def can_generate_content_pack(user):
+    return usage_service.can_generate_content_pack(
+        user,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def record_successful_content_pack_usage(user):
+    return usage_service.record_successful_content_pack_usage(
+        user,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def reserve_content_pack_credits(user):
+    return usage_service.reserve_content_pack_credits(
+        user,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def release_content_pack_credits(user):
+    return usage_service.release_content_pack_credits(
+        user,
+        usage_model=UserUsage,
+        db_session=db.session,
+    )
+
+
+def usage_limit_message(summary, credit_type):
+    limit_key = "ai_images" if credit_type == "ai_images" else "content_packs"
+    label = "AI image" if credit_type == "ai_images" else "Content Pack"
+    limit = summary["limits"][limit_key]
+    message = (
+        f"You've used all {limit} {label} credits for this billing period."
+    )
+
+    if summary.get("usage_period_end"):
+        message += f" Resets {summary['usage_period_end'].strftime('%d %B %Y')}."
+
+    return message
+
+
 app.extensions.setdefault("smu_content_pack_helpers", {}).update({
     "extract_tiktok_transcript": lambda *args, **kwargs: extract_tiktok_transcript(
         *args,
@@ -766,6 +937,29 @@ app.extensions.setdefault("smu_content_pack_helpers", {}).update({
     ),
     "get_placeholder_image_url": (
         lambda *args, **kwargs: get_placeholder_image_url(*args, **kwargs)
+    ),
+    "get_usage_summary": lambda *args, **kwargs: get_usage_summary(
+        *args,
+        **kwargs,
+    ),
+    "can_generate_content_pack": (
+        lambda *args, **kwargs: can_generate_content_pack(*args, **kwargs)
+    ),
+    "reserve_content_pack_credits": (
+        lambda *args, **kwargs: reserve_content_pack_credits(*args, **kwargs)
+    ),
+    "release_content_pack_credits": (
+        lambda *args, **kwargs: release_content_pack_credits(*args, **kwargs)
+    ),
+    "record_successful_content_pack_usage": (
+        lambda *args, **kwargs: record_successful_content_pack_usage(
+            *args,
+            **kwargs,
+        )
+    ),
+    "usage_limit_message": lambda *args, **kwargs: usage_limit_message(
+        *args,
+        **kwargs,
     ),
 })
 
@@ -794,7 +988,31 @@ app.extensions.setdefault("smu_tiktok_helpers", {}).update({
     "get_placeholder_image_url": (
         lambda *args, **kwargs: get_placeholder_image_url(*args, **kwargs)
     ),
+    "get_usage_summary": lambda *args, **kwargs: get_usage_summary(
+        *args,
+        **kwargs,
+    ),
+    "reserve_ai_image_credits": (
+        lambda *args, **kwargs: reserve_ai_image_credits(*args, **kwargs)
+    ),
+    "release_ai_image_credits": (
+        lambda *args, **kwargs: release_ai_image_credits(*args, **kwargs)
+    ),
+    "usage_limit_message": lambda *args, **kwargs: usage_limit_message(
+        *args,
+        **kwargs,
+    ),
 })
+
+logging.getLogger(__name__).info(
+    "SMU TikTok generation: structured-v1 loaded",
+    extra={
+        "smu_context": {
+            "generation_version": tiktok_service.REPURPOSE_GENERATION_VERSION,
+            "service_file": getattr(tiktok_service, "__file__", ""),
+        },
+    },
+)
 
 
 def rewrite_caption_with_action(post, brand_context="", action="improve"):
@@ -872,32 +1090,32 @@ def build_onboarding_progress(user_id):
 
     items = [
         {
-            "label": "Brand Brief",
+            "label": "Set up Brand Brief",
             "complete": has_brand_brief,
             "url": url_for("brand_brief"),
         },
         {
-            "label": "Content Pack",
+            "label": "Create a Content Pack",
             "complete": bool(session.get("content_pack_started")),
             "url": url_for("content_pack"),
         },
         {
-            "label": "First Post",
+            "label": "Create your first post",
             "complete": has_first_post,
             "url": url_for("create_post"),
         },
         {
-            "label": "Scheduled Post",
+            "label": "Schedule a post",
             "complete": has_scheduled_post,
             "url": url_for("calendar_view"),
         },
         {
-            "label": "Calendar Viewed",
+            "label": "View your calendar",
             "complete": bool(session.get("calendar_viewed")),
             "url": url_for("calendar_view"),
         },
         {
-            "label": "First Published Post",
+            "label": "Send your first post",
             "complete": has_published_post,
             "url": url_for("index", status="sent_to_make"),
         },
@@ -919,6 +1137,10 @@ app.extensions.setdefault("smu_dashboard_helpers", {}).update({
     ),
     "build_connected_platform_cards": (
         lambda *args, **kwargs: build_connected_platform_cards(*args, **kwargs)
+    ),
+    "get_usage_summary": lambda *args, **kwargs: get_usage_summary(
+        *args,
+        **kwargs,
     ),
 })
 
@@ -1181,6 +1403,24 @@ def publish_post_to_make(post, user_id):
     )
 
 
+def publish_post(post, user_id):
+    if publishing_service.should_use_direct_zernio_publish(
+        post,
+        user_id,
+        get_user_connected_accounts_func=get_user_connected_accounts,
+        get_enabled_platforms_func=get_enabled_platforms_for_user,
+        get_user_make_webhook_func=get_user_make_webhook,
+    ):
+        return publishing_service.publish_post_direct(
+            post,
+            get_user_connected_accounts(user_id),
+            api_key=app.config.get("ZERNIO_API_KEY", ""),
+            base_url=app.config.get("ZERNIO_BASE_URL"),
+        )
+
+    return publish_post_to_make(post, user_id)
+
+
 def prepare_linkedin_post(post, connected_account):
     return linkedin_publishing_service.prepare_post_for_publish(
         post,
@@ -1218,6 +1458,8 @@ def from_json_filter(value):
 def improve_post_with_ai(post, brand_context=""):
     prompt = f"""
 You are an expert social media copywriter.
+
+/human
 
 Improve this post using the brand brief and grading feedback.
 
@@ -1269,43 +1511,135 @@ log_event(
     database_configured=bool(DATABASE_URL),
 )
 
-print("Starting background scheduler...")
-log_event("scheduler_startup", status="starting")
-
 scheduler = BackgroundScheduler(
     timezone="UTC"
 )
+scheduler_lease_coordinator = None
+_scheduler_has_lease = None
 
-scheduler.add_job(
-    generate_pending_carousel_images,
-    trigger="interval",
-    seconds=20,
-    id="generate_pending_images",
-    max_instances=1,
-    replace_existing=True,
-)
 
-scheduler.add_job(
-    check_scheduled_posts,
-    trigger="interval",
-    seconds=30,
-    id="check_scheduled_posts",
-    max_instances=1,
-    replace_existing=True,
-)
+def _scheduler_owner_id():
+    instance_id = (
+        os.getenv("RENDER_INSTANCE_ID")
+        or os.getenv("HOSTNAME")
+        or "local"
+    )
+    return f"{instance_id}:{os.getpid()}:{uuid.uuid4()}"
 
-scheduler.start()
 
-print("Background scheduler started.")
-print("Registered jobs:", scheduler.get_jobs())
-log_event(
-    "scheduler_startup",
-    status="started",
-    job_count=len(scheduler.get_jobs()),
-)
+def _default_scheduler_lease_coordinator():
+    return SchedulerLeaseCoordinator(
+        lease_model=SchedulerLease,
+        db_session=db.session,
+        owner_id=_scheduler_owner_id(),
+        lease_seconds=app.config["SMU_SCHEDULER_LEASE_SECONDS"],
+    )
+
+
+def confirm_scheduler_ownership(lease_coordinator=None):
+    global _scheduler_has_lease
+
+    lease_coordinator = lease_coordinator or scheduler_lease_coordinator
+    if lease_coordinator is None:
+        return False
+
+    with app.app_context():
+        owns_lease = lease_coordinator.acquire_or_renew()
+
+    if owns_lease != _scheduler_has_lease:
+        status = "acquired" if owns_lease else "standby"
+        print(f"Scheduler lease {status}.")
+        log_event("scheduler_lease", status=status)
+    _scheduler_has_lease = owns_lease
+    return owns_lease
+
+
+def _run_scheduler_job_if_owner(job_func, lease_coordinator=None):
+    if not confirm_scheduler_ownership(lease_coordinator):
+        return None
+    return job_func()
+
+
+def register_scheduler_jobs(scheduler_instance=None, lease_coordinator=None):
+    scheduler_instance = scheduler_instance or scheduler
+    scheduler_instance.add_job(
+        lambda: _run_scheduler_job_if_owner(
+            generate_pending_carousel_images,
+            lease_coordinator,
+        ),
+        trigger="interval",
+        seconds=20,
+        id="generate_pending_images",
+        max_instances=1,
+        replace_existing=True,
+    )
+    scheduler_instance.add_job(
+        lambda: _run_scheduler_job_if_owner(
+            check_scheduled_posts,
+            lease_coordinator,
+        ),
+        trigger="interval",
+        seconds=30,
+        id="check_scheduled_posts",
+        max_instances=1,
+        replace_existing=True,
+    )
+    scheduler_instance.add_job(
+        lambda: confirm_scheduler_ownership(lease_coordinator),
+        trigger="interval",
+        seconds=app.config["SMU_SCHEDULER_RENEW_SECONDS"],
+        id="scheduler_lease_heartbeat",
+        max_instances=1,
+        replace_existing=True,
+    )
+
+
+def start_background_scheduler(scheduler_instance=None, lease_coordinator=None):
+    global scheduler_lease_coordinator
+
+    scheduler_instance = scheduler_instance or scheduler
+    if not app.config.get("SMU_SCHEDULER_ENABLED", True):
+        log_event("scheduler_startup", status="disabled")
+        return False
+    if scheduler_instance.running:
+        return False
+
+    if lease_coordinator is None:
+        lease_coordinator = _default_scheduler_lease_coordinator()
+    scheduler_lease_coordinator = lease_coordinator
+
+    print("Starting background scheduler...")
+    log_event("scheduler_startup", status="starting")
+    confirm_scheduler_ownership(lease_coordinator)
+    register_scheduler_jobs(scheduler_instance, lease_coordinator)
+    scheduler_instance.start()
+    print("Background scheduler started.")
+    print("Registered jobs:", scheduler_instance.get_jobs())
+    log_event(
+        "scheduler_startup",
+        status="started",
+        job_count=len(scheduler_instance.get_jobs()),
+    )
+    return True
+
+
+def stop_background_scheduler(scheduler_instance=None):
+    global _scheduler_has_lease
+
+    scheduler_instance = scheduler_instance or scheduler
+    if not scheduler_instance.running:
+        return False
+    scheduler_instance.shutdown(wait=False)
+    if scheduler_lease_coordinator is not None:
+        with app.app_context():
+            scheduler_lease_coordinator.release()
+    _scheduler_has_lease = False
+    log_event("scheduler_startup", status="stopped")
+    return True
 
 
 if __name__ == "__main__":
+    start_background_scheduler()
     app.run(
         debug=True,
         use_reloader=False,

@@ -24,6 +24,8 @@ def generate_pending_carousel_images(
     post_model,
     db_session,
     image_generator,
+    reserve_image_credits=None,
+    release_image_credits=None,
     batch_size=CAROUSEL_GENERATION_BATCH_SIZE,
 ):
     pending_posts = (
@@ -58,8 +60,27 @@ def generate_pending_carousel_images(
         post_id = pending_post.id
         group_id = pending_post.group_id
         processed_count += 1
+        reserved_credit = False
 
         try:
+            if reserve_image_credits and not reserve_image_credits(pending_post, 1):
+                pending_post.status = "generation_failed"
+                db_session.commit()
+                failed_count += 1
+                logger.warning(
+                    "carousel_generation_row_credit_exhausted",
+                    extra={
+                        "smu_context": {
+                            "stage": "carousel_generation_row",
+                            "result": "credit_exhausted",
+                            "post_id": post_id,
+                            "group_id": group_id,
+                        },
+                    },
+                )
+                continue
+
+            reserved_credit = bool(reserve_image_credits)
             image_url = image_generator(pending_post.prompt)
             pending_post.file_url = image_url
             pending_post.status = "draft"
@@ -80,6 +101,8 @@ def generate_pending_carousel_images(
 
         except Exception as exc:
             db_session.rollback()
+            if reserved_credit and release_image_credits:
+                release_image_credits(pending_post, 1)
             failed_count += 1
             logger.error(
                 "carousel_generation_row_failed",

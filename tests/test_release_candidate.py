@@ -6,7 +6,7 @@ def test_public_landing_page_renders_without_login(client):
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert "Turn one idea into content for every platform." in html
+    assert "Turn one idea into social content in minutes" in html
     assert "Get Started" in html
     assert "SMU v1.0.0-rc1 · © podgeaisolutions" in html
 

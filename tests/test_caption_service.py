@@ -330,6 +330,7 @@ def test_rewrite_caption_actions_preserve_prompt_mapping(app, module):
         ) == "Rewritten caption"
         call = fake_client.responses.calls[-1]
         assert call["model"] == "gpt-4.1-mini"
+        assert call["input"].count("/human") == 1
         assert call["input"].count(instruction) == 1
         assert "Current Caption:\nCaption" in call["input"]
         assert "Platform:\ninstagram" in call["input"]

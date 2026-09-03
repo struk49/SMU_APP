@@ -307,16 +307,24 @@ def test_duplicate_carousel_commit_failure_preserves_current_error_redirect(
     group_id, posts = create_carousel(module, user)
     login(client, user)
 
+    original_commit = module.db.session.commit
+
     def fail_commit():
         raise RuntimeError("commit failed")
 
     monkeypatch.setattr(module.db.session, "commit", fail_commit)
 
-    response = client.post(f"/duplicate-carousel/{group_id}", follow_redirects=True)
+    response = client.post(f"/duplicate-carousel/{group_id}", follow_redirects=False)
     module.db.session.rollback()
+    monkeypatch.setattr(module.db.session, "commit", original_commit)
 
-    assert response.status_code == 200
-    assert "Failed to duplicate carousel: commit failed" in response.get_data(as_text=True)
+    assert response.status_code == 302
+    assert response.location.endswith("/")
+    with client.session_transaction() as session:
+        assert (
+            "danger",
+            "Failed to duplicate carousel: commit failed",
+        ) in session.get("_flashes", [])
     assert Post.query.filter_by(group_id=group_id).count() == len(posts)
     assert Post.query.count() == len(posts)
 

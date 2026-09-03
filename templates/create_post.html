@@ -16,6 +16,7 @@
 </div>
 
 <form method="POST" enctype="multipart/form-data">
+    {% include "_csrf.html" %}
 
     <input type="hidden" name="carousel_order" id="carouselOrder">
     <input type="hidden" name="cover_index" id="coverIndex" value="0">
@@ -237,7 +238,7 @@
                         </div>
 
                         <div class="form-text">
-                            Make.com filters will decide which platform routes run.
+                            Selected connected platforms will be used when you publish.
                         </div>
                     </div>
 

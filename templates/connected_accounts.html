@@ -4,13 +4,92 @@
   <div>
     <h1 class="h3 fw-bold mb-1">Connected Accounts</h1>
     <p class="text-muted mb-0">
-      Manage platform availability and Make webhook settings.
+      Manage platform availability and publishing setup.
     </p>
   </div>
 
   <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
     Back to Dashboard
   </a>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
+      <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <h2 class="h5 fw-bold mb-0">Direct publishing</h2>
+          <span class="badge bg-info text-dark">Beta</span>
+        </div>
+        <p class="text-muted mb-3">
+          Connect Instagram or Facebook for direct single-image publishing.
+        </p>
+        <div class="border rounded-3 p-3 mb-3">
+          <div class="text-muted small">Plan account allowance</div>
+          {% if account_limit.is_admin %}
+            <div class="fw-semibold">{{ account_limit.count }} connected</div>
+            <div class="text-muted small">Admin account</div>
+          {% else %}
+            <div class="fw-semibold">
+              {{ account_limit.count }} of {{ account_limit.limit }}
+            </div>
+            <div class="text-muted small">
+              {% if account_limit.connected_platforms %}
+                Counting: {{ account_limit.connected_platforms|map('title')|join(', ') }}.
+              {% else %}
+                No publishing accounts connected yet.
+              {% endif %}
+              Instagram, Facebook and LinkedIn each use one slot when ready to publish.
+            </div>
+            {% if account_limit.can_connect %}
+              <div class="text-muted small">{{ account_limit.remaining }} slot{% if account_limit.remaining != 1 %}s{% endif %} remaining.</div>
+            {% elif not account_limit.over_limit %}
+              <div class="text-warning small">No slots remain. Reconnect an existing account or upgrade to add another.</div>
+            {% endif %}
+            {% if account_limit.over_limit %}
+              <div class="text-warning small">
+                Your {{ account_limit.plan|title }} plan includes {{ account_limit.limit }}.
+                Existing connections remain available, but disconnect accounts or upgrade before adding another.
+              </div>
+            {% endif %}
+          {% endif %}
+        </div>
+        <div class="small text-muted">
+          Publishing connection:
+          {% if accounts.zernio_profile_id %}
+            <span class="text-success fw-semibold">Ready</span>
+          {% else %}
+            <span>Not created yet</span>
+          {% endif %}
+        </div>
+        <div class="small text-muted">
+          Instagram:
+          {% if accounts.zernio_instagram_account_id %}
+            <span class="text-success fw-semibold">Connected</span>
+          {% else %}
+            <span>Not connected</span>
+          {% endif %}
+        </div>
+        <div class="small text-muted">
+          Facebook:
+          {% if accounts.zernio_facebook_account_id %}
+            <span class="text-success fw-semibold">Connected</span>
+          {% else %}
+            <span>Not connected</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="d-flex flex-column flex-sm-row flex-lg-column gap-2 align-self-lg-start">
+        <a href="{{ url_for('zernio_connect', platform='instagram') }}" class="btn btn-outline-primary">
+          Connect Instagram
+        </a>
+        <a href="{{ url_for('zernio_connect', platform='facebook') }}" class="btn btn-outline-secondary">
+          Connect Facebook Page
+        </a>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="card border-0 shadow-sm rounded-4 mb-4">
@@ -30,6 +109,7 @@
 
       {% if accounts.linkedin_connected %}
       <form method="POST" action="{{ url_for('linkedin_disconnect') }}">
+        {% include "_csrf.html" %}
         <button type="submit" class="btn btn-outline-danger">
           Disconnect
         </button>
@@ -44,6 +124,7 @@
 </div>
 
 <form method="POST">
+  {% include "_csrf.html" %}
   <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-4">
       <h2 class="h5 fw-bold mb-3">Platforms</h2>
@@ -84,10 +165,10 @@
 
   <div class="card border-0 shadow-sm rounded-4">
     <div class="card-body p-4">
-      <h2 class="h5 fw-bold mb-3">Make Webhooks</h2>
+      <h2 class="h5 fw-bold mb-3">Advanced publishing setup</h2>
 
       <div class="mb-3">
-        <label class="form-label fw-semibold"> Single Post Webhook </label>
+        <label class="form-label fw-semibold"> Single-post publishing connection </label>
 
         {% if accounts.make_webhook_single %}
         <span class="badge bg-success ms-2"> ✔ Configured </span>
@@ -104,7 +185,7 @@
       </div>
 
       <div class="mb-4">
-        <label class="form-label fw-semibold"> Carousel Webhook </label>
+        <label class="form-label fw-semibold"> Carousel publishing connection </label>
 
         {% if accounts.make_webhook_carousel %}
         <span class="badge bg-success ms-2"> ✔ Configured </span>

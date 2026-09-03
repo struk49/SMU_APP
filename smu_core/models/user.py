@@ -33,3 +33,10 @@ class User(UserMixin, db.Model):
 )
 
     posts = db.relationship("Post", backref="user", lazy=True)
+    usage = db.relationship(
+        "UserUsage",
+        backref="user",
+        uselist=False,
+        lazy=True,
+        cascade="all, delete-orphan",
+    )

@@ -42,7 +42,7 @@ def test_onboarding_progress_shows_when_incomplete(client, module):
 
     assert response.status_code == 200
     assert "Welcome checklist" in html
-    assert "Complete the basics to get started with SMU." in html
+    assert "Set up your workspace, create useful content, then schedule or send it when ready." in html
     assert "beta-ready" not in html.lower()
     assert "0%" in html
 
@@ -56,8 +56,9 @@ def test_empty_states_render_clear_calls_to_action(client, module):
     content_response = client.get("/content-pack")
     calendar_response = client.get("/calendar")
 
-    assert "No posts yet" in dashboard_response.get_data(as_text=True)
-    assert "Create Your First Post" in dashboard_response.get_data(as_text=True)
+    assert "Start with an idea" in dashboard_response.get_data(as_text=True)
+    assert "Generate Content Pack" in dashboard_response.get_data(as_text=True)
+    assert "Create Post" in dashboard_response.get_data(as_text=True)
     assert "No Brand Brief yet" in brand_response.get_data(as_text=True)
     assert "Create Brand Brief" in brand_response.get_data(as_text=True)
     assert "No Content Pack generated yet" in content_response.get_data(as_text=True)

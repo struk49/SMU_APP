@@ -34,6 +34,10 @@ def app():
         WTF_CSRF_ENABLED=False,
         SMU_ADMIN_EMAILS=set(),
         REGISTRATION_MODE="open",
+        STRIPE_PRICE_STARTER="",
+        STRIPE_PRICE_PRO="",
+        STRIPE_PRICE_BUSINESS="",
+        STRIPE_PRICE_ID="",
     )
 
     with smu_app.app.app_context():

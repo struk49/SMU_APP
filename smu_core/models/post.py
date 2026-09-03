@@ -27,6 +27,11 @@ class Post(db.Model):
     # Brand Coach
     brand_score = db.Column(db.Float, nullable=True)
     brand_feedback = db.Column(db.Text, nullable=True)
+    zernio_post_id = db.Column(db.String(255), nullable=True)
+    zernio_status = db.Column(db.String(50), nullable=True)
+    zernio_platforms = db.Column(db.String(200), nullable=True)
+    zernio_published_url = db.Column(db.String(500), nullable=True)
+    zernio_error = db.Column(db.Text, nullable=True)
 
     revisions = db.relationship(
     "PostRevision",

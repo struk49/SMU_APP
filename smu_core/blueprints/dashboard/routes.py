@@ -89,6 +89,7 @@ def index():
         connected_platforms=_dashboard_helper("build_connected_platform_cards")(
             current_user.id
         ),
+        usage_summary=_dashboard_helper("get_usage_summary")(user),
     )
 
 

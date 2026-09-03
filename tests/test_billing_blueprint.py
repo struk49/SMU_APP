@@ -193,8 +193,105 @@ def test_authenticated_checkout_redirects_to_stripe(client, app, module, monkeyp
     assert calls[0][0].id == user.id
     assert calls[0][1]["secret_key"] == "sk_test_123"
     assert calls[0][1]["price_id"] == "price_123"
+    assert calls[0][1]["plan"] == "pro"
     assert calls[0][1]["success_url"] == "http://smu.test/billing/success"
     assert calls[0][1]["cancel_url"] == "http://smu.test/billing/cancel"
+
+
+def test_checkout_resolves_selected_plan_to_server_side_price(
+    client,
+    app,
+    module,
+    monkeypatch,
+):
+    app.config.update(
+        STRIPE_SECRET_KEY="sk_test_123",
+        STRIPE_PRICE_STARTER="price_starter",
+        STRIPE_PRICE_PRO="price_pro",
+        STRIPE_PRICE_BUSINESS="price_business",
+        STRIPE_PRICE_ID="price_legacy",
+        SERVER_NAME="smu.test",
+    )
+    user = create_user(module)
+    login(client, user)
+    calls = []
+
+    def fake_create_checkout_session(user_arg, **kwargs):
+        calls.append((user_arg, kwargs))
+        return type("Session", (), {"url": "https://checkout.stripe.test/session"})()
+
+    monkeypatch.setattr(
+        billing,
+        "create_checkout_session",
+        fake_create_checkout_session,
+    )
+
+    response = client.post("/billing/checkout", data={"plan": "business"})
+
+    assert response.status_code == 302
+    assert calls[0][0].id == user.id
+    assert calls[0][1]["price_id"] == "price_business"
+    assert calls[0][1]["plan"] == "business"
+
+
+def test_checkout_rejects_unsupported_plan_without_stripe_call(
+    client,
+    app,
+    module,
+    monkeypatch,
+):
+    app.config.update(
+        STRIPE_SECRET_KEY="sk_test_123",
+        STRIPE_PRICE_PRO="price_pro",
+    )
+    user = create_user(module)
+    login(client, user)
+    calls = []
+    monkeypatch.setattr(
+        billing,
+        "create_checkout_session",
+        lambda *args, **kwargs: calls.append(kwargs),
+    )
+
+    response = client.post(
+        "/billing/checkout",
+        data={"plan": "price_business"},
+        follow_redirects=True,
+    )
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Subscription checkout is not configured yet." in html
+    assert calls == []
+
+
+def test_active_subscriber_checkout_does_not_create_second_subscription(
+    client,
+    app,
+    module,
+    monkeypatch,
+):
+    app.config.update(
+        STRIPE_SECRET_KEY="sk_test_123",
+        STRIPE_PRICE_PRO="price_pro",
+    )
+    user = create_user(module)
+    user.subscription_status = "active"
+    module.db.session.commit()
+    login(client, user)
+    calls = []
+    monkeypatch.setattr(
+        billing,
+        "create_checkout_session",
+        lambda *args, **kwargs: calls.append(kwargs),
+    )
+
+    response = client.post("/billing/checkout", follow_redirects=True)
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "You already have an active subscription." in html
+    assert calls == []
 
 
 def test_portal_requires_login(client):
@@ -349,6 +446,13 @@ def test_pricing_page_shows_billing_aware_ctas(client, app, module):
     assert "Create Account" in anonymous_html
     assert "Subscribe with Stripe" in unpaid_html
     assert 'action="/billing/checkout"' in unpaid_html
+    assert 'name="plan" value="starter"' in unpaid_html
+    assert 'name="plan" value="pro"' in unpaid_html
+    assert 'name="plan" value="business"' in unpaid_html
+    assert "Most Popular" in unpaid_html
+    assert "1 connected social account" in unpaid_html
+    assert "2 connected social accounts" in unpaid_html
+    assert "3 connected social accounts" in unpaid_html
     assert "Current Plan" in active_html
     assert "Manage Billing" in active_html
     assert "Subscribe Again" in canceled_html

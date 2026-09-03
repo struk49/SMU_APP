@@ -6,13 +6,20 @@
     <div>
         <h1 class="h2 fw-bold mb-1">Content Dashboard</h1>
         <p class="text-muted mb-0">
-            Create, manage and publish your AI or uploaded posts.
+            Start with an idea, build reusable content, then schedule or publish when ready.
         </p>
     </div>
 
-    <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
-        + Create Post
-    </a>
+    <div class="d-flex flex-column flex-sm-row gap-2">
+        <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
+            <i class="fa-solid fa-plus" aria-hidden="true"></i>
+            Create Post
+        </a>
+        <a href="{{ url_for('content_pack') }}" class="btn btn-outline-primary btn-lg">
+            <i class="fa-solid fa-layer-group" aria-hidden="true"></i>
+            Generate Content Pack
+        </a>
+    </div>
 </div>
 
 {% if onboarding and not onboarding.complete %}
@@ -22,7 +29,7 @@
             <div>
                 <h2 class="h5 fw-bold mb-1">Welcome checklist</h2>
                 <p class="text-muted mb-0">
-                    Complete the basics to get started with SMU.
+                    Set up your workspace, create useful content, then schedule or send it when ready.
                 </p>
             </div>
             <div class="text-lg-end">
@@ -43,6 +50,13 @@
                 aria-valuemax="100"
             ></div>
         </div>
+
+        {% set brand_brief_item = onboarding.get("items", []) | selectattr("url", "equalto", url_for("brand_brief")) | list | first %}
+        {% if brand_brief_item and not brand_brief_item.complete %}
+            <div class="alert alert-info mb-3">
+                Set up your Brand Brief to help SMU create content that better matches your business and audience. You can still create content without it.
+            </div>
+        {% endif %}
 
         <div class="row g-2">
             {% for item in onboarding.get("items", []) %}
@@ -70,16 +84,18 @@
 <div class="row g-4 mb-4">
 
     {% for label, value, icon, color in [
-        ('Total', stats.total, '📄', 'blue'),
-        ('Drafts', stats.drafts, '✏️', 'purple'),
-        ('Scheduled', stats.scheduled, '⏰', 'orange'),
-        ('Sent', stats.sent, '🚀', 'green'),
-        ('Carousel Items', stats.carousels, '🖼️', 'pink')
+        ('Total', stats.total, 'fa-file-lines', 'blue'),
+        ('Drafts', stats.drafts, 'fa-pen-to-square', 'purple'),
+        ('Scheduled', stats.scheduled, 'fa-calendar-days', 'orange'),
+        ('Sent', stats.sent, 'fa-circle-check', 'green'),
+        ('Carousel Items', stats.carousels, 'fa-images', 'pink')
     ] %}
 
     <div class="col-6 col-md">
         <div class="stat-card">
-            <div class="stat-icon stat-{{ color }}">{{ icon }}</div>
+            <div class="stat-icon stat-{{ color }}">
+                <i class="fa-solid {{ icon }}" aria-hidden="true"></i>
+            </div>
             <div>
                 <div class="text-muted small">{{ label }}</div>
                 <div class="stat-number">{{ value }}</div>
@@ -91,36 +107,39 @@
 
 </div>
 
+{% if usage_summary %}
 <div class="card border-0 shadow-sm rounded-4 mb-4">
     <div class="card-body p-4">
-        <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-3">
+        <div class="d-flex flex-column flex-lg-row justify-content-between gap-3">
             <div>
-                <h2 class="h5 fw-bold mb-1">Connected Platforms</h2>
+                <h2 class="h5 fw-bold mb-1">Usage this billing period</h2>
                 <p class="text-muted mb-0">
-                    Current account availability for publishing routes.
+                    Current plan: {{ usage_summary.plan|title }}.
+                    Resets {{ usage_summary.usage_period_end.strftime('%d %B %Y') }}.
                 </p>
             </div>
-            <a href="{{ url_for('connected_accounts') }}" class="btn btn-outline-primary align-self-md-start">
-                Manage Accounts
-            </a>
-        </div>
-
-        <div class="row g-3">
-            {% for platform in connected_platforms %}
-                <div class="col-6 col-lg-3">
+            <div class="row g-3 flex-grow-1">
+                <div class="col-sm-6">
                     <div class="border rounded-3 p-3 h-100">
-                        <div class="fw-semibold">{{ platform.name }}</div>
-                        {% if platform.connected %}
-                            <span class="badge bg-success mt-2">Connected</span>
-                        {% else %}
-                            <span class="badge bg-secondary mt-2">Not connected</span>
-                        {% endif %}
+                        <div class="text-muted small">AI images</div>
+                        <div class="fw-bold">
+                            {{ usage_summary.ai_images_used }} / {{ usage_summary.limits.ai_images }} used
+                        </div>
                     </div>
                 </div>
-            {% endfor %}
+                <div class="col-sm-6">
+                    <div class="border rounded-3 p-3 h-100">
+                        <div class="text-muted small">Content Packs</div>
+                        <div class="fw-bold">
+                            {{ usage_summary.content_packs_used }} / {{ usage_summary.limits.content_packs }} used
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
+{% endif %}
 
 <div class="filter-panel mb-4">
     <form method="GET" action="{{ url_for('index') }}">
@@ -143,7 +162,7 @@
                     <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
                     <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Drafts</option>
                     <option value="scheduled" {% if status_filter == 'scheduled' %}selected{% endif %}>Scheduled</option>
-                    <option value="sent_to_make" {% if status_filter == 'sent_to_make' %}selected{% endif %}>Sent</option>
+                    <option value="sent_to_make" {% if status_filter == 'sent_to_make' %}selected{% endif %}>Publishing</option>
                 </select>
             </div>
 
@@ -197,7 +216,7 @@
     {% elif status == 'scheduled' %}
         <span class="badge bg-warning text-dark">Scheduled</span>
     {% elif status == 'sent_to_make' %}
-        <span class="badge bg-success">Sent to Make</span>
+        <span class="badge bg-success">Publishing</span>
     {% elif status == 'generating' %}
         <span class="badge bg-info text-dark">Generating</span>
     {% elif status == 'generation_failed' %}
@@ -272,8 +291,9 @@
 
                                 {% if post.status != 'scheduled' %}
                                 <form method="POST" action="{{ url_for('send_carousel_to_make', group_id=post.group_id) }}">
+                                    {% include "_csrf.html" %}
                                     <button type="submit" class="btn btn-primary w-100">
-                                        Send Carousel
+                                        Publish Carousel
                                     </button>
                                 </form>
                                 {% endif %}
@@ -346,21 +366,55 @@
             </a>
         </div>
     {% else %}
-        <h2 class="h4 fw-bold mb-2">No posts yet</h2>
+        <h2 class="h4 fw-bold mb-2">Start with an idea</h2>
         <p class="text-muted mb-4">
-            Start with a draft, generate an image, or upload your first piece of media.
+            Build a Content Pack from an idea, topic, transcript or source text, create a ready-to-edit post directly, or set up your Brand Brief first for more tailored results.
         </p>
         <div class="d-flex flex-column flex-sm-row gap-2 justify-content-center">
-            <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
-                Create Your First Post
-            </a>
-            <a href="{{ url_for('content_pack') }}" class="btn btn-outline-primary btn-lg">
+            <a href="{{ url_for('content_pack') }}" class="btn btn-primary btn-lg">
                 Generate Content Pack
+            </a>
+            <a href="{{ url_for('create_post') }}" class="btn btn-primary btn-lg">
+                Create Post
+            </a>
+            <a href="{{ url_for('brand_brief') }}" class="btn btn-outline-secondary btn-lg">
+                Set Up Brand Brief
             </a>
         </div>
     {% endif %}
 </div>
 
 {% endif %}
+
+<div class="card border-0 shadow-sm rounded-4 mt-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-3">
+            <div>
+                <h2 class="h5 fw-bold mb-1">Connected Platforms</h2>
+                <p class="text-muted mb-0">
+                    Current account availability for publishing.
+                </p>
+            </div>
+            <a href="{{ url_for('connected_accounts') }}" class="btn btn-outline-primary align-self-md-start">
+                Manage Accounts
+            </a>
+        </div>
+
+        <div class="row g-3">
+            {% for platform in connected_platforms %}
+                <div class="col-6 col-lg-3">
+                    <div class="border rounded-3 p-3 h-100">
+                        <div class="fw-semibold">{{ platform.name }}</div>
+                        {% if platform.connected %}
+                            <span class="badge bg-success mt-2">Connected</span>
+                        {% else %}
+                            <span class="badge bg-secondary mt-2">Not connected</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
 
 {% endblock %}

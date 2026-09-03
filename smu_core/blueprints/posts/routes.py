@@ -7,6 +7,8 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import BrandBrief, Post, PostRevision
+from smu_core.services import publishing
+from smu_core.services import zernio
 from smu_core.services.access import subscription_required
 from smu_core.services.time_utils import utc_now
 
@@ -72,6 +74,20 @@ def _manual_publish_helper(name):
         raise RuntimeError(f"Manual publish helper is not available: {name}")
 
     return helper
+
+
+def _supports_direct_single_image_publish(post):
+    selected_platforms = [
+        platform.strip().lower()
+        for platform in (post.platforms or "").split(",")
+        if platform.strip()
+    ]
+    return (
+        post.file_type == "image"
+        and not post.group_id
+        and bool(selected_platforms)
+        and all(platform in {"instagram", "facebook"} for platform in selected_platforms)
+    )
 
 
 def _caption_helper(name):
@@ -199,6 +215,8 @@ def create_post():
             flash("Upload a file or enter a prompt.", "danger")
             return redirect(url_for("create_post"))
 
+        reserved_image_credits = 0
+
         try:
             if linkedin_text_only:
                 if not caption.strip():
@@ -224,6 +242,24 @@ def create_post():
 
             if prompt and not has_files:
                 image_count = 3 if make_carousel else 1
+
+                if not _post_create_helper("reserve_ai_image_credits")(
+                    current_user._get_current_object(),
+                    image_count,
+                ):
+                    summary = _post_create_helper("get_usage_summary")(
+                        current_user._get_current_object()
+                    )
+                    flash(
+                        _post_create_helper("usage_limit_message")(
+                            summary,
+                            "ai_images",
+                        ),
+                        "warning",
+                    )
+                    return redirect(url_for("create_post"))
+
+                reserved_image_credits = image_count
 
                 brand_context = _post_create_helper("build_brand_context")(
                     current_user.id
@@ -333,6 +369,12 @@ User Request:
                 return redirect(url_for("view_post", post_id=created_posts[0].id))
 
         except Exception as e:
+            db.session.rollback()
+            if reserved_image_credits:
+                _post_create_helper("release_ai_image_credits")(
+                    current_user._get_current_object(),
+                    reserved_image_credits,
+                )
             print("Create post error:", e)
             flash(f"Failed: {e}", "danger")
             return redirect(url_for("create_post"))
@@ -440,7 +482,7 @@ def send_to_make(post_id):
     ).first_or_404()
 
     if post.status in {"publishing", "sent_to_make"}:
-        flash("This post has already been sent to Make.")
+        flash("This post has already been sent for publishing.")
         return redirect(
             url_for("view_post", post_id=post.id)
         )
@@ -469,7 +511,7 @@ def send_to_make(post_id):
             )
         else:
             flash(
-                "Post sent to Make.com successfully.",
+                "Post sent for publishing successfully.",
                 "success",
             )
 
@@ -483,8 +525,8 @@ def send_to_make(post_id):
             source="manual",
             error_type=type(e).__name__,
         )
-        print("Send to Make error:", e)
-        flash(f"Failed to send post: {e}", "danger")
+        print("Publishing error:", type(e).__name__)
+        flash("We couldn't publish this post. Please try again.", "danger")
 
     return redirect(
         url_for("view_post", post_id=post.id)
@@ -503,7 +545,7 @@ def send_carousel_to_make(group_id):
         return redirect(url_for("index"))
 
     if all(post.status == "sent_to_make" for post in posts):
-        flash("This post has already been sent to Make.")
+        flash("This post has already been sent for publishing.")
         return redirect(url_for("view_post", post_id=posts[0].id))
 
     try:
@@ -518,7 +560,7 @@ def send_carousel_to_make(group_id):
             source="manual",
         )
 
-        flash("Carousel sent to Make.com successfully.", "success")
+        flash("Carousel sent for publishing successfully.", "success")
         return redirect(url_for("index"))
 
     except Exception as e:
@@ -531,8 +573,8 @@ def send_carousel_to_make(group_id):
             source="manual",
             error_type=type(e).__name__,
         )
-        print("Send carousel error:", e)
-        flash(f"Failed: {e}", "danger")
+        print("Carousel publishing error:", type(e).__name__)
+        flash("We couldn't publish this carousel. Please try again.", "danger")
         return redirect(url_for("view_post", post_id=posts[0].id))
 
 
@@ -928,7 +970,108 @@ def view_post(post_id):
             user_id=current_user.id,
         )
 
-    return render_template("view_post.html", post=post, carousel_posts=carousel_posts)
+    return render_template(
+        "view_post.html",
+        post=post,
+        carousel_posts=carousel_posts,
+        direct_publish_available=_supports_direct_single_image_publish(post),
+    )
+
+
+def _zernio_config():
+    return {
+        "api_key": current_app.config.get("ZERNIO_API_KEY", ""),
+        "base_url": current_app.config.get("ZERNIO_BASE_URL", zernio.DEFAULT_BASE_URL),
+    }
+
+
+def _store_zernio_result(post, result):
+    publishing.store_zernio_result(post, result)
+
+
+def _customer_publishing_error_message(error):
+    message = str(error).lower()
+    if "not configured" in message:
+        return "Publishing is not fully set up yet. Check Connected Accounts."
+    if "not connected" in message or "connect " in message:
+        return "Your social account needs to be connected before publishing."
+    if "public https image url" in message:
+        return "Publishing requires a public image URL."
+    if "single-image posts only" in message:
+        return "Direct publishing currently supports single-image posts only."
+    if "image posts only" in message:
+        return "Direct publishing currently supports image posts only."
+    return "We couldn't publish this post. Please try again."
+
+
+@login_required
+@subscription_required
+def publish_with_zernio(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id,
+    ).first_or_404()
+    accounts = current_user.connected_account
+
+    try:
+        publishing.publish_post_direct(
+            post,
+            accounts,
+            **_zernio_config(),
+        )
+        db.session.commit()
+    except zernio.ZernioError as exc:
+        db.session.rollback()
+        post.zernio_status = "failed"
+        post.zernio_error = str(exc)
+        db.session.commit()
+        current_app.logger.warning(
+            "Zernio publish failed: post_id=%s stage=%s status=%s type=%s",
+            post.id,
+            exc.stage,
+            exc.status_code,
+            exc.__class__.__name__,
+        )
+        flash(_customer_publishing_error_message(exc), "warning")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    flash("Post sent for publishing successfully.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
+
+
+@login_required
+@subscription_required
+def refresh_zernio_status(post_id):
+    post = Post.query.filter_by(
+        id=post_id,
+        user_id=current_user.id,
+    ).first_or_404()
+
+    if not post.zernio_post_id:
+        flash("This post has not been sent for publishing yet.", "warning")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    try:
+        result = zernio.get_post_status(
+            post.zernio_post_id,
+            **_zernio_config(),
+        )
+        _store_zernio_result(post, result)
+        db.session.commit()
+    except zernio.ZernioError as exc:
+        db.session.rollback()
+        current_app.logger.warning(
+            "Zernio status lookup failed: post_id=%s stage=%s status=%s type=%s",
+            post.id,
+            exc.stage,
+            exc.status_code,
+            exc.__class__.__name__,
+        )
+        flash("Publishing status could not be refreshed right now.", "warning")
+        return redirect(url_for("view_post", post_id=post.id))
+
+    flash("Publishing status refreshed.", "success")
+    return redirect(url_for("view_post", post_id=post.id))
 
 
 @login_required
@@ -957,12 +1100,31 @@ def edit_post(post_id):
         post.prompt = prompt
         post.platforms = ",".join(platforms)
 
+        reserved_image_credits = 0
+
         try:
             if regenerate_image:
                 if not prompt:
                     flash("Add a prompt before regenerating the image.", "danger")
                     return redirect(url_for("edit_post", post_id=post.id))
 
+                if not _post_edit_helper("reserve_ai_image_credits")(
+                    current_user._get_current_object(),
+                    1,
+                ):
+                    summary = _post_edit_helper("get_usage_summary")(
+                        current_user._get_current_object()
+                    )
+                    flash(
+                        _post_edit_helper("usage_limit_message")(
+                            summary,
+                            "ai_images",
+                        ),
+                        "warning",
+                    )
+                    return redirect(url_for("edit_post", post_id=post.id))
+
+                reserved_image_credits = 1
                 image_url = _post_edit_helper("generate_openai_image")(prompt)
                 post.file_url = image_url
                 post.file_type = "image"
@@ -973,6 +1135,12 @@ def edit_post(post_id):
             return redirect(url_for("view_post", post_id=post.id))
 
         except Exception as e:
+            db.session.rollback()
+            if reserved_image_credits:
+                _post_edit_helper("release_ai_image_credits")(
+                    current_user._get_current_object(),
+                    reserved_image_credits,
+                )
             print("Edit post error:", e)
             flash(f"Failed to update post: {e}", "danger")
             return redirect(url_for("edit_post", post_id=post.id))
@@ -1118,6 +1286,7 @@ def duplicate_carousel(group_id):
         return redirect(url_for("view_post", post_id=first_new_post.id))
 
     except Exception as e:
+        db.session.rollback()
         print("Duplicate carousel error:", e)
         flash(f"Failed to duplicate carousel: {e}", "danger")
         return redirect(url_for("index"))
@@ -1198,6 +1367,18 @@ def register_routes(state):
         "/send-carousel/<group_id>",
         "send_carousel_to_make",
         send_carousel_to_make,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/zernio-publish",
+        "publish_with_zernio",
+        publish_with_zernio,
+        methods=["POST"],
+    )
+    state.app.add_url_rule(
+        "/post/<int:post_id>/zernio-status",
+        "refresh_zernio_status",
+        refresh_zernio_status,
         methods=["POST"],
     )
     state.app.add_url_rule(

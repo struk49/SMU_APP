@@ -1,4 +1,5 @@
 from datetime import datetime
+from html import unescape
 
 import app as smu_app
 from conftest import create_carousel, create_post, create_user, login
@@ -86,7 +87,7 @@ def test_owner_can_publish_single_with_post_instance_and_user_id(
     updated = module.db.session.get(Post, post.id)
 
     assert response.status_code == 200
-    assert "Post sent to Make.com successfully." in response.get_data(as_text=True)
+    assert "Post sent for publishing successfully." in response.get_data(as_text=True)
     assert calls == [(updated, user.id)]
     assert updated.status == "sent_to_make"
     assert updated.sent_at == datetime(2026, 7, 10, 8, 0)
@@ -130,7 +131,7 @@ def test_single_duplicate_send_is_blocked_before_helper_call(client, app, module
     response = client.post(f"/send/{post.id}", follow_redirects=True)
 
     assert response.status_code == 200
-    assert "This post has already been sent to Make." in response.get_data(as_text=True)
+    assert "This post has already been sent for publishing." in response.get_data(as_text=True)
     assert calls == []
 
 
@@ -144,7 +145,7 @@ def test_single_publishing_status_is_blocked_before_helper_call(client, app, mod
     response = client.post(f"/send/{post.id}", follow_redirects=True)
 
     assert response.status_code == 200
-    assert "This post has already been sent to Make." in response.get_data(as_text=True)
+    assert "This post has already been sent for publishing." in response.get_data(as_text=True)
     assert calls == []
 
 
@@ -165,7 +166,9 @@ def test_single_helper_exception_rolls_back_and_reports_error(client, app, modul
     updated = module.db.session.get(Post, post.id)
 
     assert response.status_code == 200
-    assert "Failed to send post: No single-post webhook is configured." in response.get_data(as_text=True)
+    html = unescape(response.get_data(as_text=True))
+    assert "We couldn't publish this post. Please try again." in html
+    assert "No single-post webhook is configured" not in html
     assert updated.status == "draft"
     assert updated.sent_at is None
     assert events[0][0] == ("publishing_failure",)
@@ -200,7 +203,7 @@ def test_owner_can_publish_carousel_with_representative_post(
     updated_posts = Post.query.filter_by(group_id=group_id).order_by(Post.sort_order).all()
 
     assert response.status_code == 200
-    assert "Carousel sent to Make.com successfully." in response.get_data(as_text=True)
+    assert "Carousel sent for publishing successfully." in response.get_data(as_text=True)
     assert calls == [(representative_id, user.id)]
     assert {post.status for post in updated_posts} == {"sent_to_make"}
     assert {post.sent_at for post in updated_posts} == {datetime(2026, 7, 10, 8, 0)}
@@ -255,7 +258,7 @@ def test_carousel_duplicate_send_is_blocked_when_all_sent(client, app, module, m
     response = client.post(f"/send-carousel/{group_id}", follow_redirects=True)
 
     assert response.status_code == 200
-    assert "This post has already been sent to Make." in response.get_data(as_text=True)
+    assert "This post has already been sent for publishing." in response.get_data(as_text=True)
     assert calls == []
     assert Post.query.filter_by(group_id=group_id).count() == len(posts)
 
@@ -278,7 +281,9 @@ def test_carousel_helper_exception_rolls_back_all_group_items(client, app, modul
     updated_posts = Post.query.filter_by(group_id=group_id).all()
 
     assert response.status_code == 200
-    assert "Failed: Make returned 500" in response.get_data(as_text=True)
+    html = unescape(response.get_data(as_text=True))
+    assert "We couldn't publish this carousel. Please try again." in html
+    assert "Make returned 500" not in html
     assert {post.status for post in updated_posts} == {"draft"}
     assert {post.sent_at for post in updated_posts} == {None}
     assert Post.query.filter_by(group_id=group_id).count() == len(posts)

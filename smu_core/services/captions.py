@@ -115,6 +115,8 @@ def rewrite_caption_with_action(
     prompt = f"""
 You are an expert social media copywriter.
 
+/human
+
 Brand Brief:
 {brand_context}
 

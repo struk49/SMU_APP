@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+import re
 
 from flask import template_rendered, url_for
 
@@ -77,6 +78,11 @@ def test_accounts_get_creates_current_user_row_and_renders_template(client, app,
     assert account is not None
     assert account.created_at is not None
     assert account.updated_at is not None
+    visible_text = re.sub(r"<[^>]+>", " ", response.get_data(as_text=True))
+    assert "Direct publishing" in visible_text
+    assert "Advanced publishing setup" in visible_text
+    assert "Zernio" not in visible_text
+    assert "Make" not in visible_text
 
 
 def test_accounts_post_creates_row_stores_toggles_and_webhooks(client, module):

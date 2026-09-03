@@ -19,6 +19,7 @@
                 <form method="POST"
                       action="{{ url_for('studio_action', post_id=post.id, action=action) }}"
                       class="studio-action-form">
+                    {% include "_csrf.html" %}
                     <input type="hidden" name="final_caption">
 
                     <button type="submit" class="btn {{ style }} w-100 studio-action-button">

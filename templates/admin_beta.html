@@ -45,6 +45,7 @@
                                         action="{{ url_for('update_beta_application_status', application_id=application.id) }}"
                                         class="d-flex flex-wrap gap-2"
                                     >
+                                        {% include "_csrf.html" %}
                                         <button
                                             class="btn btn-sm btn-outline-success"
                                             name="status"

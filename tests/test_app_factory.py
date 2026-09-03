@@ -69,6 +69,7 @@ def test_model_metadata_available_after_compatibility_startup(module):
     assert "user" in module.db.metadata.tables
     assert "post" in module.db.metadata.tables
     assert "post_revision" in module.db.metadata.tables
+    assert "scheduler_lease" in module.db.metadata.tables
 
 
 def test_create_app_does_not_change_scheduler_jobs(module):

@@ -9,7 +9,7 @@
             <div>
                 <h3 class="h5 fw-bold mb-1">Publishing</h3>
                 <p class="text-muted small mb-0">
-                    Review, edit or send this post.
+                    Review, edit or publish this post.
                 </p>
             </div>
 
@@ -31,11 +31,12 @@
             {% if post.status != 'scheduled' %}
                 <form method="POST"
                       action="{{ url_for('send_to_make', post_id=post.id) }}">
+                    {% include "_csrf.html" %}
 
                     <button type="submit"
                             class="btn btn-success w-100">
 
-                        Send to Make
+                        Publish Post
 
                     </button>
 

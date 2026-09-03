@@ -32,6 +32,12 @@ LINKEDIN_OAUTH_COLUMNS = {
     "linkedin_refresh_token_expires_at",
 }
 
+ZERNIO_POC_COLUMNS = {
+    "zernio_profile_id",
+    "zernio_instagram_account_id",
+    "zernio_facebook_account_id",
+}
+
 EXPECTED_LEGACY_ORDER = [
     "id",
     "user_id",
@@ -57,6 +63,7 @@ def test_connected_account_model_remains_compatible(module):
 
     assert LEGACY_COLUMNS.issubset(column_names)
     assert LINKEDIN_OAUTH_COLUMNS.issubset(column_names)
+    assert ZERNIO_POC_COLUMNS.issubset(column_names)
     assert [
         column for column in column_names if column in LEGACY_COLUMNS
     ] == EXPECTED_LEGACY_ORDER
@@ -73,6 +80,8 @@ def test_connected_account_model_remains_compatible(module):
     assert columns.make_webhook_single.nullable is True
     assert columns.make_webhook_carousel.nullable is True
     for column_name in LINKEDIN_OAUTH_COLUMNS:
+        assert columns[column_name].nullable is True
+    for column_name in ZERNIO_POC_COLUMNS:
         assert columns[column_name].nullable is True
 
 

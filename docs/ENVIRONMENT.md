@@ -278,22 +278,30 @@ setting.
 
 ## Scheduler Runtime
 
-APScheduler is created and started in `app.py`, not in `create_app()`.
+APScheduler is created in `app.py`, but importing `app.py` does not start it.
 
 Current job IDs:
 
 - `generate_pending_images`
 - `check_scheduled_posts`
 
-Current scheduler behavior:
+Scheduler ownership behavior:
 
 - runs with timezone `UTC`
 - generates pending carousel images on an interval
 - checks scheduled posts on an interval
 - delegates scheduled-post processing to `smu_core.services.scheduler`
+- `python app.py` explicitly starts the scheduler for local development
+- production web requests use `gunicorn --config gunicorn.conf.py app:app`
+- production background jobs use `python scheduler_worker.py` in one Render Background Worker
+- the Gunicorn master and request workers never start APScheduler
+- every background job confirms a shared database lease before it executes
+- competing scheduler processes remain in standby until the lease expires
+- `SMU_SCHEDULER_ENABLED=false` disables scheduler startup for a process entirely
 
 `create_app()` does not start the scheduler. This avoids starting long-running
-background jobs in factory-only tests.
+background jobs in factory-only tests. Calling scheduler startup more than once
+in the owning process is also guarded by the scheduler's running state.
 
 Local debug uses `use_reloader=False` to avoid duplicate scheduler startup from
 the Flask reloader.
@@ -340,8 +348,15 @@ Known production/runtime considerations:
 - set environment variables in the hosting provider, not in committed files
 - ensure the database uses persistent storage
 - confirm whether local SQLite is appropriate before beta or production use
-- APScheduler runs inside the web process today, so multi-worker deployments can
-  start duplicate schedulers unless deployment is constrained carefully
+- configure the Render Web Service with `gunicorn --config gunicorn.conf.py app:app`
+  and `SMU_SCHEDULER_ENABLED=false`
+- configure one Render Background Worker with `python scheduler_worker.py` and
+  `SMU_SCHEDULER_ENABLED=true`
+- both services must use the same shared PostgreSQL `DATABASE_URL`; a local or
+  per-instance SQLite file cannot coordinate scheduler ownership across deploys
+- the default 90-second lease is renewed every 15 seconds; database failures and
+  live leases owned by another process cause customer jobs to be skipped
+- a Render Background Worker may add infrastructure cost
 - Make, Cloudinary and OpenAI credentials should be scoped and rotated as needed
 
 The requirements include `gunicorn` and `psycopg2-binary`, which support hosted

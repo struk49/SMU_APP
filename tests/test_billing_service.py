@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
 from conftest import create_user
 from smu_core.services import billing
+from smu_core.services.time_utils import utc_now
 
 
 class FakeCheckoutSession:
@@ -103,8 +104,8 @@ def test_checkout_session_call_shape_for_new_customer(module):
             "success_url": "https://smu.test/billing/success",
             "cancel_url": "https://smu.test/billing/cancel",
             "client_reference_id": "42",
-            "metadata": {"smu_user_id": "42"},
-            "subscription_data": {"metadata": {"smu_user_id": "42"}},
+            "metadata": {"smu_user_id": "42", "smu_plan": "pro"},
+            "subscription_data": {"metadata": {"smu_user_id": "42", "smu_plan": "pro"}},
             "customer_email": "owner@example.com",
         }
     ]
@@ -132,6 +133,30 @@ def test_checkout_session_reuses_existing_customer():
     assert "customer_email" not in call
 
 
+def test_checkout_session_includes_requested_internal_plan_metadata():
+    reset_fake_stripe()
+    user = type("User", (), {
+        "id": 7,
+        "email": "owner@example.com",
+        "stripe_customer_id": None,
+    })()
+
+    billing.create_checkout_session(
+        user,
+        secret_key="sk_test_123",
+        price_id="price_starter",
+        plan="starter",
+        success_url="https://smu.test/success",
+        cancel_url="https://smu.test/cancel",
+        stripe_module=FakeStripe,
+    )
+
+    call = FakeCheckoutSession.calls[0]
+    assert call["line_items"] == [{"price": "price_starter", "quantity": 1}]
+    assert call["metadata"]["smu_plan"] == "starter"
+    assert call["subscription_data"]["metadata"]["smu_plan"] == "starter"
+
+
 def test_checkout_session_requires_configured_keys():
     user = type("User", (), {"id": 1, "email": "owner@example.com"})()
 
@@ -154,6 +179,38 @@ def test_checkout_session_requires_configured_keys():
             cancel_url="https://smu.test/cancel",
             stripe_module=FakeStripe,
         )
+
+
+def test_plan_price_mapping_prefers_explicit_prices_and_preserves_legacy_pro():
+    config = {
+        "STRIPE_PRICE_STARTER": "price_starter",
+        "STRIPE_PRICE_PRO": "price_pro",
+        "STRIPE_PRICE_BUSINESS": "price_business",
+        "STRIPE_PRICE_ID": "price_legacy",
+    }
+
+    assert billing.price_id_for_plan("starter", config) == "price_starter"
+    assert billing.price_id_for_plan("pro", config) == "price_pro"
+    assert billing.price_id_for_plan("business", config) == "price_business"
+    assert billing.plan_for_price_id("price_starter", config) == "starter"
+    assert billing.plan_for_price_id("price_pro", config) == "pro"
+    assert billing.plan_for_price_id("price_business", config) == "business"
+    assert billing.plan_for_price_id("price_legacy", config) == "pro"
+
+
+def test_legacy_stripe_price_id_remains_pro_checkout_fallback():
+    config = {
+        "STRIPE_PRICE_STARTER": "",
+        "STRIPE_PRICE_PRO": "",
+        "STRIPE_PRICE_BUSINESS": "",
+        "STRIPE_PRICE_ID": "price_legacy",
+    }
+
+    assert billing.price_id_for_plan("pro", config) == "price_legacy"
+    with pytest.raises(billing.BillingConfigurationError):
+        billing.price_id_for_plan("starter", config)
+    with pytest.raises(billing.BillingConfigurationError):
+        billing.price_id_for_plan("unknown", config)
 
 
 def test_customer_portal_session_call_shape():
@@ -523,6 +580,102 @@ def test_subscription_updated_sets_status_and_period(app, module):
     assert updated.stripe_subscription_id == "sub_123"
     assert updated.subscription_status == "trialing"
     assert updated.subscription_current_period_end.tzinfo is None
+
+
+def test_subscription_updated_syncs_usage_plan_from_price_without_resetting_counters(
+    app,
+    module,
+):
+    now = utc_now()
+    usage_period_start = now - timedelta(days=1)
+    usage_period_end = now + timedelta(days=1)
+    user = create_user(module)
+    user.stripe_customer_id = "cus_123"
+    usage = module.UserUsage(
+        user_id=user.id,
+        plan="starter",
+        ai_images_used=12,
+        content_packs_used=4,
+        usage_period_start=usage_period_start,
+        usage_period_end=usage_period_end,
+    )
+    module.db.session.add(usage)
+    module.db.session.commit()
+    config = {
+        "STRIPE_PRICE_STARTER": "price_starter",
+        "STRIPE_PRICE_PRO": "price_pro",
+        "STRIPE_PRICE_BUSINESS": "price_business",
+        "STRIPE_PRICE_ID": "",
+    }
+
+    updated = billing.process_subscription_updated(
+        {
+            "id": "sub_123",
+            "customer": "cus_123",
+            "status": "active",
+            "current_period_end": 1893456000,
+            "items": {
+                "data": [
+                    {"price": {"id": "price_business"}},
+                ],
+            },
+        },
+        user_model=module.User,
+        db_session=module.db.session,
+        usage_model=module.UserUsage,
+        config=config,
+    )
+
+    assert updated.subscription_status == "active"
+    assert usage.plan == "business"
+    assert usage.ai_images_used == 12
+    assert usage.content_packs_used == 4
+    assert usage.usage_period_start == usage_period_start
+    assert usage.usage_period_end == usage_period_end
+
+
+def test_subscription_updated_ignores_unknown_price_without_changing_usage_plan(
+    app,
+    module,
+):
+    user = create_user(module)
+    user.stripe_customer_id = "cus_123"
+    usage = module.UserUsage(
+        user_id=user.id,
+        plan="pro",
+        ai_images_used=8,
+        content_packs_used=2,
+        usage_period_start=datetime(2026, 8, 1),
+        usage_period_end=datetime(2026, 9, 1),
+    )
+    module.db.session.add(usage)
+    module.db.session.commit()
+
+    billing.process_subscription_updated(
+        {
+            "id": "sub_123",
+            "customer": "cus_123",
+            "status": "active",
+            "items": {
+                "data": [
+                    {"price": {"id": "price_unknown"}},
+                ],
+            },
+        },
+        user_model=module.User,
+        db_session=module.db.session,
+        usage_model=module.UserUsage,
+        config={
+            "STRIPE_PRICE_STARTER": "price_starter",
+            "STRIPE_PRICE_PRO": "price_pro",
+            "STRIPE_PRICE_BUSINESS": "price_business",
+            "STRIPE_PRICE_ID": "",
+        },
+    )
+
+    assert usage.plan == "pro"
+    assert usage.ai_images_used == 8
+    assert usage.content_packs_used == 2
 
 
 def test_subscription_updated_persists_scheduled_cancellation(app, module):

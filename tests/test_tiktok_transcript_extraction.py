@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -20,10 +21,14 @@ class FakeYoutubeDL:
 
 
 class FakeResponse:
-    def __init__(self, text):
+    def __init__(self, text, url=None):
         self.text = text
+        self.url = url
 
     def raise_for_status(self):
+        return None
+
+    def close(self):
         return None
 
 
@@ -45,6 +50,78 @@ def block_real_caption_fetch(module, monkeypatch):
 
 def extract(module):
     return module.extract_tiktok_transcript("https://www.tiktok.com/@user/video/123")
+
+
+class FakeTranscriptionResponse:
+    text = "Transcribed TikTok audio"
+
+
+class FakeOpenAIClient:
+    def __init__(self, response=None, error=None):
+        self.audio = self
+        self.transcriptions = self
+        self.calls = []
+        self.response = response or FakeTranscriptionResponse()
+        self.error = error
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+
+        if self.error:
+            raise self.error
+
+        return self.response
+
+
+class DownloadingYoutubeDL:
+    calls = []
+    downloaded_path = None
+
+    def __init__(self, options):
+        self.options = options
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_info(self, url, download=False):
+        self.__class__.calls.append(
+            {"url": url, "download": download, "options": self.options}
+        )
+
+        if not download:
+            return {"title": "", "description": ""}
+
+        output_template = self.options["outtmpl"]
+        file_path = Path(
+            output_template.replace("%(id)s", "123").replace("%(ext)s", "mp4")
+        )
+        file_path.write_bytes(b"fake tiktok media")
+        self.__class__.downloaded_path = file_path
+        return {"id": "123", "ext": "mp4"}
+
+
+class MetadataOnlyYoutubeDL:
+    calls = []
+
+    def __init__(self, options):
+        self.options = options
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_info(self, url, download=False):
+        self.__class__.calls.append({"url": url, "download": download})
+
+        if download:
+            raise AssertionError("fallback download should not occur")
+
+        return {"title": "", "description": "Metadata transcript"}
 
 
 def test_requested_subtitles_are_preferred(module, monkeypatch):
@@ -430,3 +507,104 @@ def test_fallback_still_works_if_all_caption_candidates_fail(module, monkeypatch
     monkeypatch.setattr(module.requests, "get", fail_get)
 
     assert extract(module) == "Description fallback"
+
+
+def test_short_tiktok_url_is_resolved_before_metadata_extraction(module):
+    MetadataOnlyYoutubeDL.calls = []
+    response = FakeResponse("", url="https://www.tiktok.com/@user/video/123")
+    calls = {}
+
+    def fake_get(url, timeout=10, allow_redirects=False):
+        calls["url"] = url
+        calls["timeout"] = timeout
+        calls["allow_redirects"] = allow_redirects
+        return response
+
+    transcript = module.content_service.extract_tiktok_transcript(
+        "https://vm.tiktok.com/ZMtest/",
+        youtube_dl_cls=MetadataOnlyYoutubeDL,
+        requests_get=fake_get,
+    )
+
+    assert transcript == "Metadata transcript"
+    assert calls == {
+        "url": "https://vm.tiktok.com/ZMtest/",
+        "timeout": 10,
+        "allow_redirects": True,
+    }
+    assert MetadataOnlyYoutubeDL.calls[0]["url"] == "https://www.tiktok.com/@user/video/123"
+    assert MetadataOnlyYoutubeDL.calls[0]["download"] is False
+
+
+def test_metadata_empty_triggers_transcription_fallback(module):
+    DownloadingYoutubeDL.calls = []
+    DownloadingYoutubeDL.downloaded_path = None
+    client = FakeOpenAIClient()
+
+    transcript = module.content_service.extract_tiktok_transcript(
+        "https://www.tiktok.com/@user/video/123",
+        youtube_dl_cls=DownloadingYoutubeDL,
+        requests_get=lambda url, timeout=10: FakeResponse(""),
+        openai_api_key="test-key",
+        openai_client=client,
+    )
+
+    assert transcript == "Transcribed TikTok audio"
+    assert [call["download"] for call in DownloadingYoutubeDL.calls] == [False, True]
+    assert client.calls[0]["model"] == module.content_service.TIKTOK_TRANSCRIPTION_MODEL
+
+
+def test_transcription_fallback_cleans_up_temp_files(module):
+    DownloadingYoutubeDL.calls = []
+    DownloadingYoutubeDL.downloaded_path = None
+
+    assert module.content_service.extract_tiktok_transcript(
+        "https://www.tiktok.com/@user/video/123",
+        youtube_dl_cls=DownloadingYoutubeDL,
+        requests_get=lambda url, timeout=10: FakeResponse(""),
+        openai_api_key="test-key",
+        openai_client=FakeOpenAIClient(),
+    ) == "Transcribed TikTok audio"
+
+    assert DownloadingYoutubeDL.downloaded_path is not None
+    assert not DownloadingYoutubeDL.downloaded_path.exists()
+
+
+def test_transcription_fallback_failure_preserves_existing_exception(module):
+    with pytest.raises(Exception, match="No transcript or usable text found for this TikTok."):
+        module.content_service.extract_tiktok_transcript(
+            "https://www.tiktok.com/@user/video/123",
+            youtube_dl_cls=DownloadingYoutubeDL,
+            requests_get=lambda url, timeout=10: FakeResponse(""),
+            openai_api_key="test-key",
+            openai_client=FakeOpenAIClient(error=RuntimeError("transcription failed")),
+        )
+
+
+def test_missing_openai_key_does_not_download_media(module):
+    MetadataOnlyYoutubeDL.calls = []
+
+    transcript = module.content_service.extract_tiktok_transcript(
+        "https://www.tiktok.com/@user/video/123",
+        youtube_dl_cls=MetadataOnlyYoutubeDL,
+        requests_get=lambda url, timeout=10: FakeResponse(""),
+        openai_api_key="",
+        openai_client=FakeOpenAIClient(),
+    )
+
+    assert transcript == "Metadata transcript"
+    assert [call["download"] for call in MetadataOnlyYoutubeDL.calls] == [False]
+
+
+def test_no_fallback_download_when_metadata_succeeds(module):
+    MetadataOnlyYoutubeDL.calls = []
+
+    assert module.content_service.extract_tiktok_transcript(
+        "https://www.tiktok.com/@user/video/123",
+        youtube_dl_cls=MetadataOnlyYoutubeDL,
+        requests_get=lambda url, timeout=10: FakeResponse(""),
+        openai_api_key="test-key",
+        openai_client=FakeOpenAIClient(),
+    ) == "Metadata transcript"
+
+    assert [call["download"] for call in MetadataOnlyYoutubeDL.calls] == [False]
