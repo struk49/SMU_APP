@@ -5,6 +5,7 @@ from flask import template_rendered, url_for
 import app as smu_app
 from conftest import create_user, login
 from smu_core.models import BrandBrief, Post
+from smu_core.services import carousel_generation
 
 
 CONTENT_PACK_RESULT = """INSTAGRAM_CAPTION:
@@ -248,8 +249,77 @@ def test_create_content_pack_carousel_creates_grouped_posts(client, app, module,
     assert {post.platforms for post in posts} == {"instagram"}
     assert {post.file_url for post in posts} == {"https://cdn.test/placeholder.jpg"}
     assert posts[0].caption == "Instagram caption\n\n#one #two"
-    assert "First slide" in posts[0].prompt
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+    assert [payload["overlay"]["title"] for payload in payloads] == [
+        "First slide",
+        "Second slide",
+        "Third slide",
+    ]
+    assert all(post.prompt.startswith("SMU_OVERLAY_V1:") for post in posts)
+    for title, payload in zip(
+        ["First slide", "Second slide", "Third slide"], payloads
+    ):
+        assert title not in payload["background_prompt"]
+    assert all("no readable text" in payload["background_prompt"] for payload in payloads)
+    assert all(payload["overlay"]["body"] is None for payload in payloads)
     assert response.location.endswith(f"/post/{posts[0].id}")
+
+
+def test_content_pack_carousel_preserves_exact_polish_slide_copy(
+    client, app, module, monkeypatch
+):
+    user = create_user(module)
+    login(client, user)
+    polish_slides = [
+        "Miłego dnia!",
+        "Szczęśliwej podróży!",
+        "Często tu przychodzisz?",
+        "Zażółć gęślą jaźń",
+    ]
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "\n".join(
+            f"Slide {index}: {text}"
+            for index, text in enumerate(polish_slides, start=1)
+        ),
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url", lambda: "https://cdn.test/placeholder.jpg"
+    )
+    set_content_pack_helper(app, monkeypatch, "apply_image_style", lambda prompt, style: prompt)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result, "image_style": "minimal"},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+
+    assert response.status_code == 302
+    assert [payload["overlay"]["title"] for payload in payloads] == polish_slides
+    for text, payload in zip(polish_slides, payloads):
+        assert text not in payload["background_prompt"]
+
+
+def test_content_pack_carousel_rejects_oversized_slide_without_rows(
+    client, module
+):
+    user = create_user(module)
+    login(client, user)
+    oversized = "x" * (carousel_generation.MAX_OVERLAY_TITLE_LENGTH + 1)
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        f"Slide 1: {oversized}\nSlide 2: Valid slide",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result},
+    )
+
+    assert response.status_code == 302
+    assert response.location.endswith("/content-pack")
+    assert module.Post.query.count() == 0
 
 
 def test_create_content_pack_carousel_validation_creates_no_rows(client, module):

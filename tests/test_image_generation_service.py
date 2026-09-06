@@ -1,9 +1,11 @@
 import base64
+from io import BytesIO
 
 import pytest
+from PIL import Image
 
 import app as smu_app
-from smu_core.services import images
+from smu_core.services import images, media
 
 
 class FakeImageData:
@@ -82,6 +84,23 @@ def test_app_wrapper_delegates_to_images_service(monkeypatch):
     assert calls["multiple"]["generate_openai_image_func"] is smu_app.generate_openai_image
 
 
+def test_app_wrapper_passes_overlay_only_when_supplied(monkeypatch):
+    calls = []
+
+    def fake_generate(prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return "https://cdn.test/generated.jpg"
+
+    monkeypatch.setattr(smu_app.images_service, "generate_openai_image", fake_generate)
+    overlay = {"title": "Exact title", "body": None, "cta": None, "brand": None}
+
+    smu_app.generate_openai_image("Legacy prompt")
+    smu_app.generate_openai_image("Background prompt", overlay=overlay)
+
+    assert "overlay" not in calls[0][1]
+    assert calls[1][1]["overlay"] == overlay
+
+
 def test_helper_bridges_still_expose_image_generation_helpers(app):
     assert callable(app.extensions["smu_post_create_helpers"]["generate_openai_image"])
     assert callable(app.extensions["smu_post_create_helpers"]["generate_multiple_openai_images"])
@@ -119,6 +138,112 @@ def test_generate_openai_image_preserves_request_parameters_and_base64_upload():
         }
     ]
     assert calls["image_bytes"] == raw_image
+
+
+def test_overlay_renders_decoded_bytes_before_existing_upload():
+    raw_image = b"decoded background"
+    rendered_image = b"rendered overlay image"
+    client = FakeOpenAIClient(
+        b64_json=base64.b64encode(raw_image).decode("ascii")
+    )
+    calls = []
+    overlay = {
+        "title": "Miłego dnia!",
+        "body": None,
+        "cta": None,
+        "brand": None,
+    }
+
+    def renderer(image_bytes, **kwargs):
+        calls.append(("render", image_bytes, kwargs))
+        return rendered_image
+
+    def upload(image_bytes):
+        calls.append(("upload", image_bytes))
+        return {"secure_url": "https://cdn.test/generated.jpg"}
+
+    result = images.generate_openai_image(
+        "Text-free background",
+        openai_api_key="key",
+        openai_client=client,
+        upload_jpeg_to_cloudinary_func=upload,
+        overlay=overlay,
+        render_social_text_func=renderer,
+    )
+
+    assert result == "https://cdn.test/generated.jpg"
+    assert calls == [
+        ("render", raw_image, overlay),
+        ("upload", rendered_image),
+    ]
+    assert client.images.calls[0]["prompt"] == "Text-free background"
+
+
+def test_overlay_none_does_not_invoke_renderer():
+    client = FakeOpenAIClient()
+
+    def forbidden_renderer(*args, **kwargs):
+        raise AssertionError("legacy image path invoked the renderer")
+
+    result = images.generate_openai_image(
+        "Legacy prompt",
+        openai_api_key="key",
+        openai_client=client,
+        upload_jpeg_to_cloudinary_func=lambda image_bytes: {
+            "secure_url": "https://cdn.test/legacy.jpg"
+        },
+        render_social_text_func=forbidden_renderer,
+    )
+
+    assert result == "https://cdn.test/legacy.jpg"
+
+
+def test_overlay_reaches_cloudinary_boundary_as_normalized_jpeg():
+    source = BytesIO()
+    Image.new("RGB", (1024, 1024), (20, 30, 40)).save(source, format="PNG")
+    client = FakeOpenAIClient(b64_json=base64.b64encode(source.getvalue()).decode("ascii"))
+    cloudinary_images = []
+
+    def fake_cloudinary_upload(file_obj, **kwargs):
+        uploaded = Image.open(file_obj)
+        uploaded.load()
+        cloudinary_images.append((uploaded.format, uploaded.mode, uploaded.size, kwargs))
+        return {"secure_url": "https://cdn.test/rendered.jpg"}
+
+    def normalize_and_upload(image_bytes):
+        return media.upload_jpeg_to_cloudinary(
+            image_bytes,
+            upload_func=fake_cloudinary_upload,
+            log_diagnostics_func=lambda *args, **kwargs: None,
+        )
+
+    result = images.generate_openai_image(
+        "Text-free square background",
+        openai_api_key="key",
+        openai_client=client,
+        upload_jpeg_to_cloudinary_func=normalize_and_upload,
+        overlay={
+            "title": "Szczęśliwej podróży!",
+            "body": None,
+            "cta": None,
+            "brand": None,
+        },
+    )
+
+    assert result == "https://cdn.test/rendered.jpg"
+    assert cloudinary_images == [
+        (
+            "JPEG",
+            "RGB",
+            (1024, 1024),
+            {
+                "folder": "social_posts",
+                "resource_type": "image",
+                "format": "jpg",
+                "timeout": media.CLOUDINARY_UPLOAD_TIMEOUT_SECONDS,
+            },
+        )
+    ]
 
 
 def test_generate_multiple_openai_images_preserves_loop_contract():

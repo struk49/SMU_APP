@@ -1,11 +1,101 @@
 """Background carousel image generation helpers."""
 
+import json
 import logging
 
 
 logger = logging.getLogger(__name__)
 
 CAROUSEL_GENERATION_BATCH_SIZE = 5
+OVERLAY_PAYLOAD_PREFIX = "SMU_OVERLAY_V1:"
+OVERLAY_PAYLOAD_VERSION = 1
+MAX_OVERLAY_PAYLOAD_BYTES = 8192
+MAX_BACKGROUND_PROMPT_LENGTH = 6000
+MAX_OVERLAY_TITLE_LENGTH = 180
+
+
+class OverlayPayloadError(ValueError):
+    """A safe, categorical compatibility-payload failure."""
+
+    def __init__(self, reason="invalid_overlay_payload"):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def build_content_pack_overlay_prompt(background_prompt, title):
+    if (
+        not isinstance(background_prompt, str)
+        or not background_prompt.strip()
+        or len(background_prompt) > MAX_BACKGROUND_PROMPT_LENGTH
+        or not isinstance(title, str)
+        or not title
+        or len(title) > MAX_OVERLAY_TITLE_LENGTH
+    ):
+        raise OverlayPayloadError()
+
+    payload = {
+        "version": OVERLAY_PAYLOAD_VERSION,
+        "kind": "content_pack_carousel",
+        "background_prompt": background_prompt,
+        "overlay": {
+            "title": title,
+            "body": None,
+            "cta": None,
+            "brand": None,
+        },
+    }
+    try:
+        encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        encoded_size = len(encoded.encode("utf-8"))
+    except (TypeError, UnicodeError, ValueError) as exc:
+        raise OverlayPayloadError() from exc
+    if encoded_size > MAX_OVERLAY_PAYLOAD_BYTES:
+        raise OverlayPayloadError()
+    return encoded
+
+
+def parse_overlay_prompt(prompt):
+    if not isinstance(prompt, str) or not prompt.startswith(OVERLAY_PAYLOAD_PREFIX):
+        return None
+    try:
+        prompt_size = len(prompt.encode("utf-8"))
+    except UnicodeError as exc:
+        raise OverlayPayloadError() from exc
+    if prompt_size > MAX_OVERLAY_PAYLOAD_BYTES:
+        raise OverlayPayloadError()
+
+    try:
+        payload = json.loads(prompt[len(OVERLAY_PAYLOAD_PREFIX):])
+    except (TypeError, ValueError) as exc:
+        raise OverlayPayloadError() from exc
+
+    expected_keys = {"version", "kind", "background_prompt", "overlay"}
+    if not isinstance(payload, dict) or set(payload) != expected_keys:
+        raise OverlayPayloadError()
+    if payload["version"] != OVERLAY_PAYLOAD_VERSION:
+        raise OverlayPayloadError()
+    if payload["kind"] != "content_pack_carousel":
+        raise OverlayPayloadError()
+
+    background_prompt = payload["background_prompt"]
+    overlay = payload["overlay"]
+    if (
+        not isinstance(background_prompt, str)
+        or not background_prompt.strip()
+        or len(background_prompt) > MAX_BACKGROUND_PROMPT_LENGTH
+        or not isinstance(overlay, dict)
+        or set(overlay) != {"title", "body", "cta", "brand"}
+        or not isinstance(overlay["title"], str)
+        or not overlay["title"]
+        or len(overlay["title"]) > MAX_OVERLAY_TITLE_LENGTH
+        or any(overlay[key] is not None for key in ("body", "cta", "brand"))
+    ):
+        raise OverlayPayloadError()
+    return payload
 
 
 def _mark_generation_failed(post_model, db_session, post_id):
@@ -81,7 +171,14 @@ def generate_pending_carousel_images(
                 continue
 
             reserved_credit = bool(reserve_image_credits)
-            image_url = image_generator(pending_post.prompt)
+            overlay_payload = parse_overlay_prompt(pending_post.prompt)
+            if overlay_payload is None:
+                image_url = image_generator(pending_post.prompt)
+            else:
+                image_url = image_generator(
+                    overlay_payload["background_prompt"],
+                    overlay=overlay_payload["overlay"],
+                )
             pending_post.file_url = image_url
             pending_post.status = "draft"
             db_session.commit()

@@ -1,5 +1,7 @@
 import base64
 
+from smu_core.services.social_text import render_social_text
+
 
 OPENAI_IMAGE_TIMEOUT_SECONDS = 120
 
@@ -10,6 +12,8 @@ def generate_openai_image(
     openai_api_key=None,
     openai_client=None,
     upload_jpeg_to_cloudinary_func=None,
+    overlay=None,
+    render_social_text_func=None,
 ):
     if not openai_api_key:
         raise Exception("OPENAI_API_KEY is missing from your .env file")
@@ -25,6 +29,10 @@ def generate_openai_image(
 
     image_base64 = result.data[0].b64_json
     image_bytes = base64.b64decode(image_base64)
+
+    if overlay is not None:
+        renderer = render_social_text_func or render_social_text
+        image_bytes = renderer(image_bytes, **overlay)
 
     upload_result = upload_jpeg_to_cloudinary_func(image_bytes)
 

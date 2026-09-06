@@ -22,7 +22,14 @@ def make_pending(module, user, *, sort_order=0, group_id="group", minutes_ago=0)
     return post
 
 
-def run_worker(module, image_generator, *, batch_size=None):
+def run_worker(
+    module,
+    image_generator,
+    *,
+    batch_size=None,
+    reserve_image_credits=None,
+    release_image_credits=None,
+):
     kwargs = {
         "post_model": module.Post,
         "db_session": module.db.session,
@@ -31,6 +38,10 @@ def run_worker(module, image_generator, *, batch_size=None):
 
     if batch_size is not None:
         kwargs["batch_size"] = batch_size
+    if reserve_image_credits is not None:
+        kwargs["reserve_image_credits"] = reserve_image_credits
+    if release_image_credits is not None:
+        kwargs["release_image_credits"] = release_image_credits
 
     return carousel_generation.generate_pending_carousel_images(**kwargs)
 
@@ -239,6 +250,119 @@ def test_tiktok_and_content_pack_carousel_rows_share_worker(app, module):
     assert result["succeeded_count"] == 2
     assert module.db.session.get(module.Post, tiktok.id).status == "draft"
     assert module.db.session.get(module.Post, content_pack.id).status == "draft"
+
+
+def test_phase_two_payload_sends_background_and_exact_overlay_to_generator(
+    app, module
+):
+    user = create_user(module)
+    post = make_pending(module, user, group_id="content-pack", sort_order=0)
+    title = "Zażółć gęślą jaźń"
+    background_prompt = "Text-free background with no readable text"
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        background_prompt,
+        title,
+    )
+    module.db.session.commit()
+    calls = []
+
+    def image_generator(prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return "https://cdn.test/generated.jpg"
+
+    result = run_worker(module, image_generator)
+
+    assert result["succeeded_count"] == 1
+    assert calls == [
+        (
+            background_prompt,
+            {
+                "overlay": {
+                    "title": title,
+                    "body": None,
+                    "cta": None,
+                    "brand": None,
+                }
+            },
+        )
+    ]
+    assert title not in calls[0][0]
+    assert module.db.session.get(module.Post, post.id).status == "draft"
+
+
+def test_malformed_overlay_payload_fails_row_and_later_legacy_row_continues(
+    app, module, caplog
+):
+    user = create_user(module)
+    malformed = make_pending(module, user, group_id="malformed", sort_order=0)
+    legacy = make_pending(module, user, group_id="legacy", sort_order=1)
+    malformed.prompt = "SMU_OVERLAY_V1:{not-json SECRET SLIDE COPY}"
+    module.db.session.commit()
+    calls = []
+    caplog.set_level(logging.ERROR, logger="smu_core.services.carousel_generation")
+
+    result = run_worker(
+        module,
+        lambda prompt: calls.append(prompt) or "https://cdn.test/generated.jpg",
+        batch_size=2,
+    )
+
+    assert result["failed_count"] == 1
+    assert result["succeeded_count"] == 1
+    assert module.db.session.get(module.Post, malformed.id).status == "generation_failed"
+    assert module.db.session.get(module.Post, legacy.id).status == "draft"
+    assert calls == [legacy.prompt]
+    assert "SECRET SLIDE COPY" not in caplog.text
+    assert "error_type=OverlayPayloadError" in caplog.text
+
+
+def test_overlay_renderer_error_releases_credit_and_uses_existing_failure_path(
+    app, module, caplog
+):
+    user = create_user(module)
+    failed = make_pending(module, user, group_id="content-pack", sort_order=0)
+    later = make_pending(module, user, group_id="legacy", sort_order=1)
+    failed.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Private slide copy",
+    )
+    module.db.session.commit()
+    released = []
+    caplog.set_level(logging.ERROR, logger="smu_core.services.carousel_generation")
+
+    def image_generator(prompt, **kwargs):
+        if kwargs.get("overlay"):
+            raise RuntimeError("renderer failed with Private slide copy")
+        return "https://cdn.test/later.jpg"
+
+    result = run_worker(
+        module,
+        image_generator,
+        batch_size=2,
+        reserve_image_credits=lambda post, count: True,
+        release_image_credits=lambda post, count: released.append((post.id, count)),
+    )
+
+    assert result["failed_count"] == 1
+    assert result["succeeded_count"] == 1
+    assert released == [(failed.id, 1)]
+    assert module.db.session.get(module.Post, failed.id).status == "generation_failed"
+    assert module.db.session.get(module.Post, later.id).status == "draft"
+    assert "Private slide copy" not in caplog.text
+
+
+def test_overlay_payload_rejects_malformed_unicode_with_safe_error():
+    private_copy = "private\ud800copy"
+    try:
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background",
+            private_copy,
+        )
+    except carousel_generation.OverlayPayloadError as exc:
+        assert str(exc) == "invalid_overlay_payload"
+        assert private_copy not in str(exc)
+    else:
+        raise AssertionError("malformed Unicode payload was accepted")
 
 
 def test_worker_logs_safe_context_without_prompt_caption_or_api_key(

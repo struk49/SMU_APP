@@ -508,12 +508,18 @@ def update_brand_coach(post, brand_context=""):
     )
 
 
-def generate_openai_image(prompt):
+def generate_openai_image(prompt, *, overlay=None):
+    kwargs = {
+        "openai_api_key": OPENAI_API_KEY,
+        "openai_client": openai_client,
+        "upload_jpeg_to_cloudinary_func": upload_jpeg_to_cloudinary,
+    }
+    if overlay is not None:
+        kwargs["overlay"] = overlay
+
     return images_service.generate_openai_image(
         prompt,
-        openai_api_key=OPENAI_API_KEY,
-        openai_client=openai_client,
-        upload_jpeg_to_cloudinary_func=upload_jpeg_to_cloudinary,
+        **kwargs,
     )
 
 

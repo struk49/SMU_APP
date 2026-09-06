@@ -6,6 +6,7 @@ from flask_login import current_user, login_required
 from smu_core.extensions import db
 from smu_core.models import Post
 from smu_core.services.access import subscription_required
+from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
 
 
 content_pack_bp = Blueprint("content_pack", __name__)
@@ -134,27 +135,36 @@ def create_content_pack_carousel():
         placeholder_url = get_placeholder_image_url()
 
         for index, slide_text in enumerate(slides):
-            full_prompt = f"""
-Create an Instagram carousel slide.
-
-Slide content:
-{slide_text}
+            background_prompt = f"""
+Create a text-free visual background for an Instagram carousel slide.
 
 Visual direction:
 {styled_image_prompt}
 
 Design:
 - dark background
-- bold typography
 - high contrast
 - square 1:1 format
 - premium social media style
+
+Critical text-free requirements:
+- no readable text
+- no words or letters
+- no typography
+- no captions or labels
+- no logos containing text
+- no pseudo-text or gibberish
+- leave suitable uncluttered visual space for a later text overlay
 """
+            stored_prompt = build_content_pack_overlay_prompt(
+                background_prompt,
+                slide_text,
+            )
 
             post = Post(
                 file_url=placeholder_url,
                 file_type="image",
-                prompt=full_prompt,
+                prompt=stored_prompt,
                 caption=caption,
                 platforms="instagram",
                 post_type="carousel",
