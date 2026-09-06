@@ -62,6 +62,15 @@ def _parse_slide_block(lines):
         else:
             _append_slide_value(slide, active_field or "title", line.strip())
 
+    # The renderer requires a title. Preserve copy from a body-only or CTA-only
+    # slide by promoting that exact value rather than emitting an invalid payload.
+    if not slide["title"]:
+        for field in ("body", "cta"):
+            if slide[field]:
+                slide["title"] = slide[field]
+                slide[field] = None
+                break
+
     return slide if any(slide[field] for field in ("title", "body", "cta")) else None
 
 

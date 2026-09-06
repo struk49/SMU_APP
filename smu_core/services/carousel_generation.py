@@ -26,7 +26,11 @@ class OverlayPayloadError(ValueError):
 
 
 def _valid_optional_overlay_text(value, max_length):
-    return value is None or (isinstance(value, str) and value and len(value) <= max_length)
+    return value is None or (isinstance(value, str) and len(value) <= max_length)
+
+
+def _normalize_optional_overlay_text(value):
+    return None if isinstance(value, str) and value == "" else value
 
 
 def build_content_pack_overlay_prompt(
@@ -37,6 +41,9 @@ def build_content_pack_overlay_prompt(
     cta=None,
     brand=None,
 ):
+    body = _normalize_optional_overlay_text(body)
+    cta = _normalize_optional_overlay_text(cta)
+    brand = _normalize_optional_overlay_text(brand)
     if (
         not isinstance(background_prompt, str)
         or not background_prompt.strip()
@@ -118,6 +125,8 @@ def parse_overlay_prompt(prompt):
         )
     ):
         raise OverlayPayloadError()
+    for key in ("body", "cta", "brand"):
+        overlay[key] = _normalize_optional_overlay_text(overlay[key])
     return payload
 
 

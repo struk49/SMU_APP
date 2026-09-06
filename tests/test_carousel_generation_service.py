@@ -1,6 +1,8 @@
 import logging
 from datetime import timedelta
 
+import pytest
+
 from conftest import create_post, create_user
 from smu_core.services import carousel_generation
 from smu_core.services.time_utils import utc_now
@@ -320,6 +322,31 @@ def test_phase_two_payload_supports_structured_overlay_and_old_v1_payloads():
         "cta": None,
         "brand": None,
     }
+
+
+def test_phase_two_payload_normalizes_empty_optional_fields_to_null():
+    prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Dzień dobry",
+        body="",
+        cta="",
+        brand="",
+    )
+
+    assert carousel_generation.parse_overlay_prompt(prompt)["overlay"] == {
+        "title": "Dzień dobry",
+        "body": None,
+        "cta": None,
+        "brand": None,
+    }
+
+    for invalid_value in (0, False, [], {}):
+        with pytest.raises(carousel_generation.OverlayPayloadError):
+            carousel_generation.build_content_pack_overlay_prompt(
+                "Text-free background",
+                "Dzień dobry",
+                body=invalid_value,
+            )
 
 
 def test_malformed_overlay_payload_fails_row_and_later_legacy_row_continues(

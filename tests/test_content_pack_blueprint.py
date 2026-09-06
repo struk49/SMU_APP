@@ -331,6 +331,19 @@ def test_content_pack_carousel_parser_preserves_unlabelled_text():
     ]
 
 
+def test_content_pack_carousel_parser_promotes_cta_only_copy_to_required_title():
+    assert content_pack_routes._parse_content_pack_carousel_slides(
+        "Slide 6:\nCTA: Learn more Polish with Polish with Me"
+    ) == [
+        {
+            "title": "Learn more Polish with Polish with Me",
+            "body": None,
+            "cta": None,
+            "brand": None,
+        }
+    ]
+
+
 def test_content_pack_carousel_builds_six_distinct_text_free_backgrounds(
     client, app, module, monkeypatch
 ):
@@ -352,8 +365,7 @@ Slide 5:
 Phrase: Szczęśliwej podróży!
 Translation: Have a good trip!
 Slide 6:
-Title: Często tu przychodzisz?
-CTA: Practise today"""
+CTA: Learn more Polish with Polish with Me"""
     content_pack_result = CONTENT_PACK_RESULT.replace(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
         structured_slides,
@@ -381,6 +393,12 @@ CTA: Practise today"""
 
     assert response.status_code == 302
     assert len(payloads) == 6
+    assert payloads[5]["overlay"] == {
+        "title": "Learn more Polish with Polish with Me",
+        "body": None,
+        "cta": None,
+        "brand": None,
+    }
     assert len(set(backgrounds)) == 6
     assert all("CONSISTENT BRAND STYLE" in prompt for prompt in backgrounds)
     assert all("Slide-specific visual concept:" in prompt for prompt in backgrounds)
