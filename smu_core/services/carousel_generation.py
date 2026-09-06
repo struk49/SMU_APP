@@ -104,8 +104,11 @@ def generate_pending_carousel_images(
             if reserved_credit and release_image_credits:
                 release_image_credits(pending_post, 1)
             failed_count += 1
-            logger.error(
-                "carousel_generation_row_failed",
+            logger.exception(
+                "carousel_generation_row_failed post_id=%s error_type=%s error=%s",
+                post_id,
+                exc.__class__.__name__,
+                exc,
                 extra={
                     "smu_context": {
                         "stage": "carousel_generation_row",

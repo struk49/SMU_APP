@@ -190,6 +190,38 @@ def test_failure_isolated_and_later_rows_continue(app, module, monkeypatch):
     assert module.db.session.get(module.Post, remaining.id).status == "generating"
 
 
+def test_row_failure_log_includes_diagnostics_without_row_secrets(
+    app, module, caplog
+):
+    user = create_user(module)
+    post = make_pending(module, user, group_id="diagnostic-logs", sort_order=0)
+    post.prompt = "prompt containing OPENAI_API_KEY=do-not-log"
+    post.caption = "caption containing access_token=do-not-log"
+    module.db.session.commit()
+    caplog.set_level(logging.ERROR, logger="smu_core.services.carousel_generation")
+
+    def failing_generator(prompt):
+        raise RuntimeError("safe diagnostic failure")
+
+    result = run_worker(module, failing_generator)
+
+    assert result["failed_count"] == 1
+    records = [
+        record
+        for record in caplog.records
+        if record.message.startswith("carousel_generation_row_failed")
+    ]
+    assert len(records) == 1
+    record = records[0]
+    assert f"post_id={post.id}" in record.message
+    assert "error_type=RuntimeError" in record.message
+    assert "error=safe diagnostic failure" in record.message
+    assert record.exc_info[0] is RuntimeError
+    assert "Traceback (most recent call last)" in caplog.text
+    assert "OPENAI_API_KEY=do-not-log" not in caplog.text
+    assert "access_token=do-not-log" not in caplog.text
+
+
 def test_tiktok_and_content_pack_carousel_rows_share_worker(app, module):
     user = create_user(module)
     tiktok = make_pending(module, user, group_id="tiktok-group", sort_order=0)
