@@ -1,6 +1,9 @@
 import base64
 
 
+OPENAI_IMAGE_TIMEOUT_SECONDS = 120
+
+
 def generate_openai_image(
     prompt,
     *,
@@ -17,6 +20,7 @@ def generate_openai_image(
         size="1024x1024",
         quality="medium",
         output_format="jpeg",
+        timeout=OPENAI_IMAGE_TIMEOUT_SECONDS,
     )
 
     image_base64 = result.data[0].b64_json

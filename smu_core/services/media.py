@@ -9,6 +9,7 @@ from PIL import Image
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 VIDEO_EXTENSIONS = {"mp4", "mov", "avi", "webm"}
 INSTAGRAM_SAFE_TRANSFORMATION = "/upload/c_fill,w_1080,h_1080,q_auto,f_jpg/"
+CLOUDINARY_UPLOAD_TIMEOUT_SECONDS = 60
 
 
 def get_file_type(filename: str) -> str:
@@ -111,6 +112,7 @@ def upload_jpeg_to_cloudinary(
         folder="social_posts",
         resource_type="image",
         format="jpg",
+        timeout=CLOUDINARY_UPLOAD_TIMEOUT_SECONDS,
     )
 
     log_diagnostics_func(

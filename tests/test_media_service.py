@@ -205,6 +205,7 @@ def test_upload_jpeg_to_cloudinary_preserves_upload_arguments():
         "folder": "social_posts",
         "resource_type": "image",
         "format": "jpg",
+        "timeout": media.CLOUDINARY_UPLOAD_TIMEOUT_SECONDS,
     }
     assert calls["log"]["upload_url"] == "https://cdn.test/uploaded.jpg"
 

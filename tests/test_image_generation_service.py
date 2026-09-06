@@ -115,6 +115,7 @@ def test_generate_openai_image_preserves_request_parameters_and_base64_upload():
             "size": "1024x1024",
             "quality": "medium",
             "output_format": "jpeg",
+            "timeout": images.OPENAI_IMAGE_TIMEOUT_SECONDS,
         }
     ]
     assert calls["image_bytes"] == raw_image
