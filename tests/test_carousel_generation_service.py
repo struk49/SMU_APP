@@ -258,10 +258,14 @@ def test_phase_two_payload_sends_background_and_exact_overlay_to_generator(
     user = create_user(module)
     post = make_pending(module, user, group_id="content-pack", sort_order=0)
     title = "Zażółć gęślą jaźń"
+    body = "Miłego dnia!"
+    cta = "Szczęśliwej podróży!"
     background_prompt = "Text-free background with no readable text"
     post.prompt = carousel_generation.build_content_pack_overlay_prompt(
         background_prompt,
         title,
+        body=body,
+        cta=cta,
     )
     module.db.session.commit()
     calls = []
@@ -279,8 +283,8 @@ def test_phase_two_payload_sends_background_and_exact_overlay_to_generator(
             {
                 "overlay": {
                     "title": title,
-                    "body": None,
-                    "cta": None,
+                    "body": body,
+                    "cta": cta,
                     "brand": None,
                 }
             },
@@ -288,6 +292,34 @@ def test_phase_two_payload_sends_background_and_exact_overlay_to_generator(
     ]
     assert title not in calls[0][0]
     assert module.db.session.get(module.Post, post.id).status == "draft"
+
+
+def test_phase_two_payload_supports_structured_overlay_and_old_v1_payloads():
+    structured = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Zażółć gęślą jaźń",
+        body="Miłego dnia!",
+        cta="Szczęśliwej podróży!",
+    )
+    structured_payload = carousel_generation.parse_overlay_prompt(structured)
+    legacy_v1 = (
+        'SMU_OVERLAY_V1:{"version":1,"kind":"content_pack_carousel",'
+        '"background_prompt":"Text-free background","overlay":{'
+        '"title":"Często tu przychodzisz?","body":null,"cta":null,"brand":null}}'
+    )
+
+    assert structured_payload["overlay"] == {
+        "title": "Zażółć gęślą jaźń",
+        "body": "Miłego dnia!",
+        "cta": "Szczęśliwej podróży!",
+        "brand": None,
+    }
+    assert carousel_generation.parse_overlay_prompt(legacy_v1)["overlay"] == {
+        "title": "Często tu przychodzisz?",
+        "body": None,
+        "cta": None,
+        "brand": None,
+    }
 
 
 def test_malformed_overlay_payload_fails_row_and_later_legacy_row_continues(

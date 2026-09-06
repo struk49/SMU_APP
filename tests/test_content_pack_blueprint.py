@@ -5,6 +5,7 @@ from flask import template_rendered, url_for
 import app as smu_app
 from conftest import create_user, login
 from smu_core.models import BrandBrief, Post
+from smu_core.blueprints.content_pack import routes as content_pack_routes
 from smu_core.services import carousel_generation
 
 
@@ -263,6 +264,150 @@ def test_create_content_pack_carousel_creates_grouped_posts(client, app, module,
     assert all("no readable text" in payload["background_prompt"] for payload in payloads)
     assert all(payload["overlay"]["body"] is None for payload in payloads)
     assert response.location.endswith(f"/post/{posts[0].id}")
+
+
+def test_content_pack_carousel_parser_maps_structural_fields():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Speak Polish in Simple Steps
+Subtitle: Essential Polish words and phrases for beginners
+Body: Zażółć gęślą jaźń
+
+Slide 2:
+Phrase: Jak się masz?
+Translation: How are you?
+CTA: Miłego dnia!
+
+Slide 3:
+
+Slide 4:
+Szczęśliwej podróży!
+
+Slide 5: Często tu przychodzisz?"""
+    )
+
+    assert slides == [
+        {
+            "title": "Speak Polish in Simple Steps",
+            "body": (
+                "Essential Polish words and phrases for beginners\n"
+                "Zażółć gęślą jaźń"
+            ),
+            "cta": None,
+            "brand": None,
+        },
+        {
+            "title": "Jak się masz?",
+            "body": "How are you?",
+            "cta": "Miłego dnia!",
+            "brand": None,
+        },
+        {
+            "title": "Szczęśliwej podróży!",
+            "body": None,
+            "cta": None,
+            "brand": None,
+        },
+        {
+            "title": "Często tu przychodzisz?",
+            "body": None,
+            "cta": None,
+            "brand": None,
+        },
+    ]
+    assert all(
+        not value.startswith(
+            ("Slide ", "Title:", "Subtitle:", "Phrase:", "Translation:")
+        )
+        for slide in slides
+        for value in slide.values()
+        if isinstance(value, str)
+    )
+
+
+def test_content_pack_carousel_parser_preserves_unlabelled_text():
+    assert content_pack_routes._parse_content_pack_carousel_slides("Miłego dnia!") == [
+        {"title": "Miłego dnia!", "body": None, "cta": None, "brand": None}
+    ]
+
+
+def test_content_pack_carousel_builds_six_distinct_text_free_backgrounds(
+    client, app, module, monkeypatch
+):
+    user = create_user(module)
+    login(client, user)
+    structured_slides = """Slide 1:
+Title: Speak Polish in Simple Steps
+Subtitle: Essential Polish words and phrases for beginners
+Slide 2:
+Phrase: Jak się masz?
+Translation: How are you?
+Slide 3:
+Phrase: Miłego dnia!
+Translation: Have a nice day!
+Slide 4:
+Title: Zażółć gęślą jaźń
+Body: Polish vocabulary practice
+Slide 5:
+Phrase: Szczęśliwej podróży!
+Translation: Have a good trip!
+Slide 6:
+Title: Często tu przychodzisz?
+CTA: Practise today"""
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        structured_slides,
+    )
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "apply_image_style",
+        lambda prompt, style: "CONSISTENT BRAND STYLE",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result, "image_style": "minimal"},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+    backgrounds = [payload["background_prompt"] for payload in payloads]
+
+    assert response.status_code == 302
+    assert len(payloads) == 6
+    assert len(set(backgrounds)) == 6
+    assert all("CONSISTENT BRAND STYLE" in prompt for prompt in backgrounds)
+    assert all("Slide-specific visual concept:" in prompt for prompt in backgrounds)
+    required_text_free_phrases = (
+        "no readable text",
+        "no words",
+        "no letters",
+        "no handwriting",
+        "no pseudo-text",
+        "no gibberish text",
+        "no typography",
+        "no captions",
+        "no labels",
+        "no readable logos",
+        "no text on screens",
+        "no text on paper",
+        "no written signs",
+    )
+    assert all(
+        phrase in prompt
+        for prompt in backgrounds
+        for phrase in required_text_free_phrases
+    )
+    for payload in payloads:
+        for value in payload["overlay"].values():
+            if value:
+                assert value not in payload["background_prompt"]
 
 
 def test_content_pack_carousel_preserves_exact_polish_slide_copy(

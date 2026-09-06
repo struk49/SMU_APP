@@ -12,6 +12,9 @@ OVERLAY_PAYLOAD_VERSION = 1
 MAX_OVERLAY_PAYLOAD_BYTES = 8192
 MAX_BACKGROUND_PROMPT_LENGTH = 6000
 MAX_OVERLAY_TITLE_LENGTH = 180
+MAX_OVERLAY_BODY_LENGTH = 600
+MAX_OVERLAY_CTA_LENGTH = 120
+MAX_OVERLAY_BRAND_LENGTH = 120
 
 
 class OverlayPayloadError(ValueError):
@@ -22,7 +25,18 @@ class OverlayPayloadError(ValueError):
         super().__init__(reason)
 
 
-def build_content_pack_overlay_prompt(background_prompt, title):
+def _valid_optional_overlay_text(value, max_length):
+    return value is None or (isinstance(value, str) and value and len(value) <= max_length)
+
+
+def build_content_pack_overlay_prompt(
+    background_prompt,
+    title,
+    *,
+    body=None,
+    cta=None,
+    brand=None,
+):
     if (
         not isinstance(background_prompt, str)
         or not background_prompt.strip()
@@ -30,6 +44,9 @@ def build_content_pack_overlay_prompt(background_prompt, title):
         or not isinstance(title, str)
         or not title
         or len(title) > MAX_OVERLAY_TITLE_LENGTH
+        or not _valid_optional_overlay_text(body, MAX_OVERLAY_BODY_LENGTH)
+        or not _valid_optional_overlay_text(cta, MAX_OVERLAY_CTA_LENGTH)
+        or not _valid_optional_overlay_text(brand, MAX_OVERLAY_BRAND_LENGTH)
     ):
         raise OverlayPayloadError()
 
@@ -39,9 +56,9 @@ def build_content_pack_overlay_prompt(background_prompt, title):
         "background_prompt": background_prompt,
         "overlay": {
             "title": title,
-            "body": None,
-            "cta": None,
-            "brand": None,
+            "body": body,
+            "cta": cta,
+            "brand": brand,
         },
     }
     try:
@@ -92,7 +109,13 @@ def parse_overlay_prompt(prompt):
         or not isinstance(overlay["title"], str)
         or not overlay["title"]
         or len(overlay["title"]) > MAX_OVERLAY_TITLE_LENGTH
-        or any(overlay[key] is not None for key in ("body", "cta", "brand"))
+        or not _valid_optional_overlay_text(
+            overlay["body"], MAX_OVERLAY_BODY_LENGTH
+        )
+        or not _valid_optional_overlay_text(overlay["cta"], MAX_OVERLAY_CTA_LENGTH)
+        or not _valid_optional_overlay_text(
+            overlay["brand"], MAX_OVERLAY_BRAND_LENGTH
+        )
     ):
         raise OverlayPayloadError()
     return payload

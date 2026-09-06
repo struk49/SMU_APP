@@ -1,3 +1,4 @@
+import re
 import uuid
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
@@ -10,6 +11,124 @@ from smu_core.services.carousel_generation import build_content_pack_overlay_pro
 
 
 content_pack_bp = Blueprint("content_pack", __name__)
+
+SLIDE_MARKER_RE = re.compile(r"^Slide\s+\d+\s*:\s*(.*)$", re.IGNORECASE)
+SLIDE_FIELD_RE = re.compile(
+    r"^(Title|Subtitle|Phrase|Translation|Body|CTA)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
+BODY_FIELD_NAMES = {"subtitle", "translation", "body"}
+SLIDE_VISUAL_CONCEPTS = (
+    "A clean introductory hero composition with one bold smartphone focal object "
+    "and an abstract red-and-white Polish flag colour motif, with strong negative space.",
+    "A welcoming conversational scene with two people greeting each other, natural "
+    "gestures, and generous negative space; use no speech bubbles.",
+    "A close conversational crop focused on expressive faces and hand gestures, with "
+    "shallow depth of field and an uncluttered overlay area.",
+    "A neatly arranged vocabulary still life of recognisable everyday objects, using "
+    "varied scale and an icon-like composition without books or labelled packaging.",
+    "A balanced two-sided comparison scene with paired or mirrored matching objects, "
+    "linked by abstract shapes only and without written labels.",
+    "A closing product-focused composition featuring a smartphone with abstract UI "
+    "blocks and icons only, framed as a clear final call-to-action moment.",
+)
+
+
+def _append_slide_value(slide, field, value):
+    if not value:
+        return
+    slide[field] = f"{slide[field]}\n{value}" if slide[field] else value
+
+
+def _parse_slide_block(lines):
+    slide = {"title": None, "body": None, "cta": None, "brand": None}
+    active_field = None
+
+    for line in lines:
+        if not line.strip():
+            continue
+        field_match = SLIDE_FIELD_RE.match(line.strip())
+        if field_match:
+            label, value = field_match.groups()
+            label = label.lower()
+            active_field = (
+                "title"
+                if label in {"title", "phrase"}
+                else "body"
+                if label in BODY_FIELD_NAMES
+                else "cta"
+            )
+            _append_slide_value(slide, active_field, value)
+        else:
+            _append_slide_value(slide, active_field or "title", line.strip())
+
+    return slide if any(slide[field] for field in ("title", "body", "cta")) else None
+
+
+def _parse_content_pack_carousel_slides(carousel_idea):
+    lines = carousel_idea.splitlines()
+    has_slide_markers = any(SLIDE_MARKER_RE.match(line.strip()) for line in lines)
+
+    if not has_slide_markers:
+        if any(SLIDE_FIELD_RE.match(line.strip()) for line in lines):
+            slide = _parse_slide_block(lines)
+            return [slide] if slide else []
+        return [
+            {"title": line.strip(), "body": None, "cta": None, "brand": None}
+            for line in lines
+            if line.strip()
+        ]
+
+    blocks = []
+    current_block = None
+    for line in lines:
+        marker_match = SLIDE_MARKER_RE.match(line.strip())
+        if marker_match:
+            if current_block is not None:
+                blocks.append(current_block)
+            current_block = []
+            if marker_match.group(1):
+                current_block.append(marker_match.group(1))
+        elif current_block is not None:
+            current_block.append(line)
+    if current_block is not None:
+        blocks.append(current_block)
+
+    return [slide for block in blocks if (slide := _parse_slide_block(block))]
+
+
+def _build_slide_background_prompt(styled_image_prompt, slide_index):
+    visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
+    return f"""
+Create a text-free visual background for one slide in a cohesive Instagram carousel.
+
+Shared art direction for the whole carousel:
+{styled_image_prompt}
+
+Slide-specific visual concept:
+{visual_concept}
+
+Design:
+- maintain one consistent art style, colour palette, lighting, and premium brand mood
+- square 1:1 format
+- high contrast
+- leave suitable uncluttered visual space for a later text overlay
+
+Critical text-free requirements:
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no text on screens
+- no text on paper
+- no written signs
+"""
 
 
 def _content_pack_helper(name):
@@ -109,23 +228,7 @@ def create_content_pack_carousel():
 
     try:
         styled_image_prompt = apply_image_style(image_prompt, image_style)
-        slides = []
-
-        for line in carousel_idea.splitlines():
-            line = line.strip()
-
-            if line.lower().startswith("slide"):
-                parts = line.split(":", 1)
-
-                if len(parts) == 2 and parts[1].strip():
-                    slides.append(parts[1].strip())
-
-        if not slides:
-            slides = [
-                line.strip() for line in carousel_idea.splitlines() if line.strip()
-            ]
-
-        slides = slides[:6]
+        slides = _parse_content_pack_carousel_slides(carousel_idea)[:6]
 
         if len(slides) < 2:
             flash("Carousel needs at least 2 slides.", "danger")
@@ -134,31 +237,17 @@ def create_content_pack_carousel():
         group_id = str(uuid.uuid4())
         placeholder_url = get_placeholder_image_url()
 
-        for index, slide_text in enumerate(slides):
-            background_prompt = f"""
-Create a text-free visual background for an Instagram carousel slide.
-
-Visual direction:
-{styled_image_prompt}
-
-Design:
-- dark background
-- high contrast
-- square 1:1 format
-- premium social media style
-
-Critical text-free requirements:
-- no readable text
-- no words or letters
-- no typography
-- no captions or labels
-- no logos containing text
-- no pseudo-text or gibberish
-- leave suitable uncluttered visual space for a later text overlay
-"""
+        for index, slide in enumerate(slides):
+            background_prompt = _build_slide_background_prompt(
+                styled_image_prompt,
+                index,
+            )
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,
-                slide_text,
+                slide["title"],
+                body=slide["body"],
+                cta=slide["cta"],
+                brand=slide["brand"],
             )
 
             post = Post(
