@@ -190,18 +190,21 @@ def test_failure_isolated_and_later_rows_continue(app, module, monkeypatch):
     assert module.db.session.get(module.Post, remaining.id).status == "generating"
 
 
-def test_row_failure_log_includes_diagnostics_without_row_secrets(
+def test_row_failure_log_omits_provider_and_row_secrets(
     app, module, caplog
 ):
     user = create_user(module)
     post = make_pending(module, user, group_id="diagnostic-logs", sort_order=0)
+    fake_cloudinary_key = "123456789012345"
     post.prompt = "prompt containing OPENAI_API_KEY=do-not-log"
     post.caption = "caption containing access_token=do-not-log"
     module.db.session.commit()
     caplog.set_level(logging.ERROR, logger="smu_core.services.carousel_generation")
 
     def failing_generator(prompt):
-        raise RuntimeError("safe diagnostic failure")
+        raise RuntimeError(
+            f"Cloudinary AuthorizationRequired api_key {fake_cloudinary_key}"
+        )
 
     result = run_worker(module, failing_generator)
 
@@ -215,9 +218,9 @@ def test_row_failure_log_includes_diagnostics_without_row_secrets(
     record = records[0]
     assert f"post_id={post.id}" in record.message
     assert "error_type=RuntimeError" in record.message
-    assert "error=safe diagnostic failure" in record.message
-    assert record.exc_info[0] is RuntimeError
-    assert "Traceback (most recent call last)" in caplog.text
+    assert record.exc_info is None
+    assert fake_cloudinary_key not in caplog.text
+    assert "Cloudinary AuthorizationRequired" not in caplog.text
     assert "OPENAI_API_KEY=do-not-log" not in caplog.text
     assert "access_token=do-not-log" not in caplog.text
 
