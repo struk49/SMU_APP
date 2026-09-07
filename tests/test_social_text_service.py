@@ -159,6 +159,101 @@ def test_multiline_wrapping_and_font_fitting_stay_within_bounds(monkeypatch):
     assert " ".join(calls[0][1].splitlines()) == title
 
 
+def test_all_text_blocks_stay_inside_eight_percent_safe_area(monkeypatch):
+    calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        calls.append((position, text, kwargs))
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        title="Professional title hierarchy",
+        body="Supporting body copy with comfortable deterministic wrapping.",
+        cta="Learn more",
+        brand="SMU",
+    )
+
+    measurement = ImageDraw.Draw(Image.new("RGB", (1024, 1024)))
+    safe_margin = round(1024 * 0.08)
+    for position, text, kwargs in calls:
+        bounds = measurement.multiline_textbbox(
+            position,
+            text,
+            font=kwargs["font"],
+            spacing=kwargs["spacing"],
+            stroke_width=kwargs["stroke_width"],
+        )
+        assert bounds[0] >= safe_margin
+        assert bounds[1] >= safe_margin
+        assert bounds[2] <= 1024 - safe_margin
+        assert bounds[3] <= 1024 - safe_margin
+
+    assert calls[0][2]["font"].size > calls[1][2]["font"].size
+    assert calls[1][2]["font"].size < calls[2][2]["font"].size
+    assert calls[3][2]["font"].size < calls[1][2]["font"].size
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Dziękuję / Dziękuję bardzo — Thank you / Thank you very much",
+        "Powodzenia — Good luck & Wszystkiego najlepszego — All the best",
+    ],
+)
+def test_long_polish_english_title_wraps_without_clipping(monkeypatch, title):
+    seen = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        seen.append((position, text, kwargs))
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(source_bytes(size=(1024, 1024)), title=title)
+
+    position, rendered, kwargs = seen[0]
+    bounds = ImageDraw.Draw(Image.new("RGB", (1024, 1024))).multiline_textbbox(
+        position,
+        rendered,
+        font=kwargs["font"],
+        spacing=kwargs["spacing"],
+        stroke_width=kwargs["stroke_width"],
+    )
+    assert "\n" in rendered
+    assert " ".join(rendered.splitlines()) == title
+    assert bounds[2] <= round(1024 * 0.92)
+    assert bounds[3] <= round(1024 * 0.32)
+    assert kwargs["font"].size >= social_text.MIN_FONT_SIZE
+
+
+def test_renderer_uses_consistent_contrast_panels_and_controlled_stroke(monkeypatch):
+    panels = []
+    text_calls = []
+    original_panel = ImageDraw.ImageDraw.rounded_rectangle
+    original_text = ImageDraw.ImageDraw.multiline_text
+
+    def capture_panel(self, bounds, *args, **kwargs):
+        panels.append((bounds, kwargs))
+        return original_panel(self, bounds, *args, **kwargs)
+
+    def capture_text(self, position, text, *args, **kwargs):
+        text_calls.append(kwargs)
+        return original_text(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "rounded_rectangle", capture_panel)
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture_text)
+    social_text.render_social_text(
+        source_bytes(), title="Title", body="Body", cta="CTA"
+    )
+
+    assert len(panels) == 3
+    assert all(call["stroke_width"] == 1 for call in text_calls)
+    assert len({panel[1]["fill"] for panel in panels}) == 1
+
+
 def test_output_remains_compatible_with_existing_jpeg_normalization():
     rendered = social_text.render_social_text(source_bytes(), title="Title")
     normalized = media.normalize_image_to_jpeg(rendered)

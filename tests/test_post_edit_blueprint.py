@@ -6,6 +6,7 @@ from flask import template_rendered, url_for
 import app as smu_app
 from conftest import create_carousel, create_post, create_user, login
 from smu_core.models import Post
+from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
 
 
 @contextmanager
@@ -77,6 +78,25 @@ def test_owner_can_open_single_edit_form(client, app, module):
     assert response.status_code == 200
     assert templates[0][0] == "edit_post.html"
     assert templates[0][1]["post"].id == post.id
+
+
+def test_structured_prompt_is_not_exposed_in_edit_form(client, module):
+    user = create_user(module)
+    post = create_post(module, user)
+    post.prompt = build_content_pack_overlay_prompt(
+        "Private technical background prompt",
+        "Private overlay title",
+    )
+    module.db.session.commit()
+    login(client, user)
+
+    response = client.get(f"/edit-post/{post.id}")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "SMU_OVERLAY_V1:" not in html
+    assert "Private technical background prompt" not in html
+    assert "Private overlay title" not in html
 
 
 def test_single_edit_post_updates_existing_post_and_redirects(client, module):

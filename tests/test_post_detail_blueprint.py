@@ -6,6 +6,7 @@ from flask import template_rendered, url_for
 import app as smu_app
 from conftest import create_post, create_user, login
 from smu_core.models import Post
+from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
 
 
 @contextmanager
@@ -84,6 +85,28 @@ def test_owner_can_view_single_post_with_same_template_context(client, app, modu
     assert "Pinterest" in html
     assert "Scheduled" in html
     assert "https://cdn.test/single.jpg" in html
+
+
+def test_structured_carousel_prompt_is_human_readable_in_post_detail(
+    client, module
+):
+    user = create_user(module)
+    post = create_post(module, user, group_id="structured-carousel")
+    post.prompt = build_content_pack_overlay_prompt(
+        "Private technical background prompt",
+        "Private overlay title",
+    )
+    module.db.session.commit()
+    login(client, user)
+
+    response = client.get(f"/post/{post.id}")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Content Pack carousel artwork" in html
+    assert "SMU_OVERLAY_V1:" not in html
+    assert "Private technical background prompt" not in html
+    assert "Private overlay title" not in html
 
 
 def test_another_user_is_redirected_from_post_detail(client, module):

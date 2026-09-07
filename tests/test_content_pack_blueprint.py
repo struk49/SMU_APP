@@ -383,24 +383,28 @@ Slide 5: Często tu przychodzisz?"""
             ),
             "cta": None,
             "brand": None,
+            "visual": None,
         },
         {
             "title": "Jak się masz?",
             "body": "How are you?",
             "cta": "Miłego dnia!",
             "brand": None,
+            "visual": None,
         },
         {
             "title": "Szczęśliwej podróży!",
             "body": None,
             "cta": None,
             "brand": None,
+            "visual": None,
         },
         {
             "title": "Często tu przychodzisz?",
             "body": None,
             "cta": None,
             "brand": None,
+            "visual": None,
         },
     ]
     assert all(
@@ -415,7 +419,13 @@ Slide 5: Często tu przychodzisz?"""
 
 def test_content_pack_carousel_parser_preserves_unlabelled_text():
     assert content_pack_routes._parse_content_pack_carousel_slides("Miłego dnia!") == [
-        {"title": "Miłego dnia!", "body": None, "cta": None, "brand": None}
+        {
+            "title": "Miłego dnia!",
+            "body": None,
+            "cta": None,
+            "brand": None,
+            "visual": None,
+        }
     ]
 
 
@@ -428,8 +438,54 @@ def test_content_pack_carousel_parser_promotes_cta_only_copy_to_required_title()
             "body": None,
             "cta": None,
             "brand": None,
+            "visual": None,
         }
     ]
+
+
+def test_tip_is_body_copy_and_visual_is_background_metadata_only():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Phrase: Miłego dnia!
+Translation: Have a nice day!
+Tip: Use with friends and younger people.
+Visual: Two young people smiling and waving"""
+    )
+
+    assert slides == [
+        {
+            "title": "Miłego dnia!",
+            "body": "Have a nice day!\nUse with friends and younger people.",
+            "cta": None,
+            "brand": None,
+            "visual": "Two young people smiling and waving",
+        }
+    ]
+
+
+def test_visual_direction_is_categorical_and_strips_text_request():
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "Realistic photography",
+        1,
+        "Sunset background with greeting text",
+    )
+
+    assert "warm sunset atmosphere" in prompt
+    assert "friendly conversational interaction" in prompt
+    assert "Sunset background with greeting text" not in prompt
+    assert "greeting text" not in prompt
+    assert "no readable text" in prompt
+
+
+def test_cover_and_content_prompts_reserve_role_specific_negative_space():
+    cover = content_pack_routes._build_slide_background_prompt("Style", 0)
+    content = content_pack_routes._build_slide_background_prompt("Style", 1)
+
+    assert "Slide role: cover" in cover
+    assert "large, calm, low-detail headline area" in cover
+    assert "main subject lower-right" in cover
+    assert "Slide role: content" in content
+    assert "upper-left and central-left area calm and low-detail" in content
 
 
 def test_content_pack_carousel_builds_six_distinct_text_free_backgrounds(

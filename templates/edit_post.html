@@ -114,6 +114,7 @@
                         </div>
                     </div>
 
+                    {% if not post.prompt or not post.prompt.startswith('SMU_OVERLAY_V1:') %}
                     <div class="mb-4">
                         <label class="form-label fw-semibold">Image Prompt</label>
                         <textarea name="prompt" class="form-control"
@@ -123,6 +124,7 @@
                             Used if you choose to regenerate the image.
                         </div>
                     </div>
+                    {% endif %}
 
                   <div class="mb-4">
     <label class="form-label fw-semibold d-block">

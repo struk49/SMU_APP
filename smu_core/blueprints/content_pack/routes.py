@@ -14,10 +14,10 @@ content_pack_bp = Blueprint("content_pack", __name__)
 
 SLIDE_MARKER_RE = re.compile(r"^Slide\s+\d+\s*:\s*(.*)$", re.IGNORECASE)
 SLIDE_FIELD_RE = re.compile(
-    r"^(Title|Subtitle|Phrase|Translation|Body|CTA)\s*:\s*(.*)$",
+    r"^(Title|Subtitle|Phrase|Translation|Body|Tip|CTA|Visual)\s*:\s*(.*)$",
     re.IGNORECASE,
 )
-BODY_FIELD_NAMES = {"subtitle", "translation", "body"}
+BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one bold smartphone focal object "
     "and an abstract red-and-white Polish flag colour motif, with strong negative space.",
@@ -41,7 +41,13 @@ def _append_slide_value(slide, field, value):
 
 
 def _parse_slide_block(lines):
-    slide = {"title": None, "body": None, "cta": None, "brand": None}
+    slide = {
+        "title": None,
+        "body": None,
+        "cta": None,
+        "brand": None,
+        "visual": None,
+    }
     active_field = None
 
     for line in lines:
@@ -51,13 +57,14 @@ def _parse_slide_block(lines):
         if field_match:
             label, value = field_match.groups()
             label = label.lower()
-            active_field = (
-                "title"
-                if label in {"title", "phrase"}
-                else "body"
-                if label in BODY_FIELD_NAMES
-                else "cta"
-            )
+            if label in {"title", "phrase"}:
+                active_field = "title"
+            elif label in BODY_FIELD_NAMES:
+                active_field = "body"
+            elif label == "visual":
+                active_field = "visual"
+            else:
+                active_field = "cta"
             _append_slide_value(slide, active_field, value)
         else:
             _append_slide_value(slide, active_field or "title", line.strip())
@@ -83,7 +90,13 @@ def _parse_content_pack_carousel_slides(carousel_idea):
             slide = _parse_slide_block(lines)
             return [slide] if slide else []
         return [
-            {"title": line.strip(), "body": None, "cta": None, "brand": None}
+            {
+                "title": line.strip(),
+                "body": None,
+                "cta": None,
+                "brand": None,
+                "visual": None,
+            }
             for line in lines
             if line.strip()
         ]
@@ -106,8 +119,32 @@ def _parse_content_pack_carousel_slides(carousel_idea):
     return [slide for block in blocks if (slide := _parse_slide_block(block))]
 
 
-def _build_slide_background_prompt(styled_image_prompt, slide_index):
+def _safe_visual_direction(visual):
+    """Map untrusted visual prose to text-free scene categories."""
+    normalized = (visual or "").lower()
+    directions = []
+    if any(word in normalized for word in ("sunset", "sunrise", "golden hour")):
+        directions.append("warm sunset atmosphere")
+    if any(word in normalized for word in ("people", "person", "smiling", "waving", "greeting")):
+        directions.append("friendly conversational interaction")
+    if any(word in normalized for word in ("phone", "mobile", "app")):
+        directions.append("smartphone with abstract interface shapes")
+    if any(word in normalized for word in ("object", "vocabulary", "food", "travel")):
+        directions.append("clean arrangement of relevant everyday objects")
+    return ", ".join(directions) if directions else None
+
+
+def _build_slide_background_prompt(styled_image_prompt, slide_index, visual=None):
     visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
+    safe_visual_direction = _safe_visual_direction(visual)
+    role = "cover" if slide_index == 0 else "content"
+    composition_direction = (
+        "Reserve a large, calm, low-detail headline area across the upper-left and "
+        "centre; keep the main subject lower-right and use few supporting elements."
+        if role == "cover"
+        else "Keep the upper-left and central-left area calm and low-detail for later "
+        "typography; position subjects or objects mainly to the right or lower portion."
+    )
     return f"""
 Create a text-free visual background for one slide in a cohesive Instagram carousel.
 
@@ -122,6 +159,11 @@ Mandatory carousel style lock:
 
 Slide-specific visual concept:
 {visual_concept}
+{f"Additional sanitized scene direction: {safe_visual_direction}." if safe_visual_direction else ""}
+
+Slide role: {role}
+Text-overlay composition:
+{composition_direction}
 
 Design:
 - maintain one consistent art style, colour palette, lighting, and premium brand mood
@@ -273,6 +315,7 @@ def create_content_pack_carousel():
             background_prompt = _build_slide_background_prompt(
                 styled_image_prompt,
                 index,
+                slide["visual"],
             )
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,

@@ -113,7 +113,11 @@
                     <div class="mb-4">
                         <h2 class="h6 fw-semibold text-muted">AI Prompt</h2>
                         <div class="caption-box">
-                            {{ post.prompt }}
+                            {% if post.prompt.startswith('SMU_OVERLAY_V1:') %}
+                                Content Pack carousel artwork
+                            {% else %}
+                                {{ post.prompt }}
+                            {% endif %}
                         </div>
                     </div>
                 {% endif %}

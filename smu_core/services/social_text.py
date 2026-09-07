@@ -130,22 +130,46 @@ def _draw_block(draw, text, box, *, max_lines, start_size):
     if not text:
         return
     left, top, right, bottom = box
+    panel_padding = max(10, round(min(right - left, bottom - top) * 0.05))
+    stroke_width = 1
     font, rendered, spacing = _fit_block(
         draw,
         text,
-        max_width=right - left,
-        max_height=bottom - top,
+        max_width=right - left - 2 * (panel_padding + stroke_width),
+        max_height=bottom - top - 2 * (panel_padding + stroke_width),
         max_lines=max_lines,
         start_size=start_size,
     )
+    measured = draw.multiline_textbbox(
+        (0, 0), rendered, font=font, spacing=spacing, stroke_width=stroke_width
+    )
+    text_x = left + panel_padding - measured[0]
+    text_y = top + panel_padding - measured[1]
+    text_bounds = draw.multiline_textbbox(
+        (text_x, text_y),
+        rendered,
+        font=font,
+        spacing=spacing,
+        stroke_width=stroke_width,
+    )
+    draw.rounded_rectangle(
+        (
+            text_bounds[0] - panel_padding,
+            text_bounds[1] - panel_padding,
+            text_bounds[2] + panel_padding,
+            text_bounds[3] + panel_padding,
+        ),
+        radius=max(8, panel_padding),
+        fill=(8, 12, 20, 220),
+    )
     draw.multiline_text(
-        (left, top),
+        (text_x, text_y),
         rendered,
         font=font,
         fill=(255, 255, 255),
         spacing=spacing,
         align="left",
-        stroke_width=max(1, font.size // 28),
+        stroke_width=stroke_width,
         stroke_fill=(0, 0, 0),
     )
 
@@ -190,7 +214,7 @@ def render_social_text(
         raise SocialTextRenderError("invalid_image") from exc
 
     width, height = image.size
-    margin = max(16, round(min(width, height) * 0.06))
+    margin = max(16, round(min(width, height) * 0.08))
     if width - 2 * margin < MIN_FONT_SIZE or height - 2 * margin < 4 * MIN_FONT_SIZE:
         raise SocialTextRenderError("image_dimensions_unsupported")
 
