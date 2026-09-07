@@ -804,6 +804,11 @@ CTA selection:
   trying, or practice; product content may invite seeing how it works or trying a
   supported capability; stories may invite a genuine shared experience or question.
 - Do not force a CTA or use engagement bait.
+- Prefer specific claims grounded in the source over stock marketing phrases, and
+  prefer concrete source-backed observations over abstract benefit claims.
+- Avoid generic CTA wording such as "Start creating smarter", "Take your content to
+  the next level", "Work smarter", or "Get started today" unless the source or brand
+  brief specifically supports it. Refer to a concrete next action where possible.
 
 Image direction:
 - IMAGE_PROMPT describes one adaptable, text-free visual concept that supports the

@@ -551,6 +551,11 @@ def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
     assert "vocabulary moves from cover through distinct terms" in prompt
     assert "Never reuse the same hook across platforms" in prompt
     assert "six outputs differ in supported hook, structure, CTA, tone, length" in prompt
+    assert "specific claims grounded in the source" in prompt
+    assert "concrete source-backed observations" in prompt
+    assert "Start creating smarter" in prompt
+    assert "Get started today" in prompt
+    assert "Refer to a concrete next action" in prompt
 
 
 def test_content_pack_section_extraction_image_style_and_placeholder_behaviour():

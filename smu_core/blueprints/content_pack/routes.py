@@ -18,6 +18,8 @@ SLIDE_FIELD_RE = re.compile(
     re.IGNORECASE,
 )
 BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
+CONTENT_PACK_CAROUSEL_MIN_SLIDES = 2
+CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
     "negative space, without trying to illustrate every detail of the source.",
@@ -123,6 +125,29 @@ def _parse_content_pack_carousel_slides(carousel_idea):
         blocks.append(current_block)
 
     return [slide for block in blocks if (slide := _parse_slide_block(block))]
+
+
+def _normalize_content_pack_carousel_slides(slides):
+    if len(slides) <= CONTENT_PACK_CAROUSEL_MAX_SLIDES:
+        return slides
+
+    final_cta_index = next(
+        (
+            index
+            for index in range(len(slides) - 1, 0, -1)
+            if slides[index]["layout_role"] == "cta"
+        ),
+        None,
+    )
+    if final_cta_index is None:
+        return slides[:CONTENT_PACK_CAROUSEL_MAX_SLIDES]
+
+    retained_content = [
+        slide
+        for index, slide in enumerate(slides[1:], start=1)
+        if index != final_cta_index and slide["layout_role"] != "cta"
+    ][: CONTENT_PACK_CAROUSEL_MAX_SLIDES - 2]
+    return [slides[0], *retained_content, slides[final_cta_index]]
 
 
 def _safe_visual_direction(visual):
@@ -309,10 +334,16 @@ def create_content_pack_carousel():
 
     try:
         styled_image_prompt = apply_image_style(image_prompt, image_style)
-        slides = _parse_content_pack_carousel_slides(carousel_idea)[:6]
+        slides = _normalize_content_pack_carousel_slides(
+            _parse_content_pack_carousel_slides(carousel_idea)
+        )
 
-        if len(slides) < 2:
-            flash("Carousel needs at least 2 slides.", "danger")
+        if len(slides) < CONTENT_PACK_CAROUSEL_MIN_SLIDES:
+            flash(
+                "SMU couldn't create enough carousel slides from this Content Pack. "
+                "Please regenerate the Content Pack and try again.",
+                "danger",
+            )
             return redirect(url_for("content_pack"))
 
         required_images = len(slides)

@@ -449,6 +449,214 @@ def test_content_pack_carousel_parser_promotes_cta_only_copy_to_required_title()
     ]
 
 
+@pytest.mark.parametrize("slide_count", [2, 6])
+def test_carousel_normalizer_accepts_valid_slide_counts_unchanged(slide_count):
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "\n".join(
+            f"Slide {index}: Value {index}"
+            for index in range(1, slide_count + 1)
+        )
+    )
+
+    assert content_pack_routes._normalize_content_pack_carousel_slides(slides) == slides
+
+
+@pytest.mark.parametrize("slide_count", [7, 9])
+def test_carousel_normalizer_caps_oversized_pack_and_preserves_final_cta(
+    slide_count,
+):
+    blocks = ["Slide 1:\nTitle: Cover"]
+    blocks.extend(
+        f"Slide {index}:\nTitle: Value {index}"
+        for index in range(2, slide_count)
+    )
+    blocks.append(f"Slide {slide_count}:\nCTA: Final action")
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "\n".join(blocks)
+    )
+
+    normalized = content_pack_routes._normalize_content_pack_carousel_slides(slides)
+
+    assert len(normalized) == 6
+    assert [slide["title"] for slide in normalized] == [
+        "Cover",
+        "Value 2",
+        "Value 3",
+        "Value 4",
+        "Value 5",
+        "Final action",
+    ]
+    assert normalized[-1]["layout_role"] == "cta"
+
+
+def test_carousel_normalizer_without_cta_retains_first_six_in_source_order():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "\n".join(f"Slide {index}: Value {index}" for index in range(1, 9))
+    )
+
+    normalized = content_pack_routes._normalize_content_pack_carousel_slides(slides)
+
+    assert [slide["title"] for slide in normalized] == [
+        "Value 1",
+        "Value 2",
+        "Value 3",
+        "Value 4",
+        "Value 5",
+        "Value 6",
+    ]
+
+
+def test_carousel_normalizer_keeps_only_final_semantic_cta_when_oversized():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Cover
+Slide 2:
+CTA: Early action
+Slide 3:
+Title: Value 3
+Slide 4:
+Title: Value 4
+Slide 5:
+Title: Value 5
+Slide 6:
+Title: Value 6
+Slide 7:
+Title: Value 7
+Slide 8:
+CTA: Final action"""
+    )
+
+    normalized = content_pack_routes._normalize_content_pack_carousel_slides(slides)
+
+    assert [slide["title"] for slide in normalized] == [
+        "Cover",
+        "Value 3",
+        "Value 4",
+        "Value 5",
+        "Value 6",
+        "Final action",
+    ]
+    assert normalized[-1]["layout_role"] == "cta"
+
+
+def test_oversized_carousel_creates_six_rows_and_reserves_six_credits(
+    client, module
+):
+    module.app.config["SMU_ADMIN_EMAILS"] = set()
+    user = create_user(module, email="normalized-six@example.com")
+    usage = module.UserUsage(
+        user_id=user.id,
+        plan="starter",
+        ai_images_used=14,
+        content_packs_used=0,
+        usage_period_start=utc_now() - timedelta(days=1),
+        usage_period_end=utc_now() + timedelta(days=30),
+    )
+    module.db.session.add(usage)
+    module.db.session.commit()
+    login(client, user)
+    oversized = "\n".join(
+        ["Slide 1:\nTitle: Cover"]
+        + [f"Slide {index}:\nTitle: Value {index}" for index in range(2, 7)]
+        + ["Slide 7:\nCTA: Final action"]
+    )
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        oversized,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+
+    assert response.status_code == 302
+    assert len(posts) == 6
+    assert module.db.session.get(module.UserUsage, usage.id).ai_images_used == 20
+    assert [payload["overlay"]["title"] for payload in payloads] == [
+        "Cover",
+        "Value 2",
+        "Value 3",
+        "Value 4",
+        "Value 5",
+        "Final action",
+    ]
+    assert [payload["layout_role"] for payload in payloads] == [
+        "cover",
+        "info",
+        "info",
+        "info",
+        "info",
+        "cta",
+    ]
+
+
+def test_oversized_carousel_credit_message_uses_normalized_slide_count(
+    client, module
+):
+    module.app.config["SMU_ADMIN_EMAILS"] = set()
+    user = create_user(module, email="normalized-insufficient@example.com")
+    usage = module.UserUsage(
+        user_id=user.id,
+        plan="starter",
+        ai_images_used=15,
+        content_packs_used=0,
+        usage_period_start=utc_now() - timedelta(days=1),
+        usage_period_end=utc_now() + timedelta(days=30),
+    )
+    module.db.session.add(usage)
+    module.db.session.commit()
+    login(client, user)
+    oversized = "\n".join(
+        [f"Slide {index}: Value {index}" for index in range(1, 7)]
+        + ["Slide 7:\nCTA: Final action"]
+    )
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        oversized,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert (
+        "You need 6 AI image credits to create this carousel, but you have 5 remaining."
+        in response.get_data(as_text=True)
+    )
+    assert module.Post.query.count() == 0
+    assert module.db.session.get(module.UserUsage, usage.id).ai_images_used == 15
+
+
+def test_carousel_with_fewer_than_two_valid_slides_uses_safe_message(
+    client, module
+):
+    user = create_user(module)
+    login(client, user)
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "Slide 1:\nTitle: Only valid slide\nSlide 2:",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "SMU couldn&#39;t create enough carousel slides" in response.get_data(
+        as_text=True
+    )
+    assert module.Post.query.count() == 0
+    assert module.UserUsage.query.filter_by(user_id=user.id).first() is None
+
+
 def test_tip_is_body_copy_and_visual_is_background_metadata_only():
     slides = content_pack_routes._parse_content_pack_carousel_slides(
         """Slide 1:
