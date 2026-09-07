@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from datetime import timedelta
 
 import pytest
 from flask import template_rendered, url_for
@@ -8,6 +9,7 @@ from conftest import create_user, login
 from smu_core.models import BrandBrief, Post
 from smu_core.blueprints.content_pack import routes as content_pack_routes
 from smu_core.services import carousel_generation
+from smu_core.services.time_utils import utc_now
 
 
 CONTENT_PACK_RESULT = """INSTAGRAM_CAPTION:
@@ -264,7 +266,92 @@ def test_create_content_pack_carousel_creates_grouped_posts(client, app, module,
         assert title not in payload["background_prompt"]
     assert all("no readable text" in payload["background_prompt"] for payload in payloads)
     assert all(payload["overlay"]["body"] is None for payload in payloads)
+    assert all(payload["credits_reserved"] is True for payload in payloads)
     assert response.location.endswith(f"/post/{posts[0].id}")
+
+
+@pytest.mark.parametrize(("images_used", "remaining"), [(15, 5), (20, 0)])
+def test_content_pack_carousel_rejects_insufficient_whole_carousel_credits(
+    client, module, images_used, remaining
+):
+    module.app.config["SMU_ADMIN_EMAILS"] = set()
+    user = create_user(module, email=f"limited-{images_used}@example.com")
+    usage = module.UserUsage(
+        user_id=user.id,
+        plan="starter",
+        ai_images_used=images_used,
+        content_packs_used=0,
+        usage_period_start=utc_now() - timedelta(days=1),
+        usage_period_end=utc_now() + timedelta(days=30),
+    )
+    module.db.session.add(usage)
+    module.db.session.commit()
+    login(client, user)
+    six_slides = "\n".join(
+        f"Slide {index}: Credit test {index}" for index in range(1, 7)
+    )
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        six_slides,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert (
+        f"You need 6 AI image credits to create this carousel, but you have "
+        f"{remaining} remaining."
+    ) in response.get_data(as_text=True)
+    assert module.Post.query.count() == 0
+    assert module.db.session.get(module.UserUsage, usage.id).ai_images_used == images_used
+
+
+def test_six_image_content_pack_reserves_and_consumes_exactly_six_credits(
+    client, module, monkeypatch
+):
+    module.app.config["SMU_ADMIN_EMAILS"] = set()
+    user = create_user(module, email="six-credits@example.com")
+    usage = module.UserUsage(
+        user_id=user.id,
+        plan="starter",
+        ai_images_used=14,
+        content_packs_used=0,
+        usage_period_start=utc_now() - timedelta(days=1),
+        usage_period_end=utc_now() + timedelta(days=30),
+    )
+    module.db.session.add(usage)
+    module.db.session.commit()
+    login(client, user)
+    six_slides = "\n".join(
+        f"Slide {index}: Successful credit test {index}" for index in range(1, 7)
+    )
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        six_slides,
+    )
+    monkeypatch.setattr(
+        module,
+        "generate_openai_image",
+        lambda prompt, **kwargs: "https://cdn.test/generated.jpg",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result},
+    )
+    assert response.status_code == 302
+    assert module.Post.query.count() == 6
+    assert module.db.session.get(module.UserUsage, usage.id).ai_images_used == 20
+
+    module.generate_pending_carousel_images()
+    module.generate_pending_carousel_images()
+
+    assert {post.status for post in module.Post.query.all()} == {"draft"}
+    assert module.db.session.get(module.UserUsage, usage.id).ai_images_used == 20
 
 
 def test_content_pack_carousel_parser_maps_structural_fields():
@@ -557,6 +644,8 @@ def test_content_pack_carousel_rejects_oversized_slide_without_rows(
     assert response.status_code == 302
     assert response.location.endswith("/content-pack")
     assert module.Post.query.count() == 0
+    usage = module.UserUsage.query.filter_by(user_id=user.id).one()
+    assert usage.ai_images_used == 0
 
 
 def test_create_content_pack_carousel_validation_creates_no_rows(client, module):

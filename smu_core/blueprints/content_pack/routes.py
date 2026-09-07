@@ -231,6 +231,7 @@ def create_content_pack_carousel():
     extract_content_pack_section = _content_pack_helper("extract_content_pack_section")
     apply_image_style = _content_pack_helper("apply_image_style")
     get_placeholder_image_url = _content_pack_helper("get_placeholder_image_url")
+    reserve_ai_image_credits = _content_pack_helper("reserve_ai_image_credits")
 
     caption = extract_content_pack_section(content_pack_result, "INSTAGRAM_CAPTION")
     carousel_idea = extract_content_pack_section(content_pack_result, "CAROUSEL_IDEA")
@@ -252,6 +253,19 @@ def create_content_pack_carousel():
             flash("Carousel needs at least 2 slides.", "danger")
             return redirect(url_for("content_pack"))
 
+        required_images = len(slides)
+        user = current_user._get_current_object()
+        if not reserve_ai_image_credits(user, required_images, commit=False):
+            db.session.rollback()
+            summary = _content_pack_helper("get_usage_summary")(user)
+            remaining = summary["ai_images_remaining"]
+            flash(
+                f"You need {required_images} AI image credits to create this "
+                f"carousel, but you have {remaining} remaining.",
+                "warning",
+            )
+            return redirect(url_for("content_pack"))
+
         group_id = str(uuid.uuid4())
         placeholder_url = get_placeholder_image_url()
 
@@ -266,6 +280,7 @@ def create_content_pack_carousel():
                 body=slide["body"],
                 cta=slide["cta"],
                 brand=slide["brand"],
+                credits_reserved=True,
             )
 
             post = Post(
@@ -299,6 +314,7 @@ def create_content_pack_carousel():
         return redirect(url_for("view_post", post_id=first_post.id))
 
     except Exception as e:
+        db.session.rollback()
         print("Create content pack carousel error:", e)
         flash(f"Failed to create content pack carousel: {e}", "danger")
         return redirect(url_for("content_pack"))
