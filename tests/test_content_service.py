@@ -384,7 +384,8 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
         call["input"].split()
     )
     assert "do not use emoji" in call["input"]
-    assert "text-free scene only" in call["input"]
+    assert "text-free scene or composition" in call["input"]
+    assert len(client.calls) == 1
 
     with pytest.raises(Exception, match="OPENAI_API_KEY is missing"):
         content.generate_content_pack(
@@ -393,6 +394,73 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
             openai_api_key="",
             openai_client=client,
         )
+
+
+def test_content_pack_prompt_is_source_faithful_and_platform_native():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "Representative source",
+        "Natural brand voice",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = client.calls[0]["input"]
+
+    assert "Never invent facts, statistics, testimonials" in prompt
+    assert "Never turn uncertainty into a factual claim" in prompt
+    assert "Preserve important names, terminology, and supplied facts" in prompt
+    assert "Instagram: use a strong first-line hook" in prompt
+    assert "Facebook: provide more context or story" in prompt
+    assert "Do not copy the Instagram caption verbatim" in prompt
+    assert "LinkedIn: be professional but human" in prompt
+    assert "Pinterest: provide a concise discovery/search-oriented" in prompt
+    assert "Reddit: lead with context and genuine discussion" in prompt
+    assert "X: focus on one strong supported idea" in prompt
+    assert "Threads:" not in prompt
+
+
+def test_content_pack_prompt_requires_variety_and_natural_writing():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "Representative source",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = client.calls[0]["input"]
+    normalized_prompt = " ".join(prompt.split())
+
+    assert "distinct content opportunity, not a resized rewrite" in prompt
+    assert "Do not repeat the same opening or default CTA everywhere" in prompt
+    assert "generic AI openings" in prompt
+    assert "In today's fast-paced world" in prompt
+    assert "Unlock the power of" in prompt
+    assert "A CTA is optional" in prompt
+    assert "Never invent an offer" in normalized_prompt
+
+
+def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "Representative source",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = client.calls[0]["input"]
+    normalized_prompt = " ".join(prompt.split())
+
+    assert "ONE PRIMARY IDEA PER SLIDE" in prompt
+    assert "Use 2 to 6 consecutively numbered slides" in prompt
+    assert "without filler" in prompt
+    assert "Image copy must be fast to understand, minimal, swipeable" in prompt
+    assert "Caption copy carries context, explanation, story" in prompt
+    assert "must complement rather than duplicate the carousel" in normalized_prompt
+    assert "Title/Subtitle for a cover" in prompt
+    assert "Phrase/Translation" in prompt
+    assert "Title/Body for information" in prompt
+    assert "CTA for the final action" in prompt
+    assert "Visual describes only a simple, relevant, text-free scene" in prompt
+    assert "Never put exact overlay copy in Visual" in prompt
+    assert "do not use emoji, decorative symbols, or icon glyphs" in prompt
 
 
 def test_content_pack_section_extraction_image_style_and_placeholder_behaviour():

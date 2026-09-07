@@ -19,18 +19,18 @@ SLIDE_FIELD_RE = re.compile(
 )
 BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
 SLIDE_VISUAL_CONCEPTS = (
-    "A clean introductory hero composition with one bold smartphone focal object "
-    "and an abstract red-and-white Polish flag colour motif, with strong negative space.",
-    "A welcoming conversational scene with two people greeting each other, natural "
-    "gestures, and generous negative space; use no speech bubbles.",
-    "A close conversational crop focused on expressive faces and hand gestures, with "
-    "shallow depth of field and an uncluttered overlay area.",
-    "A neatly arranged vocabulary still life of recognisable everyday objects, using "
-    "varied scale and an icon-like composition without books or labelled packaging.",
-    "A balanced two-sided comparison scene with paired or mirrored matching objects, "
-    "linked by abstract shapes only and without written labels.",
-    "A closing product-focused composition featuring a smartphone with abstract UI "
-    "blocks and icons only, framed as a clear final call-to-action moment.",
+    "A clean introductory hero composition with one relevant focal subject and strong "
+    "negative space, without trying to illustrate every detail of the source.",
+    "A simple scene or object grouping that supports the first distinct value point, "
+    "with generous negative space and no speech bubbles.",
+    "A different but cohesive scene supporting the next distinct idea, using an "
+    "uncluttered composition and one clear focal subject.",
+    "A restrained detail, object, or human moment that supports the slide's idea "
+    "without becoming a literal diagram or labelled infographic.",
+    "A calm takeaway composition with minimal supporting elements, clear visual "
+    "hierarchy, and room for concise overlay copy.",
+    "A simple closing composition with one relevant focal element and substantial "
+    "clean space for a conclusion or call to action.",
 )
 
 
