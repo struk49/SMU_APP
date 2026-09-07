@@ -378,8 +378,7 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
     assert "Source content:\nTranscript text" in call["input"]
     assert "INSTAGRAM_CAPTION:" in call["input"]
     assert "REDDIT_POST:" in call["input"]
-    assert "Phrase:" in call["input"]
-    assert "Translation:" in call["input"]
+    assert "ONLY when the source genuinely teaches vocabulary" in call["input"]
     assert "rather than combining both into one field" in " ".join(
         call["input"].split()
     )
@@ -454,13 +453,104 @@ def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
     assert "Image copy must be fast to understand, minimal, swipeable" in prompt
     assert "Caption copy carries context, explanation, story" in prompt
     assert "must complement rather than duplicate the carousel" in normalized_prompt
-    assert "Title/Subtitle for a cover" in prompt
-    assert "Phrase/Translation" in prompt
-    assert "Title/Body for information" in prompt
-    assert "CTA for the final action" in prompt
+    assert "cover uses Title and optional Subtitle" in prompt
+    assert "use Phrase," in prompt
+    assert "Translation, optional Tip" in prompt
+    assert "use Title, optional Body, optional CTA, and Visual" in prompt
+    assert "A closing CTA is one short action" in prompt
     assert "Visual describes only a simple, relevant, text-free scene" in prompt
     assert "Never put exact overlay copy in Visual" in prompt
     assert "do not use emoji, decorative symbols, or icon glyphs" in prompt
+
+
+def test_content_pack_prompt_classifies_source_without_exposing_classification():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "SMU is improving its content generator.",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = client.calls[0]["input"]
+    normalized_prompt = " ".join(prompt.split())
+
+    for category in (
+        "Product / SaaS",
+        "Educational",
+        "Tutorial / How-to",
+        "Build in Public",
+        "Story",
+        "Opinion",
+        "Announcement",
+        "List / Tips",
+        "Vocabulary / Language Learning",
+        "Community / Engagement",
+    ):
+        assert category in prompt
+    assert "Silently choose exactly one category" in prompt
+    assert "classification is internal only" in normalized_prompt
+    assert "Never name or expose it in the output" in prompt
+
+
+def test_content_pack_prompt_gates_vocabulary_fields_by_semantic_category():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "Representative source",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = " ".join(client.calls[0]["input"].split())
+
+    assert "ONLY when the source genuinely teaches vocabulary" in prompt
+    assert "use Phrase, Translation, optional Tip, and Visual" in prompt
+    assert "For every other category" in prompt
+    assert "use Title, optional Body, optional CTA, and Visual" in prompt
+    assert "Never use Phrase or Translation for these categories" in prompt
+    assert "SMU topics all use this general Title/Body structure" in prompt
+
+
+def test_content_pack_prompt_preserves_tense_and_rejects_generic_claims():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "I'm improving SMU so it understands source text.",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = " ".join(client.calls[0]["input"].split())
+
+    assert "Preserve the source tense" in prompt
+    assert "must not be rewritten as completed or proven" in prompt
+    for banned_phrase in (
+        "One-size-fits-all",
+        "Work smarter, not harder",
+        "Game-changer",
+        "Unlock the power of",
+        "Take your content to the next level",
+        "In today's world",
+        "Revolutionary",
+        "Amazing",
+    ):
+        assert banned_phrase in prompt
+    assert "Replace generic claims with concrete source observations" in prompt
+
+
+def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "Representative source",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = " ".join(client.calls[0]["input"].split())
+
+    assert "Use 2 to 6 consecutively numbered slides" in prompt
+    assert "Body is limited to two short sentences" in prompt
+    assert "A closing CTA is one short action, never a paragraph" in prompt
+    assert "educational content moves from hook to lesson" in prompt
+    assert "products move from problem to solution" in prompt
+    assert "stories move from situation to challenge" in prompt
+    assert "vocabulary moves from cover through distinct terms" in prompt
+    assert "Never reuse the same hook across platforms" in prompt
+    assert "six outputs differ in supported hook, structure, CTA, tone, length" in prompt
 
 
 def test_content_pack_section_extraction_image_style_and_placeholder_behaviour():

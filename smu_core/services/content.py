@@ -697,10 +697,20 @@ audience questions, and any genuine educational, discussion, or story angles.
 Use only the opportunities the source actually supports; do not output this internal
 analysis or add new section headings.
 
+Semantic classification:
+- Silently choose exactly one category before writing: Product / SaaS, Educational,
+  Tutorial / How-to, Build in Public, Story, Opinion, Announcement, List / Tips,
+  Vocabulary / Language Learning, or Community / Engagement.
+- Use the category to choose hooks, carousel structure, tone, and CTAs.
+- This classification is internal only. Never name or expose it in the output.
+
 Source fidelity:
 - Never invent facts, statistics, testimonials, personal experiences, product
-  features, prices, offers, dates, quotes, actions, or results absent from the source.
+  features or capabilities, prices, offers, dates, customers, revenue, downloads,
+  quotes, actions, or results absent from the source.
 - Never turn uncertainty into a factual claim or pretend to be a customer.
+- Preserve the source tense. Work described as planned, in progress, or hoped for
+  must not be rewritten as completed or proven.
 - Preserve important names, terminology, and supplied facts accurately.
 - For a simple topic or idea, creative framing is allowed, but invented specifics
   must not be presented as facts.
@@ -715,11 +725,15 @@ Writing quality:
   "Whether you're a...", "Look no further", "Here's the thing", "Did you know?",
   "Want to learn more?", "Are you ready?", "Let's dive in!", or
   "Here's everything you need to know" unless the source genuinely justifies one.
+- Also avoid "One-size-fits-all", "Work smarter, not harder", "Take your content
+  to the next level", "In today's world", "Revolutionary", and vague claims that
+  something is "Amazing". Replace generic claims with concrete source observations.
 - Never include the literal instruction marker "/human" in customer-facing copy.
 
 Content variety:
 - Treat each platform as a distinct content opportunity, not a resized rewrite.
-- Vary supported angles, hooks, structure, and CTAs across platforms.
+- Ensure the six outputs differ in supported hook, structure, CTA, tone, length,
+  and perspective. Reject simple rewrites before returning the pack.
 - Do not repeat the same opening or default CTA everywhere.
 - A CTA is optional. When useful, choose a source- and platform-appropriate action
   such as save, try, answer, discuss, share, follow, visit, read, or watch. Never
@@ -727,8 +741,9 @@ Content variety:
 
 Platform strategy:
 - Instagram: use a strong first-line hook, conversational and scannable value, and
-  a natural CTA when appropriate. Complement the carousel instead of repeating it.
-- Facebook: provide more context or story, natural paragraphs, and a genuine
+  a natural CTA when appropriate. Keep it short and emotional, normally 1-2 short
+  paragraphs. Complement the carousel instead of repeating it.
+- Facebook: provide more context or storytelling, natural paragraphs, and a genuine
   discussion opportunity. Do not copy the Instagram caption verbatim.
 - LinkedIn: be professional but human, selecting a supported insight, lesson,
   practical takeaway, observation, or build-in-public angle. Avoid fake corporate
@@ -736,9 +751,16 @@ Platform strategy:
 - Pinterest: provide a concise discovery/search-oriented title and description with
   useful keywords incorporated naturally. Avoid keyword stuffing.
 - Reddit: lead with context and genuine discussion in a natural community tone.
-  Avoid promotional copy and fabricated personal experience.
+  Avoid promotional copy and fabricated personal experience. End with a genuine,
+  source-relevant question rather than comment bait.
 - X: focus on one strong supported idea in concise, punchy, natural copy. Do not
-  compress the whole source into one post or create a thread.
+  compress the whole source into one post or create a thread; keep it naturally
+  within platform limits and suitable to become part of a thread later.
+
+Hook selection:
+- Choose a curiosity, contrarian, problem, promise, story, or educational hook from
+  the source meaning. It must be specific, supported, and non-clickbait.
+- Never reuse the same hook across platforms or fabricate controversy or urgency.
 
 Carousel strategy:
 - Use 2 to 6 consecutively numbered slides and only as many as the source can
@@ -754,16 +776,34 @@ Carousel strategy:
   translation for vocabulary; a 2-7 word info title with one short supporting
   sentence; and a 2-10 word closing CTA. These are writing targets, not truncation
   rules: preserve meaning and never cut supplied wording blindly.
-- Use Title/Subtitle for a cover, Phrase/Translation and optional very short Body for
-  vocabulary, Title/Body for information, and CTA for the final action when useful.
-- For vocabulary, put the target-language wording in Phrase and its meaning in
-  Translation rather than combining both into one field.
+- The cover uses Title and optional Subtitle. Content uses either Title with Body,
+  or the vocabulary structure below. Body is limited to two short sentences.
+  A closing CTA is one short action, never a paragraph.
+- ONLY when the source genuinely teaches vocabulary or language terms, use Phrase,
+  Translation, optional Tip, and Visual. Put the target-language wording in Phrase
+  and its meaning in Translation rather than combining both into one field.
+- For every other category, including Product / SaaS, Educational, Tutorial / How-to,
+  Build in Public, Story, Opinion, Announcement, List / Tips, and Community /
+  Engagement, use Title, optional Body, optional CTA, and Visual. Never use Phrase
+  or Translation for these categories. Business, marketing, productivity, AI,
+  estate-agent, LinkedIn, news, tutorial, feature-launch, and SMU topics all use this
+  general Title/Body structure unless they genuinely teach language vocabulary.
+- Adapt story flow to the category: educational content moves from hook to lesson,
+  example, and takeaway; products move from problem to solution, operation, and
+  benefit; stories move from situation to challenge, turning point, and lesson;
+  vocabulary moves from cover through distinct terms to an optional closing CTA.
 - Structural labels are metadata and must not be repeated inside their values.
 - Visual describes only a simple, relevant, text-free scene or composition. Avoid
   overly literal diagrams, written signs, logos, fake interfaces, and instructions
   to render the overlay wording. Never put exact overlay copy in Visual.
 - Overlay copy must use normal textual characters supported by a conventional
   sans-serif font; do not use emoji, decorative symbols, or icon glyphs.
+
+CTA selection:
+- Match any CTA to the category and goal. Educational content may invite saving,
+  trying, or practice; product content may invite seeing how it works or trying a
+  supported capability; stories may invite a genuine shared experience or question.
+- Do not force a CTA or use engagement bait.
 
 Image direction:
 - IMAGE_PROMPT describes one adaptable, text-free visual concept that supports the
@@ -780,18 +820,7 @@ FACEBOOK_POST:
 ...
 
 CAROUSEL_IDEA:
-Slide 1:
-Title: ...
-Subtitle: ...
-Visual: ...
-Slide 2:
-Phrase: ...
-Translation: ...
-Body: ...
-Visual: ...
-Slide 3:
-CTA: ...
-Visual: ...
+...
 
 PINTEREST_PIN_TITLE:
 ...
