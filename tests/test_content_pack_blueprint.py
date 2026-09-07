@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 
+import pytest
 from flask import template_rendered, url_for
 
 import app as smu_app
@@ -426,6 +427,79 @@ CTA: Learn more Polish with Polish with Me"""
         for value in payload["overlay"].values():
             if value:
                 assert value not in payload["background_prompt"]
+
+
+@pytest.mark.parametrize(
+    ("image_style", "expected_treatment"),
+    [
+        ("realistic", "high-quality photography"),
+        ("viral_carousel", "viral Instagram business carousel"),
+        ("luxury", "luxury brand aesthetic"),
+        ("minimal", "minimalist modern design"),
+        ("corporate", "professional corporate social media design"),
+        ("pixar", "3D animated film look"),
+    ],
+)
+def test_content_pack_carousel_keeps_selected_style_across_all_six_slides(
+    client, app, module, image_style, expected_treatment
+):
+    user = create_user(module, email=f"{image_style}@example.com")
+    login(client, user)
+    structured_slides = "\n".join(
+        f"Slide {index}: Private overlay copy {index}" for index in range(1, 7)
+    )
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        structured_slides,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result, "image_style": image_style},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+    backgrounds = [payload["background_prompt"] for payload in payloads]
+
+    assert response.status_code == 302
+    assert len(backgrounds) == 6
+    assert len(set(backgrounds)) == 6
+    assert all(expected_treatment in prompt for prompt in backgrounds)
+    assert all("Mandatory carousel style lock:" in prompt for prompt in backgrounds)
+    assert all(
+        "Private overlay copy" not in prompt for prompt in backgrounds
+    )
+
+
+@pytest.mark.parametrize("image_style", ["", "unknown-style"])
+def test_content_pack_carousel_default_and_unknown_style_use_existing_fallback(
+    client, module, image_style
+):
+    user = create_user(module, email=f"fallback-{image_style or 'default'}@example.com")
+    login(client, user)
+    structured_slides = "\n".join(
+        f"Slide {index}: Isolated copy {index}" for index in range(1, 7)
+    )
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        structured_slides,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack_result, "image_style": image_style},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    backgrounds = [
+        carousel_generation.parse_overlay_prompt(post.prompt)["background_prompt"]
+        for post in posts
+    ]
+
+    assert response.status_code == 302
+    assert len(backgrounds) == 6
+    assert all("Bright image direction" in prompt for prompt in backgrounds)
+    assert all("\nStyle:" not in prompt for prompt in backgrounds)
+    assert all("Mandatory carousel style lock:" in prompt for prompt in backgrounds)
 
 
 def test_content_pack_carousel_preserves_exact_polish_slide_copy(

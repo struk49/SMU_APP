@@ -114,6 +114,12 @@ Create a text-free visual background for one slide in a cohesive Instagram carou
 Shared art direction for the whole carousel:
 {styled_image_prompt}
 
+Mandatory carousel style lock:
+- the shared art direction above controls the rendering medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
 Slide-specific visual concept:
 {visual_concept}
 
@@ -137,6 +143,9 @@ Critical text-free requirements:
 - no text on screens
 - no text on paper
 - no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- text-free requirements override any conflicting typography or signage in the style direction
 """
 
 
