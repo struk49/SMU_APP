@@ -5,6 +5,7 @@ from flask_login import current_user, login_required
 
 from smu_core.extensions import db
 from smu_core.models import BetaApplication, Feedback
+from smu_core.services.access import is_admin_user
 
 
 beta_bp = Blueprint("beta", __name__)
@@ -22,14 +23,6 @@ def _log_event(event_name, **fields):
     log_event = current_app.extensions.get("smu_log_event")
     if log_event:
         log_event(event_name, **fields)
-
-
-def is_current_user_admin():
-    admin_emails = current_app.config.get("SMU_ADMIN_EMAILS", set())
-    return (
-        current_user.is_authenticated
-        and current_user.email.lower() in admin_emails
-    )
 
 
 def beta_apply():
@@ -92,7 +85,7 @@ def beta_apply():
 
 @login_required
 def admin_beta():
-    if not is_current_user_admin():
+    if not is_admin_user(current_user):
         abort(404)
 
     applications = BetaApplication.query.order_by(
@@ -111,7 +104,7 @@ def admin_beta():
 
 @login_required
 def update_beta_application_status(application_id):
-    if not is_current_user_admin():
+    if not is_admin_user(current_user):
         abort(404)
 
     status = request.form.get("status", "").strip().lower()

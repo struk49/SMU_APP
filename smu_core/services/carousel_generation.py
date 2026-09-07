@@ -40,6 +40,7 @@ def build_content_pack_overlay_prompt(
     body=None,
     cta=None,
     brand=None,
+    credits_reserved=False,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -54,6 +55,7 @@ def build_content_pack_overlay_prompt(
         or not _valid_optional_overlay_text(body, MAX_OVERLAY_BODY_LENGTH)
         or not _valid_optional_overlay_text(cta, MAX_OVERLAY_CTA_LENGTH)
         or not _valid_optional_overlay_text(brand, MAX_OVERLAY_BRAND_LENGTH)
+        or not isinstance(credits_reserved, bool)
     ):
         raise OverlayPayloadError()
 
@@ -68,6 +70,8 @@ def build_content_pack_overlay_prompt(
             "brand": brand,
         },
     }
+    if credits_reserved:
+        payload["credits_reserved"] = True
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -98,7 +102,16 @@ def parse_overlay_prompt(prompt):
         raise OverlayPayloadError() from exc
 
     expected_keys = {"version", "kind", "background_prompt", "overlay"}
-    if not isinstance(payload, dict) or set(payload) != expected_keys:
+    allowed_keys = expected_keys | {"credits_reserved"}
+    if (
+        not isinstance(payload, dict)
+        or not expected_keys.issubset(payload)
+        or not set(payload).issubset(allowed_keys)
+        or (
+            "credits_reserved" in payload
+            and not isinstance(payload["credits_reserved"], bool)
+        )
+    ):
         raise OverlayPayloadError()
     if payload["version"] != OVERLAY_PAYLOAD_VERSION:
         raise OverlayPayloadError()
@@ -185,7 +198,15 @@ def generate_pending_carousel_images(
         reserved_credit = False
 
         try:
-            if reserve_image_credits and not reserve_image_credits(pending_post, 1):
+            overlay_payload = parse_overlay_prompt(pending_post.prompt)
+            credits_pre_reserved = bool(
+                overlay_payload and overlay_payload.get("credits_reserved")
+            )
+            if (
+                reserve_image_credits
+                and not credits_pre_reserved
+                and not reserve_image_credits(pending_post, 1)
+            ):
                 pending_post.status = "generation_failed"
                 db_session.commit()
                 failed_count += 1
@@ -202,8 +223,7 @@ def generate_pending_carousel_images(
                 )
                 continue
 
-            reserved_credit = bool(reserve_image_credits)
-            overlay_payload = parse_overlay_prompt(pending_post.prompt)
+            reserved_credit = credits_pre_reserved or bool(reserve_image_credits)
             if overlay_payload is None:
                 image_url = image_generator(pending_post.prompt)
             else:

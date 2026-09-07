@@ -20,7 +20,11 @@ def registration_mode():
 
 def is_admin_user(user):
     email = (getattr(user, "email", "") or "").strip().lower()
-    admin_emails = current_app.config.get("SMU_ADMIN_EMAILS") or set()
+    admin_emails = {
+        configured_email.strip().lower()
+        for configured_email in current_app.config.get("SMU_ADMIN_EMAILS") or set()
+        if isinstance(configured_email, str) and configured_email.strip()
+    }
     return bool(email and email in admin_emails)
 
 

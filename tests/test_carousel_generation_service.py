@@ -324,6 +324,36 @@ def test_phase_two_payload_supports_structured_overlay_and_old_v1_payloads():
     }
 
 
+def test_pre_reserved_carousel_row_skips_second_reservation_and_releases_on_failure(
+    app, module
+):
+    user = create_user(module)
+    post = make_pending(module, user, group_id="pre-reserved", sort_order=0)
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Private copy",
+        credits_reserved=True,
+    )
+    module.db.session.commit()
+    reserve_calls = []
+    release_calls = []
+
+    def fail_generation(prompt, **kwargs):
+        raise RuntimeError("failed")
+
+    result = run_worker(
+        module,
+        fail_generation,
+        reserve_image_credits=lambda post, count: reserve_calls.append(post.id),
+        release_image_credits=lambda post, count: release_calls.append(post.id),
+    )
+
+    assert result["failed_count"] == 1
+    assert reserve_calls == []
+    assert release_calls == [post.id]
+    assert module.db.session.get(module.Post, post.id).status == "generation_failed"
+
+
 def test_phase_two_payload_normalizes_empty_optional_fields_to_null():
     prompt = carousel_generation.build_content_pack_overlay_prompt(
         "Text-free background",

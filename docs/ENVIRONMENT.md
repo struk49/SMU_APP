@@ -94,7 +94,7 @@ The current code reads these environment variables.
 | --- | --- | --- | --- | --- | --- |
 | `SECRET_KEY` | Required for production | Flask session signing secret | `a-long-random-secret` | `dev-secret-key` | Yes |
 | `DATABASE_URL` | Optional locally, required for hosted DB | SQLAlchemy database URL | `postgresql://user:pass@host/db` | `sqlite:///posts.db` | Yes |
-| `SMU_ADMIN_EMAILS` | Optional | Comma-separated admin allowlist for beta admin views | `admin@example.com,owner@example.com` | empty set | No, but avoid exposing private emails unnecessarily |
+| `SMU_ADMIN_EMAILS` | Optional | Comma-separated admin allowlist for product access, commercial quota bypass, and admin views | `admin@example.com,owner@example.com` | empty set | No, but avoid exposing private emails unnecessarily |
 | `OPENAI_API_KEY` | Required for OpenAI features | OpenAI API access | `sk-...` | empty string | Yes |
 | `CLOUDINARY_CLOUD_NAME` | Required for Cloudinary upload features | Cloudinary cloud name | `my-cloud` | unset | No |
 | `CLOUDINARY_API_KEY` | Required for Cloudinary upload features | Cloudinary API key | `1234567890` | unset | Yes |

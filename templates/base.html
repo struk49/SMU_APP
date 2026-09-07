@@ -195,7 +195,14 @@
                                 id="accountNavMenu"
                                 aria-labelledby="accountNavButton"
                             >
-                                <li><span class="dropdown-item-text app-user">{{ current_user.email }}</span></li>
+                                <li>
+                                    <span class="dropdown-item-text app-user">
+                                        {{ current_user.email }}
+                                        {% if is_admin_user(current_user) %}
+                                            <span class="badge bg-primary ms-1">Admin</span>
+                                        {% endif %}
+                                    </span>
+                                </li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item app-logout-link" href="{{ url_for('logout') }}">Logout</a></li>
                             </ul>

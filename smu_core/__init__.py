@@ -41,11 +41,14 @@ def create_app(config_object=None):
         flash("Your session expired. Please try again.", "warning")
         return redirect(request.referrer or url_for("index"))
 
-    from smu_core.services.access import has_product_access
+    from smu_core.services.access import has_product_access, is_admin_user
 
     @app.context_processor
     def inject_access_helpers():
-        return {"has_product_access": has_product_access}
+        return {
+            "has_product_access": has_product_access,
+            "is_admin_user": is_admin_user,
+        }
 
     from smu_core.blueprints.accounts import accounts_bp
     from smu_core.blueprints.auth import auth_bp

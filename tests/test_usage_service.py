@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
+from types import SimpleNamespace
 
 from conftest import create_user
 from smu_core.services import usage
@@ -128,6 +131,47 @@ def test_reserve_and_release_image_credits(app, module):
         db_session=module.db.session,
     )
     assert user_usage.ai_images_used == 1
+
+
+def test_competing_whole_carousel_reservations_cannot_oversubscribe(app, module):
+    user = create_user(module)
+    user_usage = module.UserUsage(
+        user_id=user.id,
+        plan="starter",
+        ai_images_used=10,
+        content_packs_used=0,
+        usage_period_start=fixed_now() - timedelta(days=1),
+        usage_period_end=fixed_now() + timedelta(days=20),
+    )
+    module.db.session.add(user_usage)
+    module.db.session.commit()
+
+    user_identity = SimpleNamespace(
+        id=user.id,
+        email=user.email,
+        subscription_current_period_end=None,
+    )
+    barrier = Barrier(2)
+
+    def reserve_six():
+        with app.app_context():
+            barrier.wait()
+            try:
+                return usage.reserve_image_credits(
+                    user_identity,
+                    count=6,
+                    usage_model=module.UserUsage,
+                    db_session=module.db.session,
+                    now_provider=fixed_now,
+                )
+            finally:
+                module.db.session.remove()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda _: reserve_six(), range(2)))
+
+    assert sorted(results) == [False, True]
+    assert module.db.session.get(module.UserUsage, user_usage.id).ai_images_used == 16
 
 
 def test_admin_users_bypass_usage_limits(app, module):

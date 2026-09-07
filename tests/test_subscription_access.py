@@ -1,7 +1,7 @@
 from werkzeug.security import generate_password_hash
 
 from conftest import create_post, create_user, login
-from smu_core.services.access import has_product_access
+from smu_core.services.access import has_product_access, is_admin_user
 from smu_core.services import billing
 
 
@@ -34,6 +34,74 @@ def test_access_helper_allows_only_active_trialing_admin_or_open_mode(app, modul
     app.config["SMU_ADMIN_EMAILS"] = set()
     app.config["REGISTRATION_MODE"] = "open"
     assert has_product_access(user) is True
+
+
+def test_admin_allowlist_is_case_insensitive_and_whitespace_normalized(app, module):
+    user = create_user(module, email="owner@example.com")
+    app.config.update(
+        REGISTRATION_MODE="subscription",
+        SMU_ADMIN_EMAILS={"  OWNER@EXAMPLE.COM  "},
+    )
+
+    assert is_admin_user(user) is True
+    assert has_product_access(user) is True
+
+
+def test_canceled_admin_keeps_product_access_and_truthful_stripe_state(
+    client, app, module
+):
+    app.config.update(
+        REGISTRATION_MODE="subscription",
+        SMU_ADMIN_EMAILS={"owner@example.com"},
+    )
+    admin = create_user(module, email="owner@example.com")
+    admin.subscription_status = "canceled"
+    admin.subscription_cancel_at_period_end = False
+    module.db.session.commit()
+    login(client, admin)
+
+    response = client.get("/content-pack")
+    refreshed = module.db.session.get(module.User, admin.id)
+
+    assert response.status_code == 200
+    assert refreshed.subscription_status == "canceled"
+    assert refreshed.subscription_cancel_at_period_end is False
+    assert "Admin" in response.get_data(as_text=True)
+
+
+def test_admin_indicator_is_not_shown_for_normal_active_user(client, app, module):
+    app.config.update(
+        REGISTRATION_MODE="subscription",
+        SMU_ADMIN_EMAILS={"owner@example.com"},
+    )
+    user = activate_subscription(
+        module,
+        create_user(module, email="customer@example.com"),
+    )
+    login(client, user)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert '<span class="badge bg-primary ms-1">Admin</span>' not in response.get_data(
+        as_text=True
+    )
+
+
+def test_admin_access_does_not_bypass_post_ownership(client, app, module):
+    app.config.update(
+        REGISTRATION_MODE="subscription",
+        SMU_ADMIN_EMAILS={"admin@example.com"},
+    )
+    admin = create_user(module, email="admin@example.com")
+    other = create_user(module, email="other@example.com")
+    other_post = create_post(module, other)
+    login(client, admin)
+
+    response = client.get(f"/post/{other_post.id}")
+
+    assert response.status_code == 302
+    assert response.location.endswith("/")
 
 
 def test_public_and_billing_routes_remain_accessible_without_subscription(client):

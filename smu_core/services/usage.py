@@ -339,6 +339,7 @@ def reserve_image_credits(
     usage_model,
     db_session,
     now_provider=utc_now,
+    commit=True,
 ):
     if is_admin_user(user):
         return True
@@ -350,11 +351,22 @@ def reserve_image_credits(
         now_provider=now_provider,
     )
 
-    if remaining_ai_image_credits(usage) < count:
+    limit = get_plan_limits(usage.plan)["ai_images"]
+    updated = usage_model.query.filter(
+        usage_model.id == usage.id,
+        usage_model.ai_images_used <= limit - count,
+    ).update(
+        {usage_model.ai_images_used: usage_model.ai_images_used + count},
+        synchronize_session=False,
+    )
+    if not updated:
         return False
 
-    usage.ai_images_used += count
-    db_session.commit()
+    if commit:
+        db_session.commit()
+    else:
+        db_session.flush()
+    db_session.expire(usage)
     return True
 
 

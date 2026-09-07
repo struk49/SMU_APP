@@ -847,12 +847,13 @@ def get_usage_summary(user):
     )
 
 
-def reserve_ai_image_credits(user, count=1):
+def reserve_ai_image_credits(user, count=1, *, commit=True):
     return usage_service.reserve_image_credits(
         user,
         count=count,
         usage_model=UserUsage,
         db_session=db.session,
+        commit=commit,
     )
 
 
@@ -946,6 +947,12 @@ app.extensions.setdefault("smu_content_pack_helpers", {}).update({
     "get_usage_summary": lambda *args, **kwargs: get_usage_summary(
         *args,
         **kwargs,
+    ),
+    "reserve_ai_image_credits": (
+        lambda *args, **kwargs: reserve_ai_image_credits(*args, **kwargs)
+    ),
+    "release_ai_image_credits": (
+        lambda *args, **kwargs: release_ai_image_credits(*args, **kwargs)
     ),
     "can_generate_content_pack": (
         lambda *args, **kwargs: can_generate_content_pack(*args, **kwargs)
