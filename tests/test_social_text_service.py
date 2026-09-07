@@ -27,6 +27,12 @@ def source_bytes(*, mode="RGB", size=(1000, 1000)):
     return buffer.getvalue()
 
 
+def source_bytes_with_color(color, *, size=(1000, 1000)):
+    buffer = BytesIO()
+    Image.new("RGB", size, color).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 def test_bundled_production_font_and_license_are_present():
     assert social_text.FONT_PATH.is_file()
     assert social_text.FONT_PATH.name == "SMUSocialText-Regular.ttf"
@@ -252,6 +258,364 @@ def test_renderer_uses_consistent_contrast_panels_and_controlled_stroke(monkeypa
     assert len(panels) == 3
     assert all(call["stroke_width"] == 1 for call in text_calls)
     assert len({panel[1]["fill"] for panel in panels}) == 1
+
+
+@pytest.mark.parametrize("layout_role", ["cover", "phrase", "info", "cta"])
+def test_role_uses_direct_unified_typography_on_calm_background(monkeypatch, layout_role):
+    panels = []
+    original = ImageDraw.ImageDraw.rounded_rectangle
+
+    def capture(self, bounds, *args, **kwargs):
+        panels.append((bounds, kwargs))
+        return original(self, bounds, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "rounded_rectangle", capture)
+    social_text.render_social_text(
+        source_bytes(),
+        title="Designed headline",
+        body="Comfortably readable supporting copy.",
+        cta="Take one action",
+        brand="SMU",
+        layout_role=layout_role,
+    )
+
+    assert panels == []
+
+
+@pytest.mark.parametrize(
+    "background",
+    [
+        (248, 248, 248),
+        (8, 12, 20),
+        None,
+    ],
+)
+def test_unified_contrast_surface_is_readable_on_light_dark_and_busy_backgrounds(
+    monkeypatch, background
+):
+    text_calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        text_calls.append(kwargs)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    if background is None:
+        image = Image.new("RGB", (1000, 1000))
+        pixels = image.load()
+        for y in range(1000):
+            for x in range(1000):
+                value = 245 if (x // 40 + y // 40) % 2 else 25
+                pixels[x, y] = (value, 80, 255 - value)
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        image_bytes = buffer.getvalue()
+    else:
+        image_bytes = source_bytes_with_color(background)
+
+    output = social_text.render_social_text(
+        image_bytes,
+        title="Readable title",
+        body="Readable supporting copy",
+        layout_role="info",
+    )
+
+    assert output.startswith(b"\x89PNG")
+    assert text_calls
+    expected_fill = (
+        (22, 26, 34, 255)
+        if background == (248, 248, 248)
+        else (255, 255, 255, 255)
+    )
+    if background is not None:
+        assert all(call["fill"] == expected_fill for call in text_calls)
+    assert all(call["stroke_width"] >= 1 for call in text_calls)
+
+
+def test_role_aware_long_bilingual_copy_never_clips(monkeypatch):
+    calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        calls.append((position, text, kwargs))
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        title="Dziękuję bardzo",
+        body="Thank you very much — a useful phrase for polite everyday conversations.",
+        layout_role="phrase",
+    )
+    measurement = ImageDraw.Draw(Image.new("RGB", (1024, 1024)))
+    margin = round(1024 * 0.08)
+    for position, text, kwargs in calls:
+        bounds = measurement.multiline_textbbox(
+            position,
+            text,
+            font=kwargs["font"],
+            spacing=kwargs["spacing"],
+            stroke_width=kwargs["stroke_width"],
+        )
+        assert bounds[0] >= margin
+        assert bounds[1] >= margin
+        assert bounds[2] <= 1024 - margin
+        assert bounds[3] <= 1024 - margin
+
+
+def test_cover_role_does_not_render_internal_cover_label(monkeypatch):
+    rendered_text = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        rendered_text.append(text)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(
+        source_bytes(), title="Customer headline", layout_role="cover"
+    )
+
+    assert [" ".join(text.splitlines()) for text in rendered_text] == [
+        "Customer headline"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("layout_role", "expected"),
+    [("cover", "hero"), ("phrase", "split"), ("info", "editorial"), ("cta", "cta")],
+)
+def test_role_selects_deterministic_internal_layout(layout_role, expected):
+    assert social_text.select_design_layout(layout_role) == expected
+    assert social_text.select_design_layout(layout_role) == expected
+
+
+def test_same_input_renders_identical_bytes_without_random_selection():
+    kwargs = {
+        "title": "Deterministic title",
+        "body": "Supporting copy",
+        "layout_role": "info",
+        "design_style": "corporate",
+    }
+    first = social_text.render_social_text(source_bytes(), **kwargs)
+    second = social_text.render_social_text(source_bytes(), **kwargs)
+    assert first == second
+
+
+def test_style_tokens_cover_actual_styles_and_unknown_uses_default():
+    assert set(social_text.STYLE_TOKENS) == {
+        "default",
+        "realistic",
+        "viral_carousel",
+        "luxury",
+        "minimal",
+        "corporate",
+        "pixar",
+    }
+    assert social_text._style_tokens("unknown") == social_text.STYLE_TOKENS["default"]
+
+
+def test_existing_styles_change_bounded_design_tokens_deterministically():
+    outputs = {
+        style: social_text.render_social_text(
+            source_bytes(),
+            title="One representative headline",
+            body="One concise supporting point.",
+            layout_role="info",
+            design_style=style,
+        )
+        for style in social_text.STYLE_TOKENS
+    }
+    assert len(set(outputs.values())) == len(social_text.STYLE_TOKENS)
+
+
+def test_light_and_dark_regions_choose_opposite_readable_foregrounds():
+    box = (80, 80, 520, 700)
+    light = Image.open(BytesIO(source_bytes_with_color((245, 245, 245)))).convert("RGBA")
+    dark = Image.open(BytesIO(source_bytes_with_color((12, 18, 28)))).convert("RGBA")
+
+    assert social_text._analyze_text_region(light, box)["foreground"] == (22, 26, 34, 255)
+    assert social_text._analyze_text_region(dark, box)["foreground"] == (255, 255, 255, 255)
+
+
+def test_busy_background_uses_one_localized_surface_bounded_to_typography(monkeypatch):
+    image = Image.new("RGB", (1000, 1000))
+    draw = ImageDraw.Draw(image)
+    for x in range(0, 600, 20):
+        draw.rectangle((x, 0, x + 9, 800), fill="white")
+        draw.rectangle((x + 10, 0, x + 19, 800), fill="black")
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    surfaces = []
+    original = ImageDraw.ImageDraw.rounded_rectangle
+
+    def capture(self, bounds, *args, **kwargs):
+        if kwargs.get("fill") in {(8, 12, 20, 112), (248, 248, 244, 130)}:
+            surfaces.append(bounds)
+        return original(self, bounds, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "rounded_rectangle", capture)
+    social_text.render_social_text(
+        buffer.getvalue(),
+        title="Busy but readable",
+        body="Localized protection follows this typography.",
+        layout_role="info",
+    )
+
+    assert len(surfaces) == 1
+    left, top, right, bottom = surfaces[0]
+    assert (right - left) * (bottom - top) / 1_000_000 < 0.35
+    assert bottom < round(1000 * 0.78)
+
+
+def test_brand_is_never_injected_and_supplied_brand_still_renders(monkeypatch):
+    rendered = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        rendered.append(" ".join(text.splitlines()))
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(
+        source_bytes(), title="No default brand", layout_role="cover"
+    )
+    assert rendered == ["No default brand"]
+
+    rendered.clear()
+    social_text.render_social_text(
+        source_bytes(),
+        title="Supplied brand",
+        brand="Customer Brand",
+        layout_role="cover",
+    )
+    assert rendered == ["Supplied brand", "Customer Brand"]
+
+
+def test_balanced_cover_wrapping_preserves_exact_words(monkeypatch):
+    rendered = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        rendered.append(text)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    title = "Different Platforms. Different Content."
+    social_text.render_social_text(source_bytes(), title=title, layout_role="cover")
+
+    assert " ".join(rendered[0].splitlines()) == title
+    assert 2 <= len(rendered[0].splitlines()) <= 4
+
+
+@pytest.mark.parametrize(
+    "colour",
+    [(250, 250, 250), (180, 180, 180), (28, 28, 28), (4, 4, 4)],
+)
+def test_uniform_regions_use_direct_typography_without_fallback(colour):
+    image = Image.open(BytesIO(source_bytes_with_color(colour))).convert("RGBA")
+    analysis = social_text._analyze_text_region(image, (80, 80, 540, 790))
+
+    assert analysis["luminance_deviation"] == 0
+    assert analysis["local_variation"] == 0
+    assert analysis["busy"] is False
+
+
+def test_local_transition_density_distinguishes_calm_subject_from_busy_texture():
+    calm = Image.new("RGB", (1000, 1000), (238, 232, 218))
+    calm_draw = ImageDraw.Draw(calm)
+    calm_draw.ellipse((310, 220, 780, 690), fill=(130, 62, 48))
+    busy = Image.new("RGB", (1000, 1000))
+    busy_draw = ImageDraw.Draw(busy)
+    for y in range(0, 1000, 20):
+        for x in range(0, 1000, 20):
+            fill = (245, 245, 245) if (x // 20 + y // 20) % 2 else (10, 10, 10)
+            busy_draw.rectangle((x, y, x + 19, y + 19), fill=fill)
+
+    calm_analysis = social_text._analyze_text_region(calm, (80, 80, 820, 820))
+    busy_analysis = social_text._analyze_text_region(busy, (80, 80, 820, 820))
+
+    assert calm_analysis["busy"] is False
+    assert busy_analysis["busy"] is True
+    assert busy_analysis["local_variation"] > calm_analysis["local_variation"]
+
+
+def test_clean_cta_uses_direct_typography_without_card(monkeypatch):
+    surfaces = []
+    original = ImageDraw.ImageDraw.rounded_rectangle
+
+    def capture(self, bounds, *args, **kwargs):
+        surfaces.append((bounds, kwargs.get("fill")))
+        return original(self, bounds, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "rounded_rectangle", capture)
+    social_text.render_social_text(
+        source_bytes_with_color((22, 28, 38)),
+        title="Build the next post",
+        body="Start with one clear idea.",
+        layout_role="cta",
+    )
+
+    assert surfaces == []
+
+
+def test_hero_headline_is_materially_larger_than_editorial(monkeypatch):
+    calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        calls.append(kwargs["font"].size)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(
+        source_bytes(size=(1024, 1024)), title="Make content distinct", layout_role="cover"
+    )
+    hero_size = calls[0]
+    calls.clear()
+    social_text.render_social_text(
+        source_bytes(size=(1024, 1024)), title="Make content distinct", layout_role="info"
+    )
+
+    assert hero_size >= 85
+    assert hero_size > calls[0]
+
+
+def test_style_tokens_create_substantive_hierarchy_and_spacing_differences():
+    tokens = social_text.STYLE_TOKENS
+
+    assert tokens["viral_carousel"]["headline"] > tokens["default"]["headline"]
+    assert tokens["viral_carousel"]["region_width"] > tokens["default"]["region_width"]
+    assert tokens["luxury"]["gap"] > tokens["viral_carousel"]["gap"]
+    assert tokens["luxury"]["region_width"] < tokens["viral_carousel"]["region_width"]
+    assert tokens["minimal"]["strength"] <= tokens["default"]["strength"]
+    assert tokens["realistic"]["strength"] < tokens["default"]["strength"]
+    assert tokens["corporate"]["accent"] == "divider"
+    assert tokens["pixar"]["accent"] == "circle"
+
+
+def test_viral_headline_is_larger_than_default_when_safe(monkeypatch):
+    calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        calls.append(kwargs["font"].size)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    sizes = {}
+    for style in ("default", "viral_carousel"):
+        calls.clear()
+        social_text.render_social_text(
+            source_bytes(size=(1024, 1024)),
+            title="Create boldly",
+            layout_role="cover",
+            design_style=style,
+        )
+        sizes[style] = calls[0]
+
+    assert sizes["viral_carousel"] > sizes["default"]
 
 
 def test_output_remains_compatible_with_existing_jpeg_normalization():

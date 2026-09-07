@@ -171,22 +171,28 @@ def _build_slide_background_prompt(
     visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
     safe_visual_direction = _safe_visual_direction(visual)
     role = layout_role or ("cover" if slide_index == 0 else "info")
+    design_layout = {
+        "cover": "hero",
+        "phrase": "split",
+        "info": "editorial",
+        "cta": "cta",
+    }[role]
     composition_directions = {
         "cover": (
-            "Reserve a large, calm, low-detail headline area across the upper-left and "
-            "centre; keep the main subject lower-right and use few supporting elements."
+            "Keep approximately the left 50% calm and low-detail as the text-safe zone; "
+            "place the main subject primarily on the right or lower-right."
         ),
         "phrase": (
-            "Reserve a prominent calm area in the upper half for a short phrase and a "
-            "separate quieter area below it; keep the subject mainly to the right."
+            "Keep the left and upper-left calm and low-detail as the phrase-safe zone; "
+            "place the subject or primary object mainly on the right or lower-right."
         ),
         "info": (
-            "Keep the upper-left and central-left area calm and low-detail for later "
-            "typography; position subjects or objects mainly to the right or lower portion."
+            "Keep the left and central-left area calm and low-detail for concise explanatory "
+            "copy; place important faces and objects primarily on the right."
         ),
         "cta": (
-            "Reserve a bold, calm central area for a closing message and call to action; "
-            "frame supporting subjects around it without cluttering the centre."
+            "Reserve a large calm central region for the closing composition, with minimal "
+            "competing detail and any subject anchored outside that region."
         ),
     }
     composition_direction = composition_directions[role]
@@ -207,6 +213,7 @@ Slide-specific visual concept:
 {f"Additional sanitized scene direction: {safe_visual_direction}." if safe_visual_direction else ""}
 
 Slide role: {role}
+Internal design layout: {design_layout}
 Text-overlay composition:
 {composition_direction}
 
@@ -215,6 +222,8 @@ Design:
 - square 1:1 format
 - high contrast
 - leave suitable uncluttered visual space for a later text overlay
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+- do not place an important subject beneath or behind the intended typography region
 
 Critical text-free requirements:
 - no readable text

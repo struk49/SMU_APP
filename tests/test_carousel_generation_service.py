@@ -350,6 +350,34 @@ def test_v1_payload_accepts_and_worker_forwards_layout_role(
 
 
 @pytest.mark.parametrize(
+    ("style_marker", "expected_style"),
+    list(carousel_generation.DESIGN_STYLE_MARKERS.items()),
+)
+def test_worker_derives_existing_design_style_without_v1_change(
+    app, module, style_marker, expected_style
+):
+    user = create_user(module, email=f"{expected_style}@example.com")
+    post = make_pending(module, user, group_id=expected_style)
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        f"Text-free background\n{style_marker}",
+        "Exact title",
+        layout_role="info",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert calls[0]["overlay"]["design_style"] == expected_style
+    assert "design_style" not in carousel_generation.parse_overlay_prompt(post.prompt)
+
+
+@pytest.mark.parametrize(
     "layout_role", ["content", "COVER", "", 1, False, [], {}]
 )
 def test_v1_payload_rejects_invalid_layout_role(layout_role):

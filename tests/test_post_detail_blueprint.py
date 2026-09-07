@@ -166,6 +166,8 @@ def test_carousel_post_loads_current_user_group_in_existing_order(
     assert "Carousel · 2 images" in html
     assert "Cover" in html
     assert 'text-dark position-absolute' not in html
+    assert "object-fit:contain" in html
+    assert "object-fit:cover" not in html
     assert "https://cdn.test/cover.jpg" in html
     assert "https://cdn.test/child.jpg" in html
 

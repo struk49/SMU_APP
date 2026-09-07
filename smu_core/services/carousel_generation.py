@@ -16,6 +16,14 @@ MAX_OVERLAY_BODY_LENGTH = 600
 MAX_OVERLAY_CTA_LENGTH = 120
 MAX_OVERLAY_BRAND_LENGTH = 120
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
+DESIGN_STYLE_MARKERS = {
+    "Style: realistic social media image": "realistic",
+    "Style: viral Instagram business carousel": "viral_carousel",
+    "Style: luxury brand aesthetic": "luxury",
+    "Style: minimalist modern design": "minimal",
+    "Style: professional corporate social media design": "corporate",
+    "Style: charming 3D animated film look": "pixar",
+}
 
 
 class OverlayPayloadError(ValueError):
@@ -32,6 +40,17 @@ def _valid_optional_overlay_text(value, max_length):
 
 def _normalize_optional_overlay_text(value):
     return None if isinstance(value, str) and value == "" else value
+
+
+def _design_style_from_background_prompt(background_prompt):
+    return next(
+        (
+            design_style
+            for marker, design_style in DESIGN_STYLE_MARKERS.items()
+            if marker in background_prompt
+        ),
+        None,
+    )
 
 
 def build_content_pack_overlay_prompt(
@@ -248,6 +267,11 @@ def generate_pending_carousel_images(
                 overlay = dict(overlay_payload["overlay"])
                 if "layout_role" in overlay_payload:
                     overlay["layout_role"] = overlay_payload["layout_role"]
+                    design_style = _design_style_from_background_prompt(
+                        overlay_payload["background_prompt"]
+                    )
+                    if design_style:
+                        overlay["design_style"] = design_style
                 image_url = image_generator(
                     overlay_payload["background_prompt"],
                     overlay=overlay,

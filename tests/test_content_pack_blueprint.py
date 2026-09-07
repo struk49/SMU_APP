@@ -705,14 +705,22 @@ def test_background_prompts_reserve_role_specific_negative_space():
     )
 
     assert "Slide role: cover" in cover
-    assert "large, calm, low-detail headline area" in cover
-    assert "main subject lower-right" in cover
+    assert "Internal design layout: hero" in cover
+    assert "left 50% calm and low-detail" in cover
+    assert "right or lower-right" in cover
     assert "Slide role: phrase" in phrase
-    assert "short phrase" in phrase
+    assert "Internal design layout: split" in phrase
+    assert "upper-left calm and low-detail" in phrase
     assert "Slide role: info" in info
-    assert "upper-left and central-left area calm and low-detail" in info
+    assert "Internal design layout: editorial" in info
+    assert "left and central-left area calm and low-detail" in info
     assert "Slide role: cta" in cta
-    assert "bold, calm central area" in cta
+    assert "Internal design layout: cta" in cta
+    assert "large calm central region" in cta
+    assert all(
+        "faces, facial features, and primary objects completely outside" in prompt
+        for prompt in (cover, phrase, info, cta)
+    )
 
 
 def test_content_pack_carousel_builds_six_distinct_text_free_backgrounds(
