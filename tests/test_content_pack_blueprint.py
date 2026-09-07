@@ -384,6 +384,7 @@ Slide 5: Często tu przychodzisz?"""
             "cta": None,
             "brand": None,
             "visual": None,
+            "layout_role": "info",
         },
         {
             "title": "Jak się masz?",
@@ -391,6 +392,7 @@ Slide 5: Często tu przychodzisz?"""
             "cta": "Miłego dnia!",
             "brand": None,
             "visual": None,
+            "layout_role": "phrase",
         },
         {
             "title": "Szczęśliwej podróży!",
@@ -398,6 +400,7 @@ Slide 5: Często tu przychodzisz?"""
             "cta": None,
             "brand": None,
             "visual": None,
+            "layout_role": "info",
         },
         {
             "title": "Często tu przychodzisz?",
@@ -405,6 +408,7 @@ Slide 5: Często tu przychodzisz?"""
             "cta": None,
             "brand": None,
             "visual": None,
+            "layout_role": "info",
         },
     ]
     assert all(
@@ -425,6 +429,7 @@ def test_content_pack_carousel_parser_preserves_unlabelled_text():
             "cta": None,
             "brand": None,
             "visual": None,
+            "layout_role": "info",
         }
     ]
 
@@ -439,6 +444,7 @@ def test_content_pack_carousel_parser_promotes_cta_only_copy_to_required_title()
             "cta": None,
             "brand": None,
             "visual": None,
+            "layout_role": "cta",
         }
     ]
 
@@ -459,6 +465,7 @@ Visual: Two young people smiling and waving"""
             "cta": None,
             "brand": None,
             "visual": "Two young people smiling and waving",
+            "layout_role": "phrase",
         }
     ]
 
@@ -477,15 +484,27 @@ def test_visual_direction_is_categorical_and_strips_text_request():
     assert "no readable text" in prompt
 
 
-def test_cover_and_content_prompts_reserve_role_specific_negative_space():
+def test_background_prompts_reserve_role_specific_negative_space():
     cover = content_pack_routes._build_slide_background_prompt("Style", 0)
-    content = content_pack_routes._build_slide_background_prompt("Style", 1)
+    phrase = content_pack_routes._build_slide_background_prompt(
+        "Style", 1, layout_role="phrase"
+    )
+    info = content_pack_routes._build_slide_background_prompt(
+        "Style", 2, layout_role="info"
+    )
+    cta = content_pack_routes._build_slide_background_prompt(
+        "Style", 5, layout_role="cta"
+    )
 
     assert "Slide role: cover" in cover
     assert "large, calm, low-detail headline area" in cover
     assert "main subject lower-right" in cover
-    assert "Slide role: content" in content
-    assert "upper-left and central-left area calm and low-detail" in content
+    assert "Slide role: phrase" in phrase
+    assert "short phrase" in phrase
+    assert "Slide role: info" in info
+    assert "upper-left and central-left area calm and low-detail" in info
+    assert "Slide role: cta" in cta
+    assert "bold, calm central area" in cta
 
 
 def test_content_pack_carousel_builds_six_distinct_text_free_backgrounds(
@@ -543,6 +562,14 @@ CTA: Learn more Polish with Polish with Me"""
         "cta": None,
         "brand": None,
     }
+    assert [payload["layout_role"] for payload in payloads] == [
+        "cover",
+        "phrase",
+        "phrase",
+        "info",
+        "phrase",
+        "cta",
+    ]
     assert len(set(backgrounds)) == 6
     assert all("CONSISTENT BRAND STYLE" in prompt for prompt in backgrounds)
     assert all("Slide-specific visual concept:" in prompt for prompt in backgrounds)

@@ -18,11 +18,11 @@
                 <div class="p-3">
                     <div class="row g-3">
                         {% for item in carousel_posts %}
-                            <div class="col-6 col-md-4 position-relative">
+                            <div class="col-6 col-md-4">
                                 {% if item.is_cover %}
-                                    <span class="badge bg-warning text-dark position-absolute m-2">
-                                        Cover
-                                    </span>
+                                    <div class="mb-1">
+                                        <span class="badge bg-warning text-dark">Cover</span>
+                                    </div>
                                 {% endif %}
 
                                 <img src="{{ item.file_url }}"

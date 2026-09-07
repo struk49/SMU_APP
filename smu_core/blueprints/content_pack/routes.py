@@ -47,6 +47,7 @@ def _parse_slide_block(lines):
         "cta": None,
         "brand": None,
         "visual": None,
+        "layout_role": "info",
     }
     active_field = None
 
@@ -59,12 +60,16 @@ def _parse_slide_block(lines):
             label = label.lower()
             if label in {"title", "phrase"}:
                 active_field = "title"
+                if label == "phrase":
+                    slide["layout_role"] = "phrase"
             elif label in BODY_FIELD_NAMES:
                 active_field = "body"
             elif label == "visual":
                 active_field = "visual"
             else:
                 active_field = "cta"
+                if slide["layout_role"] != "phrase":
+                    slide["layout_role"] = "cta"
             _append_slide_value(slide, active_field, value)
         else:
             _append_slide_value(slide, active_field or "title", line.strip())
@@ -96,6 +101,7 @@ def _parse_content_pack_carousel_slides(carousel_idea):
                 "cta": None,
                 "brand": None,
                 "visual": None,
+                "layout_role": "info",
             }
             for line in lines
             if line.strip()
@@ -134,17 +140,31 @@ def _safe_visual_direction(visual):
     return ", ".join(directions) if directions else None
 
 
-def _build_slide_background_prompt(styled_image_prompt, slide_index, visual=None):
+def _build_slide_background_prompt(
+    styled_image_prompt, slide_index, visual=None, layout_role=None
+):
     visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
     safe_visual_direction = _safe_visual_direction(visual)
-    role = "cover" if slide_index == 0 else "content"
-    composition_direction = (
-        "Reserve a large, calm, low-detail headline area across the upper-left and "
-        "centre; keep the main subject lower-right and use few supporting elements."
-        if role == "cover"
-        else "Keep the upper-left and central-left area calm and low-detail for later "
-        "typography; position subjects or objects mainly to the right or lower portion."
-    )
+    role = layout_role or ("cover" if slide_index == 0 else "info")
+    composition_directions = {
+        "cover": (
+            "Reserve a large, calm, low-detail headline area across the upper-left and "
+            "centre; keep the main subject lower-right and use few supporting elements."
+        ),
+        "phrase": (
+            "Reserve a prominent calm area in the upper half for a short phrase and a "
+            "separate quieter area below it; keep the subject mainly to the right."
+        ),
+        "info": (
+            "Keep the upper-left and central-left area calm and low-detail for later "
+            "typography; position subjects or objects mainly to the right or lower portion."
+        ),
+        "cta": (
+            "Reserve a bold, calm central area for a closing message and call to action; "
+            "frame supporting subjects around it without cluttering the centre."
+        ),
+    }
+    composition_direction = composition_directions[role]
     return f"""
 Create a text-free visual background for one slide in a cohesive Instagram carousel.
 
@@ -312,10 +332,12 @@ def create_content_pack_carousel():
         placeholder_url = get_placeholder_image_url()
 
         for index, slide in enumerate(slides):
+            layout_role = "cover" if index == 0 else slide["layout_role"]
             background_prompt = _build_slide_background_prompt(
                 styled_image_prompt,
                 index,
                 slide["visual"],
+                layout_role,
             )
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,
@@ -324,6 +346,7 @@ def create_content_pack_carousel():
                 cta=slide["cta"],
                 brand=slide["brand"],
                 credits_reserved=True,
+                layout_role=layout_role,
             )
 
             post = Post(

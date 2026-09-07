@@ -15,6 +15,7 @@ MAX_OVERLAY_TITLE_LENGTH = 180
 MAX_OVERLAY_BODY_LENGTH = 600
 MAX_OVERLAY_CTA_LENGTH = 120
 MAX_OVERLAY_BRAND_LENGTH = 120
+OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
 
 
 class OverlayPayloadError(ValueError):
@@ -41,6 +42,7 @@ def build_content_pack_overlay_prompt(
     cta=None,
     brand=None,
     credits_reserved=False,
+    layout_role=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -56,6 +58,13 @@ def build_content_pack_overlay_prompt(
         or not _valid_optional_overlay_text(cta, MAX_OVERLAY_CTA_LENGTH)
         or not _valid_optional_overlay_text(brand, MAX_OVERLAY_BRAND_LENGTH)
         or not isinstance(credits_reserved, bool)
+        or (
+            layout_role is not None
+            and (
+                not isinstance(layout_role, str)
+                or layout_role not in OVERLAY_LAYOUT_ROLES
+            )
+        )
     ):
         raise OverlayPayloadError()
 
@@ -72,6 +81,8 @@ def build_content_pack_overlay_prompt(
     }
     if credits_reserved:
         payload["credits_reserved"] = True
+    if layout_role is not None:
+        payload["layout_role"] = layout_role
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -102,7 +113,7 @@ def parse_overlay_prompt(prompt):
         raise OverlayPayloadError() from exc
 
     expected_keys = {"version", "kind", "background_prompt", "overlay"}
-    allowed_keys = expected_keys | {"credits_reserved"}
+    allowed_keys = expected_keys | {"credits_reserved", "layout_role"}
     if (
         not isinstance(payload, dict)
         or not expected_keys.issubset(payload)
@@ -110,6 +121,13 @@ def parse_overlay_prompt(prompt):
         or (
             "credits_reserved" in payload
             and not isinstance(payload["credits_reserved"], bool)
+        )
+        or (
+            "layout_role" in payload
+            and (
+                not isinstance(payload["layout_role"], str)
+                or payload["layout_role"] not in OVERLAY_LAYOUT_ROLES
+            )
         )
     ):
         raise OverlayPayloadError()
@@ -227,9 +245,12 @@ def generate_pending_carousel_images(
             if overlay_payload is None:
                 image_url = image_generator(pending_post.prompt)
             else:
+                overlay = dict(overlay_payload["overlay"])
+                if "layout_role" in overlay_payload:
+                    overlay["layout_role"] = overlay_payload["layout_role"]
                 image_url = image_generator(
                     overlay_payload["background_prompt"],
-                    overlay=overlay_payload["overlay"],
+                    overlay=overlay,
                 )
             pending_post.file_url = image_url
             pending_post.status = "draft"

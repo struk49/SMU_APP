@@ -324,6 +324,51 @@ def test_phase_two_payload_supports_structured_overlay_and_old_v1_payloads():
     }
 
 
+@pytest.mark.parametrize("layout_role", ["cover", "phrase", "info", "cta"])
+def test_v1_payload_accepts_and_worker_forwards_layout_role(
+    app, module, layout_role
+):
+    user = create_user(module, email=f"{layout_role}@example.com")
+    post = make_pending(module, user, group_id=layout_role)
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Exact title",
+        layout_role=layout_role,
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append((prompt, kwargs))
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert carousel_generation.parse_overlay_prompt(post.prompt)["layout_role"] == layout_role
+    assert calls[0][1]["overlay"]["layout_role"] == layout_role
+
+
+@pytest.mark.parametrize(
+    "layout_role", ["content", "COVER", "", 1, False, [], {}]
+)
+def test_v1_payload_rejects_invalid_layout_role(layout_role):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", layout_role=layout_role
+        )
+
+
+def test_parser_rejects_invalid_layout_role_type():
+    malformed = (
+        'SMU_OVERLAY_V1:{"version":1,"kind":"content_pack_carousel",'
+        '"layout_role":[],"background_prompt":"Text-free background",'
+        '"overlay":{"title":"Title","body":null,"cta":null,"brand":null}}'
+    )
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.parse_overlay_prompt(malformed)
+
+
 def test_pre_reserved_carousel_row_skips_second_reservation_and_releases_on_failure(
     app, module
 ):

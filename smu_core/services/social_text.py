@@ -33,6 +33,8 @@ LINE_LIMITS = {
     "brand": 2,
 }
 
+LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
+
 
 class SocialTextRenderError(ValueError):
     """A safe, categorical rendering failure that never contains user copy."""
@@ -68,6 +70,19 @@ def _load_font(size):
         return ImageFont.truetype(str(FONT_PATH), size=size)
     except (OSError, ValueError) as exc:
         raise SocialTextRenderError("font_unavailable") from exc
+
+
+def _validate_font_support(*values):
+    font = _load_font(32)
+    missing_mask = font.getmask("\u0378")
+    missing_signature = (missing_mask.size, bytes(missing_mask))
+    for value in values:
+        for character in value:
+            if character.isspace():
+                continue
+            mask = font.getmask(character)
+            if character == "\ufffd" or (mask.size, bytes(mask)) == missing_signature:
+                raise SocialTextRenderError("unsupported_text_character")
 
 
 def _line_width(draw, text, font):
@@ -182,10 +197,15 @@ def render_social_text(
     cta=None,
     brand=None,
     layout="carousel",
+    layout_role=None,
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
     if layout != "carousel":
         raise SocialTextRenderError("unsupported_layout")
+    if layout_role is not None and (
+        not isinstance(layout_role, str) or layout_role not in LAYOUT_ROLES
+    ):
+        raise SocialTextRenderError("unsupported_layout_role")
     if not isinstance(image_bytes, bytes) or not image_bytes:
         raise SocialTextRenderError("invalid_image")
     if len(image_bytes) > MAX_INPUT_BYTES:
@@ -195,6 +215,7 @@ def render_social_text(
     body = _validated_text("body", body)
     cta = _validated_text("cta", cta)
     brand = _validated_text("brand", brand)
+    _validate_font_support(title, body, cta, brand)
 
     try:
         with Image.open(BytesIO(image_bytes)) as source:
@@ -220,38 +241,64 @@ def render_social_text(
 
     draw = ImageDraw.Draw(image)
     content_width = width - 2 * margin
-    title_box = (margin, margin, width - margin, round(height * 0.32))
-    body_box = (margin, round(height * 0.35), width - margin, round(height * 0.64))
-    cta_box = (margin, round(height * 0.70), width - margin, round(height * 0.82))
-    brand_box = (margin, round(height * 0.88), width - margin, height - margin)
+    role_layouts = {
+        "cover": ((margin, margin, width - margin, round(height * 0.40)),
+                  (margin, round(height * 0.44), width - margin, round(height * 0.64)),
+                  (margin, round(height * 0.70), width - margin, round(height * 0.82)),
+                  (margin, round(height * 0.88), width - margin, height - margin),
+                  (0.095, 0.042, 0.045, 0.032)),
+        "phrase": ((margin, margin, width - margin, round(height * 0.36)),
+                   (margin, round(height * 0.40), width - margin, round(height * 0.64)),
+                   (margin, round(height * 0.70), width - margin, round(height * 0.82)),
+                   (margin, round(height * 0.88), width - margin, height - margin),
+                   (0.085, 0.042, 0.045, 0.032)),
+        "info": ((margin, margin, width - margin, round(height * 0.30)),
+                 (margin, round(height * 0.33), width - margin, round(height * 0.68)),
+                 (margin, round(height * 0.72), width - margin, round(height * 0.82)),
+                 (margin, round(height * 0.88), width - margin, height - margin),
+                 (0.065, 0.042, 0.045, 0.032)),
+        "cta": ((margin, round(height * 0.20), width - margin, round(height * 0.47)),
+                (margin, round(height * 0.50), width - margin, round(height * 0.66)),
+                (margin, round(height * 0.70), width - margin, round(height * 0.84)),
+                (margin, round(height * 0.88), width - margin, height - margin),
+                (0.078, 0.040, 0.052, 0.032)),
+    }
+    if layout_role is None:
+        title_box = (margin, margin, width - margin, round(height * 0.32))
+        body_box = (margin, round(height * 0.35), width - margin, round(height * 0.64))
+        cta_box = (margin, round(height * 0.70), width - margin, round(height * 0.82))
+        brand_box = (margin, round(height * 0.88), width - margin, height - margin)
+        size_scales = (0.075, 0.042, 0.045, 0.032)
+    else:
+        title_box, body_box, cta_box, brand_box, size_scales = role_layouts[layout_role]
 
     _draw_block(
         draw,
         title,
         title_box,
         max_lines=LINE_LIMITS["title"],
-        start_size=max(MIN_FONT_SIZE, round(content_width * 0.075)),
+        start_size=max(MIN_FONT_SIZE, round(content_width * size_scales[0])),
     )
     _draw_block(
         draw,
         body,
         body_box,
         max_lines=LINE_LIMITS["body"],
-        start_size=max(MIN_FONT_SIZE, round(content_width * 0.042)),
+        start_size=max(MIN_FONT_SIZE, round(content_width * size_scales[1])),
     )
     _draw_block(
         draw,
         cta,
         cta_box,
         max_lines=LINE_LIMITS["cta"],
-        start_size=max(MIN_FONT_SIZE, round(content_width * 0.045)),
+        start_size=max(MIN_FONT_SIZE, round(content_width * size_scales[2])),
     )
     _draw_block(
         draw,
         brand,
         brand_box,
         max_lines=LINE_LIMITS["brand"],
-        start_size=max(MIN_FONT_SIZE, round(content_width * 0.032)),
+        start_size=max(MIN_FONT_SIZE, round(content_width * size_scales[3])),
     )
 
     output = BytesIO()

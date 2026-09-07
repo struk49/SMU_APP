@@ -338,3 +338,90 @@ def test_renderer_performs_no_file_writes_or_remote_calls(monkeypatch):
     monkeypatch.setattr(Path, "write_text", forbidden)
     output = social_text.render_social_text(source_bytes(), title="Offline title")
     assert output.startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize("unsupported", ["\ufffd", "\U0001f600"])
+def test_unsupported_font_character_fails_without_copy_leak(unsupported, caplog):
+    supplied_copy = f"Private prompt {unsupported} and caption"
+    with pytest.raises(social_text.SocialTextRenderError) as raised:
+        social_text.render_social_text(source_bytes(), title=supplied_copy)
+
+    assert raised.value.reason == "unsupported_text_character"
+    assert supplied_copy not in str(raised.value)
+    assert supplied_copy not in caplog.text
+
+
+def test_role_title_hierarchy_and_cta_position_are_deterministic(monkeypatch):
+    calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        calls.append((position, kwargs["font"].size))
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    sizes = {}
+    positions = {}
+    for role in ("cover", "phrase", "info", "cta"):
+        calls.clear()
+        social_text.render_social_text(
+            source_bytes(), title="Short title", layout_role=role
+        )
+        positions[role], sizes[role] = calls[0]
+
+    assert sizes["cover"] > sizes["phrase"] > sizes["info"]
+    assert positions["cta"][1] > positions["info"][1]
+
+
+def test_phrase_title_is_stronger_than_translation_body(monkeypatch):
+    sizes = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        sizes.append(kwargs["font"].size)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(
+        source_bytes(),
+        title="Chleb",
+        body="Bread. A staple on every table.",
+        layout_role="phrase",
+    )
+
+    assert sizes[0] > sizes[1]
+
+
+@pytest.mark.parametrize("layout_role", ["cover", "phrase", "info", "cta"])
+def test_every_role_keeps_text_inside_safe_area(monkeypatch, layout_role):
+    calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        calls.append((position, text, kwargs))
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        title="Role title",
+        body="Supporting information",
+        cta="Learn more",
+        brand="SMU",
+        layout_role=layout_role,
+    )
+
+    draw = ImageDraw.Draw(Image.new("RGB", (1024, 1024)))
+    safe_margin = round(1024 * 0.08)
+    for position, text, kwargs in calls:
+        bounds = draw.multiline_textbbox(
+            position,
+            text,
+            font=kwargs["font"],
+            spacing=kwargs["spacing"],
+            stroke_width=kwargs["stroke_width"],
+        )
+        assert bounds[0] >= safe_margin
+        assert bounds[1] >= safe_margin
+        assert bounds[2] <= 1024 - safe_margin
+        assert bounds[3] <= 1024 - safe_margin

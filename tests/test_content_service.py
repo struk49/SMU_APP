@@ -378,6 +378,13 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
     assert "Source content:\nTranscript text" in call["input"]
     assert "INSTAGRAM_CAPTION:" in call["input"]
     assert "REDDIT_POST:" in call["input"]
+    assert "Phrase:" in call["input"]
+    assert "Translation:" in call["input"]
+    assert "rather than combining both into one field" in " ".join(
+        call["input"].split()
+    )
+    assert "do not use emoji" in call["input"]
+    assert "text-free scene only" in call["input"]
 
     with pytest.raises(Exception, match="OPENAI_API_KEY is missing"):
         content.generate_content_pack(
