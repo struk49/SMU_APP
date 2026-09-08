@@ -36,6 +36,16 @@ SLIDE_VISUAL_CONCEPTS = (
 )
 
 
+def _select_layout_variant(layout_role, slide_index):
+    if layout_role == "cover":
+        return "hero_left"
+    if layout_role == "cta":
+        return "closing"
+    if layout_role == "phrase":
+        return "split_left" if slide_index % 2 else "split_right"
+    return ("editorial_statement", "visual_focus", "split_right")[slide_index % 3]
+
+
 def _append_slide_value(slide, field, value):
     if not value:
         return
@@ -192,36 +202,47 @@ def _safe_visual_direction(visual):
 
 
 def _build_slide_background_prompt(
-    styled_image_prompt, slide_index, visual=None, layout_role=None
+    styled_image_prompt,
+    slide_index,
+    visual=None,
+    layout_role=None,
+    layout_variant=None,
 ):
     visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
     safe_visual_direction = _safe_visual_direction(visual)
     role = layout_role or ("cover" if slide_index == 0 else "info")
-    design_layout = {
-        "cover": "hero",
-        "phrase": "split",
-        "info": "editorial",
-        "cta": "cta",
-    }[role]
+    design_layout = layout_variant or _select_layout_variant(role, slide_index)
     composition_directions = {
-        "cover": (
-            "Keep approximately the left 50% calm and low-detail as the text-safe zone; "
-            "place the main subject primarily on the right or lower-right."
+        "hero_left": (
+            "Reserve a broad, dramatic low-detail region across the left 60% for oversized "
+            "headline typography; place the focal subject on the right."
         ),
-        "phrase": (
-            "Keep the left and upper-left calm and low-detail as the phrase-safe zone; "
-            "place the subject or primary object mainly on the right or lower-right."
+        "hero_center": (
+            "Keep a large calm central field for oversized headline typography and frame "
+            "the focal environment around its edges."
         ),
-        "info": (
-            "Keep the left and central-left area calm and low-detail for concise explanatory "
-            "copy; place important faces and objects primarily on the right."
+        "split_left": (
+            "Keep the left half calm and low-detail for prominent typography; weight the "
+            "subject or object toward the right half without drawing a divider."
         ),
-        "cta": (
-            "Reserve a large calm central region for the closing composition, with minimal "
-            "competing detail and any subject anchored outside that region."
+        "split_right": (
+            "Keep the right half calm and low-detail for prominent typography; weight the "
+            "subject or object toward the left half without drawing a divider."
+        ),
+        "editorial_statement": (
+            "Reserve a generous calm upper and central field for an oversized editorial "
+            "statement; keep atmospheric artwork secondary and away from the type."
+        ),
+        "visual_focus": (
+            "Let one strong focal subject carry the upper composition while preserving a "
+            "wide, calm lower-third region for large typography."
+        ),
+        "closing": (
+            "Reserve a large calm central region for a confident concluding statement; keep "
+            "supporting artwork asymmetric and avoid button-like or interface shapes."
         ),
     }
-    composition_direction = composition_directions[role]
+    composition_direction = composition_directions[design_layout]
     return f"""
 Create a text-free visual background for one slide in a cohesive Instagram carousel.
 
@@ -247,6 +268,8 @@ Design:
 - maintain one consistent art style, colour palette, lighting, and premium brand mood
 - square 1:1 format
 - high contrast
+- compose the artwork and reserved typography space as one intentional social-carousel design
+- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
 - leave suitable uncluttered visual space for a later text overlay
 - keep faces, facial features, and primary objects completely outside the text-safe zone
 - do not place an important subject beneath or behind the intended typography region
@@ -399,11 +422,13 @@ def create_content_pack_carousel():
 
         for index, slide in enumerate(slides):
             layout_role = "cover" if index == 0 else slide["layout_role"]
+            layout_variant = _select_layout_variant(layout_role, index)
             background_prompt = _build_slide_background_prompt(
                 styled_image_prompt,
                 index,
                 slide["visual"],
                 layout_role,
+                layout_variant,
             )
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,
@@ -413,6 +438,7 @@ def create_content_pack_carousel():
                 brand=slide["brand"],
                 credits_reserved=True,
                 layout_role=layout_role,
+                layout_variant=layout_variant,
             )
 
             post = Post(

@@ -738,17 +738,17 @@ def test_background_prompts_reserve_role_specific_negative_space():
     )
 
     assert "Slide role: cover" in cover
-    assert "Internal design layout: hero" in cover
-    assert "left 50% calm and low-detail" in cover
-    assert "right or lower-right" in cover
+    assert "Internal design layout: hero_left" in cover
+    assert "left 60%" in cover
+    assert "focal subject on the right" in cover
     assert "Slide role: phrase" in phrase
-    assert "Internal design layout: split" in phrase
-    assert "upper-left calm and low-detail" in phrase
+    assert "Internal design layout: split_left" in phrase
+    assert "left half calm and low-detail" in phrase
     assert "Slide role: info" in info
-    assert "Internal design layout: editorial" in info
-    assert "left and central-left area calm and low-detail" in info
+    assert "Internal design layout: split_right" in info
+    assert "right half calm and low-detail" in info
     assert "Slide role: cta" in cta
-    assert "Internal design layout: cta" in cta
+    assert "Internal design layout: closing" in cta
     assert "large calm central region" in cta
     assert all(
         "faces, facial features, and primary objects completely outside" in prompt
@@ -819,6 +819,18 @@ CTA: Learn more Polish with Polish with Me"""
         "phrase",
         "cta",
     ]
+    assert [payload["layout_variant"] for payload in payloads] == [
+        "hero_left",
+        "split_left",
+        "split_right",
+        "editorial_statement",
+        "split_right",
+        "closing",
+    ]
+    assert all(
+        payload["layout_variant"] in payload["background_prompt"]
+        for payload in payloads
+    )
     assert len(set(backgrounds)) == 6
     assert all("CONSISTENT BRAND STYLE" in prompt for prompt in backgrounds)
     assert all("Slide-specific visual concept:" in prompt for prompt in backgrounds)

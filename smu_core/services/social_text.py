@@ -16,7 +16,6 @@ FONT_PATH = (
 MAX_INPUT_BYTES = 20 * 1024 * 1024
 MAX_DIMENSION = 4096
 MAX_PIXELS = 16_000_000
-MAX_FIT_ITERATIONS = 24
 MIN_FONT_SIZE = 18
 
 TEXT_LIMITS = {
@@ -34,40 +33,49 @@ LINE_LIMITS = {
 }
 
 LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
+LAYOUT_VARIANTS = {
+    "hero_left",
+    "hero_center",
+    "split_left",
+    "split_right",
+    "editorial_statement",
+    "visual_focus",
+    "closing",
+}
 ROLE_DESIGN_LAYOUTS = {
-    "cover": "hero",
-    "phrase": "split",
-    "info": "editorial",
-    "cta": "cta",
+    "cover": "hero_left",
+    "phrase": "split_left",
+    "info": "editorial_statement",
+    "cta": "closing",
 }
 STYLE_TOKENS = {
     "default": {
         "headline": 1.00, "body": 1.00, "region_width": 1.00,
-        "gap": 1.00, "accent": "line", "strength": 0.70, "surface_alpha": 112,
+        "gap": 1.00, "surface_alpha": 112,
     },
     "realistic": {
         "headline": 0.90, "body": 0.96, "region_width": 0.90,
-        "gap": 1.05, "accent": "line", "strength": 0.22, "surface_alpha": 96,
+        "gap": 1.05, "surface_alpha": 96,
     },
     "viral_carousel": {
-        "headline": 1.24, "body": 1.04, "region_width": 1.08,
-        "gap": 0.76, "accent": "block", "strength": 0.90, "surface_alpha": 124,
+        "headline": 1.32, "body": 1.06, "region_width": 1.18,
+        "gap": 0.76, "surface_alpha": 124,
     },
     "luxury": {
         "headline": 0.96, "body": 0.94, "region_width": 0.84,
-        "gap": 1.55, "accent": "line", "strength": 0.24, "surface_alpha": 92,
+        "gap": 1.55, "surface_alpha": 92,
     },
     "minimal": {
         "headline": 1.02, "body": 0.96, "region_width": 0.88,
-        "gap": 1.35, "accent": "line", "strength": 0.10, "surface_alpha": 88,
+        "gap": 1.35, "surface_alpha": 88,
     },
     "corporate": {
         "headline": 1.06, "body": 1.00, "region_width": 0.98,
-        "gap": 1.10, "accent": "divider", "strength": 0.58, "surface_alpha": 108,
+        "gap": 1.10, "surface_alpha": 108,
     },
     "pixar": {
         "headline": 1.14, "body": 1.03, "region_width": 1.04,
-        "gap": 1.18, "accent": "circle", "strength": 0.68, "surface_alpha": 106,
+        "gap": 1.18, "surface_alpha": 106,
     },
 }
 
@@ -168,16 +176,7 @@ def _fit_block(
     if preferred_max_lines and preferred_max_lines < max_lines:
         line_targets.insert(0, preferred_max_lines)
     for line_target in line_targets:
-        for iteration in range(MAX_FIT_ITERATIONS):
-            if MAX_FIT_ITERATIONS == 1:
-                size = min_size
-            else:
-                size = round(
-                    start_size
-                    - (start_size - min_size)
-                    * iteration
-                    / (MAX_FIT_ITERATIONS - 1)
-                )
+        for size in range(start_size, min_size - 1, -1):
             font = _load_font(size)
             lines = _wrap_text(draw, text, font, max_width)
             spacing = max(4, size // 5)
@@ -271,6 +270,8 @@ def _prepare_composition_block(
     if align == "center":
         text_x = left + ((right - left) - (measured[2] - measured[0])) / 2
         text_x -= measured[0]
+    elif align == "right":
+        text_x = right - (measured[2] - measured[0]) - measured[0]
     else:
         text_x = left - measured[0]
     text_y = top - measured[1]
@@ -292,8 +293,8 @@ def _prepare_composition_block(
     }
 
 
-def select_design_layout(layout_role):
-    return ROLE_DESIGN_LAYOUTS[layout_role]
+def select_design_layout(layout_role, layout_variant=None):
+    return layout_variant or ROLE_DESIGN_LAYOUTS[layout_role]
 
 
 def _style_tokens(design_style):
@@ -327,45 +328,6 @@ def _analyze_text_region(image, box):
     }
 
 
-def _draw_accent(draw, layout, bounds, tokens, foreground, scale):
-    left, top, right, bottom = bounds
-    strength = tokens["strength"]
-    if strength <= 0:
-        return
-    opacity = round(210 * strength)
-    if foreground[0] < 128:
-        colour = (32, 40, 54, opacity)
-    else:
-        colour = (255, 255, 255, opacity)
-    thickness = max(2, round(scale * (0.006 + 0.004 * strength)))
-    accent = tokens["accent"]
-    if accent == "block":
-        block_width = max(thickness * 5, round(scale * 0.045))
-        block_height = max(thickness * 2, round(scale * 0.012))
-        block_bottom = top - round(scale * 0.018)
-        draw.rounded_rectangle(
-            (left, block_bottom - block_height, left + block_width, block_bottom),
-            radius=max(2, block_height // 3),
-            fill=colour,
-        )
-    elif accent == "divider" or layout == "split":
-        x = right + round(scale * 0.025)
-        draw.line((x, top, x, bottom), fill=colour, width=thickness)
-    elif accent == "circle":
-        diameter = max(10, round(scale * 0.025))
-        draw.ellipse(
-            (left, top - diameter * 2, left + diameter, top - diameter),
-            fill=colour,
-        )
-    else:
-        line_width = min(right - left, round(scale * (0.12 + 0.05 * strength)))
-        draw.line(
-            (left, top - round(scale * 0.025), left + line_width, top - round(scale * 0.025)),
-            fill=colour,
-            width=thickness,
-        )
-
-
 def _draw_role_composition(
     draw,
     *,
@@ -378,9 +340,10 @@ def _draw_role_composition(
     cta,
     brand,
     layout_role,
+    layout_variant,
     design_style,
 ):
-    design_layout = select_design_layout(layout_role)
+    design_layout = select_design_layout(layout_role, layout_variant)
     tokens = _style_tokens(design_style)
     content_width = width - 2 * margin
     scale = min(width, height)
@@ -389,31 +352,52 @@ def _draw_role_composition(
     readable_title_size = max(MIN_FONT_SIZE, round(scale * 0.039))
     padding = max(12, round(scale * 0.022))
     layout_tokens = {
-        "hero": {
-            "region": (margin, round(height * 0.12), round(width * 0.54), round(height * 0.79)),
+        "hero_left": {
+            "region": (margin, round(height * 0.14), round(width * 0.74), round(height * 0.86)),
             "align": "left",
-            "sizes": (0.168, 0.054, 0.058),
-            "lines": (4, 4, 2),
-            "preferred": (None, None, None),
+            "sizes": (0.205, 0.060, 0.064),
+            "lines": (4, 3, 2),
+            "preferred": (3, None, None),
         },
-        "split": {
-            "region": (margin, round(height * 0.19), round(width * 0.48), round(height * 0.76)),
+        "hero_center": {
+            "region": (round(width * 0.12), round(height * 0.20), round(width * 0.88), round(height * 0.82)),
+            "align": "center",
+            "sizes": (0.190, 0.060, 0.064),
+            "lines": (4, 3, 2),
+            "preferred": (3, None, None),
+        },
+        "split_left": {
+            "region": (margin, round(height * 0.18), round(width * 0.56), round(height * 0.84)),
             "align": "left",
-            "sizes": (0.132, 0.060, 0.054),
+            "sizes": (0.158, 0.064, 0.058),
             "lines": (3, 4, 2),
             "preferred": (2, None, None),
         },
-        "editorial": {
-            "region": (margin, round(height * 0.17), round(width * 0.52), round(height * 0.78)),
-            "align": "left",
-            "sizes": (0.102, 0.052, 0.052),
-            "lines": (4, 8, 2),
+        "split_right": {
+            "region": (round(width * 0.44), round(height * 0.18), width - margin, round(height * 0.84)),
+            "align": "right",
+            "sizes": (0.158, 0.064, 0.058),
+            "lines": (3, 4, 2),
             "preferred": (2, None, None),
         },
-        "cta": {
-            "region": (round(width * 0.18), round(height * 0.29), round(width * 0.82), round(height * 0.74)),
+        "editorial_statement": {
+            "region": (margin, round(height * 0.14), round(width * 0.68), round(height * 0.82)),
+            "align": "left",
+            "sizes": (0.145, 0.060, 0.058),
+            "lines": (4, 4, 2),
+            "preferred": (3, None, None),
+        },
+        "visual_focus": {
+            "region": (margin, round(height * 0.57), width - margin, round(height * 0.88)),
+            "align": "left",
+            "sizes": (0.150, 0.056, 0.058),
+            "lines": (3, 2, 2),
+            "preferred": (2, None, None),
+        },
+        "closing": {
+            "region": (round(width * 0.13), round(height * 0.25), round(width * 0.87), round(height * 0.80)),
             "align": "center",
-            "sizes": (0.122, 0.054, 0.064),
+            "sizes": (0.172, 0.060, 0.072),
             "lines": (3, 3, 2),
             "preferred": (2, None, None),
         },
@@ -430,7 +414,11 @@ def _draw_role_composition(
     gap = max(10, round(scale * 0.026 * tokens["gap"]))
     values = (title, body, cta)
     minimums = (readable_title_size, readable_body_size, readable_body_size)
-    height_shares = (0.45, 0.36, 0.19)
+    height_shares = (
+        (0.52, 0.31, 0.17)
+        if design_style == "viral_carousel"
+        else (0.45, 0.36, 0.19)
+    )
     blocks = []
     cursor = region_top
     for value, font_scale, max_lines, preferred, min_size, height_share in zip(
@@ -489,7 +477,6 @@ def _draw_role_composition(
             fill=surface_fill,
         )
 
-    _draw_accent(draw, design_layout, typography_bounds, tokens, foreground, scale)
     for block in blocks:
         draw.multiline_text(
             block["position"],
@@ -523,7 +510,7 @@ def _draw_role_composition(
             max_lines=2,
             start_size=round(content_width * 0.032),
             min_size=readable_brand_size,
-            align="center" if design_layout == "cta" else "left",
+            align="center" if design_layout in {"hero_center", "closing"} else config["align"],
             stroke_width=stroke_width,
         )
         draw.multiline_text(
@@ -547,6 +534,7 @@ def render_social_text(
     brand=None,
     layout="carousel",
     layout_role=None,
+    layout_variant=None,
     design_style=None,
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
@@ -556,6 +544,12 @@ def render_social_text(
         not isinstance(layout_role, str) or layout_role not in LAYOUT_ROLES
     ):
         raise SocialTextRenderError("unsupported_layout_role")
+    if layout_variant is not None and (
+        layout_role is None
+        or not isinstance(layout_variant, str)
+        or layout_variant not in LAYOUT_VARIANTS
+    ):
+        raise SocialTextRenderError("unsupported_layout_variant")
     if not isinstance(image_bytes, bytes) or not image_bytes:
         raise SocialTextRenderError("invalid_image")
     if len(image_bytes) > MAX_INPUT_BYTES:
@@ -604,6 +598,7 @@ def render_social_text(
             cta=cta,
             brand=brand,
             layout_role=layout_role,
+            layout_variant=layout_variant,
             design_style=design_style,
         )
         image = Image.alpha_composite(image, composition_layer)

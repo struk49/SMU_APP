@@ -593,8 +593,9 @@ def test_content_pack_creative_director_rules_cover_representative_sources(sourc
     assert "Creative-director planning (internal only)" in prompt
     assert "one visual story with a deliberate beginning, progression" in normalized
     assert "Every slide must advance the idea" in prompt
-    assert "3-8 word" in prompt
-    assert "0-18 words" in prompt
+    assert "3-6 word cover title" in prompt
+    assert "2-6 word internal headline" in prompt
+    assert "0-12 supporting words" in prompt
     assert "parser metadata, not customer-visible copy" in normalized
     assert "only for genuine steps, rankings, defined lists" in normalized
     assert "Vary adjacent Visual concepts meaningfully" in prompt

@@ -349,6 +349,38 @@ def test_v1_payload_accepts_and_worker_forwards_layout_role(
     assert calls[0][1]["overlay"]["layout_role"] == layout_role
 
 
+def test_v1_payload_forwards_optional_layout_variant_and_preserves_exact_copy(
+    app, module
+):
+    user = create_user(module, email="layout-variant@example.com")
+    post = make_pending(module, user, group_id="layout-variant")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Exact customer title",
+        body="Exact supporting copy",
+        layout_role="info",
+        layout_variant="visual_focus",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append((prompt, kwargs))
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert calls[0][1]["overlay"] == {
+        "title": "Exact customer title",
+        "body": "Exact supporting copy",
+        "cta": None,
+        "brand": None,
+        "layout_role": "info",
+        "layout_variant": "visual_focus",
+    }
+
+
 @pytest.mark.parametrize(
     ("style_marker", "expected_style"),
     list(carousel_generation.DESIGN_STYLE_MARKERS.items()),
@@ -395,6 +427,24 @@ def test_parser_rejects_invalid_layout_role_type():
     )
     with pytest.raises(carousel_generation.OverlayPayloadError):
         carousel_generation.parse_overlay_prompt(malformed)
+
+
+@pytest.mark.parametrize("layout_variant", ["random", "", 1, False, [], {}])
+def test_v1_payload_rejects_invalid_layout_variant(layout_variant):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background",
+            "Title",
+            layout_role="info",
+            layout_variant=layout_variant,
+        )
+
+
+def test_v1_payload_rejects_layout_variant_without_role():
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", layout_variant="visual_focus"
+        )
 
 
 def test_pre_reserved_carousel_row_skips_second_reservation_and_releases_on_failure(

@@ -16,6 +16,15 @@ MAX_OVERLAY_BODY_LENGTH = 600
 MAX_OVERLAY_CTA_LENGTH = 120
 MAX_OVERLAY_BRAND_LENGTH = 120
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
+OVERLAY_LAYOUT_VARIANTS = {
+    "hero_left",
+    "hero_center",
+    "split_left",
+    "split_right",
+    "editorial_statement",
+    "visual_focus",
+    "closing",
+}
 DESIGN_STYLE_MARKERS = {
     "Style: realistic social media image": "realistic",
     "Style: viral Instagram business carousel": "viral_carousel",
@@ -62,6 +71,7 @@ def build_content_pack_overlay_prompt(
     brand=None,
     credits_reserved=False,
     layout_role=None,
+    layout_variant=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -84,6 +94,15 @@ def build_content_pack_overlay_prompt(
                 or layout_role not in OVERLAY_LAYOUT_ROLES
             )
         )
+        or (
+            layout_variant is not None
+            and (
+                layout_role is None
+                or
+                not isinstance(layout_variant, str)
+                or layout_variant not in OVERLAY_LAYOUT_VARIANTS
+            )
+        )
     ):
         raise OverlayPayloadError()
 
@@ -102,6 +121,8 @@ def build_content_pack_overlay_prompt(
         payload["credits_reserved"] = True
     if layout_role is not None:
         payload["layout_role"] = layout_role
+    if layout_variant is not None:
+        payload["layout_variant"] = layout_variant
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -132,7 +153,11 @@ def parse_overlay_prompt(prompt):
         raise OverlayPayloadError() from exc
 
     expected_keys = {"version", "kind", "background_prompt", "overlay"}
-    allowed_keys = expected_keys | {"credits_reserved", "layout_role"}
+    allowed_keys = expected_keys | {
+        "credits_reserved",
+        "layout_role",
+        "layout_variant",
+    }
     if (
         not isinstance(payload, dict)
         or not expected_keys.issubset(payload)
@@ -146,6 +171,15 @@ def parse_overlay_prompt(prompt):
             and (
                 not isinstance(payload["layout_role"], str)
                 or payload["layout_role"] not in OVERLAY_LAYOUT_ROLES
+            )
+        )
+        or (
+            "layout_variant" in payload
+            and (
+                "layout_role" not in payload
+                or
+                not isinstance(payload["layout_variant"], str)
+                or payload["layout_variant"] not in OVERLAY_LAYOUT_VARIANTS
             )
         )
     ):
@@ -267,6 +301,8 @@ def generate_pending_carousel_images(
                 overlay = dict(overlay_payload["overlay"])
                 if "layout_role" in overlay_payload:
                     overlay["layout_role"] = overlay_payload["layout_role"]
+                    if "layout_variant" in overlay_payload:
+                        overlay["layout_variant"] = overlay_payload["layout_variant"]
                     design_style = _design_style_from_background_prompt(
                         overlay_payload["background_prompt"]
                     )

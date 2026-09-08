@@ -796,10 +796,12 @@ Carousel strategy:
   Caption copy carries context, explanation, story, supporting details, and optional
   CTA/hashtags. The Instagram caption must complement rather than duplicate the
   carousel, and carousel slides must not reproduce the full caption.
-- Prefer a 3-8 word cover title and optional supporting copy of 0-18 words; one phrase
-  and short translation for vocabulary; a 2-7 word info title with 0-18 supporting
-  words; and a short natural closing CTA. These are writing targets, not truncation
-  rules: preserve meaning and never cut supplied wording blindly.
+- Write artwork copy for bold visual composition: normally use a 3-6 word cover title
+  (about 8 words maximum), a 2-6 word internal headline, and 0-12 supporting words.
+  Keep vocabulary translations equally concise and make conclusions or CTAs short
+  enough to render prominently. These are writing targets, not truncation rules:
+  preserve source fidelity, never invent a claim for impact, and never cut supplied
+  wording blindly. Caption copy remains the place for fuller explanation.
 - The cover uses Title and optional Subtitle. Content uses either Title with Body,
   or the vocabulary structure below. Body is normally one concise sentence and must
   not restate the headline. A closing CTA is one short action, never a paragraph.

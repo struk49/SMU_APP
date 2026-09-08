@@ -384,7 +384,12 @@ def test_cover_role_does_not_render_internal_cover_label(monkeypatch):
 
 @pytest.mark.parametrize(
     ("layout_role", "expected"),
-    [("cover", "hero"), ("phrase", "split"), ("info", "editorial"), ("cta", "cta")],
+    [
+        ("cover", "hero_left"),
+        ("phrase", "split_left"),
+        ("info", "editorial_statement"),
+        ("cta", "closing"),
+    ],
 )
 def test_role_selects_deterministic_internal_layout(layout_role, expected):
     assert social_text.select_design_layout(layout_role) == expected
@@ -442,9 +447,10 @@ def test_light_and_dark_regions_choose_opposite_readable_foregrounds():
 def test_busy_background_uses_one_localized_surface_bounded_to_typography(monkeypatch):
     image = Image.new("RGB", (1000, 1000))
     draw = ImageDraw.Draw(image)
-    for x in range(0, 600, 20):
-        draw.rectangle((x, 0, x + 9, 800), fill="white")
-        draw.rectangle((x + 10, 0, x + 19, 800), fill="black")
+    for y in range(0, 1000, 20):
+        for x in range(0, 1000, 20):
+            fill = "white" if (x // 20 + y // 20) % 2 else "black"
+            draw.rectangle((x, y, x + 19, y + 19), fill=fill)
     buffer = BytesIO()
     image.save(buffer, format="PNG")
     surfaces = []
@@ -467,6 +473,47 @@ def test_busy_background_uses_one_localized_surface_bounded_to_typography(monkey
     left, top, right, bottom = surfaces[0]
     assert (right - left) * (bottom - top) / 1_000_000 < 0.35
     assert bottom < round(1000 * 0.78)
+
+
+def test_role_aware_layouts_draw_no_decorative_dash_or_accent(monkeypatch):
+    accents = []
+    monkeypatch.setattr(
+        ImageDraw.ImageDraw,
+        "line",
+        lambda self, *args, **kwargs: accents.append((args, kwargs)),
+    )
+
+    for role in social_text.LAYOUT_ROLES:
+        social_text.render_social_text(
+            source_bytes(), title="Bold exact headline", layout_role=role
+        )
+
+    assert accents == []
+
+
+def test_named_layout_variants_create_deterministic_position_variety(monkeypatch):
+    calls = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        calls.append((position, kwargs["align"]))
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    positions = {}
+    for variant in ("split_left", "split_right", "visual_focus"):
+        calls.clear()
+        social_text.render_social_text(
+            source_bytes(),
+            title="Exact headline",
+            layout_role="info",
+            layout_variant=variant,
+        )
+        positions[variant] = calls[0]
+
+    assert len(set(positions.values())) == 3
+    assert positions["split_left"][1] == "left"
+    assert positions["split_right"][1] == "right"
 
 
 def test_brand_is_never_injected_and_supplied_brand_still_renders(monkeypatch):
@@ -589,10 +636,10 @@ def test_style_tokens_create_substantive_hierarchy_and_spacing_differences():
     assert tokens["viral_carousel"]["region_width"] > tokens["default"]["region_width"]
     assert tokens["luxury"]["gap"] > tokens["viral_carousel"]["gap"]
     assert tokens["luxury"]["region_width"] < tokens["viral_carousel"]["region_width"]
-    assert tokens["minimal"]["strength"] <= tokens["default"]["strength"]
-    assert tokens["realistic"]["strength"] < tokens["default"]["strength"]
-    assert tokens["corporate"]["accent"] == "divider"
-    assert tokens["pixar"]["accent"] == "circle"
+    assert tokens["minimal"]["surface_alpha"] < tokens["default"]["surface_alpha"]
+    assert tokens["realistic"]["surface_alpha"] < tokens["default"]["surface_alpha"]
+    assert tokens["corporate"]["gap"] > tokens["viral_carousel"]["gap"]
+    assert tokens["pixar"]["headline"] > tokens["default"]["headline"]
 
 
 def test_viral_headline_is_larger_than_default_when_safe(monkeypatch):
@@ -649,6 +696,23 @@ def test_invalid_inputs_raise_safe_categories(kwargs, reason):
     assert raised.value.reason == reason
     if supplied_copy:
         assert supplied_copy not in str(raised.value)
+
+
+def test_layout_variant_requires_role_and_known_deterministic_variant():
+    with pytest.raises(social_text.SocialTextRenderError) as missing_role:
+        social_text.render_social_text(
+            source_bytes(), title="Title", layout_variant="visual_focus"
+        )
+    assert missing_role.value.reason == "unsupported_layout_variant"
+
+    with pytest.raises(social_text.SocialTextRenderError) as unknown_variant:
+        social_text.render_social_text(
+            source_bytes(),
+            title="Title",
+            layout_role="info",
+            layout_variant="random",
+        )
+    assert unknown_variant.value.reason == "unsupported_layout_variant"
 
 
 def test_unbreakable_text_fails_with_safe_dedicated_exception():
