@@ -1,5 +1,3 @@
-import os
-
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -82,24 +80,8 @@ def login():
         password = request.form.get("password", "")
 
         user = User.query.filter_by(email=email).first()
-        password_verified = bool(
-            user and check_password_hash(user.password_hash, password)
-        )
 
-        # TEMPORARY: remove after the production login incident is diagnosed.
-        _log_event(
-            "login_auth_diagnostic",
-            normalized_email=email,
-            user_found=user is not None,
-            password_length=len(password),
-            password_verified=password_verified,
-            database_backend=db.engine.url.get_backend_name(),
-            request_host=request.host,
-            request_path=request.path,
-            deployed_commit=os.getenv("RENDER_GIT_COMMIT", "unavailable"),
-        )
-
-        if not password_verified:
+        if not user or not check_password_hash(user.password_hash, password):
             _log_event(
                 "login_failure",
                 email_present=bool(email),
