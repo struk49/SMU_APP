@@ -154,15 +154,41 @@ def _safe_visual_direction(visual):
     """Map untrusted visual prose to text-free scene categories."""
     normalized = (visual or "").lower()
     directions = []
-    if any(word in normalized for word in ("sunset", "sunrise", "golden hour")):
-        directions.append("warm sunset atmosphere")
-    if any(word in normalized for word in ("people", "person", "smiling", "waving", "greeting")):
-        directions.append("friendly conversational interaction")
-    if any(word in normalized for word in ("phone", "mobile", "app")):
-        directions.append("smartphone with abstract interface shapes")
-    if any(word in normalized for word in ("object", "vocabulary", "food", "travel")):
-        directions.append("clean arrangement of relevant everyday objects")
-    return ", ".join(directions) if directions else None
+    scene_categories = (
+        (("copy", "duplicate", "same post", "rewrite", "branch"),
+         "one original object branching into several visibly distinct destinations"),
+        (("platform", "channel", "format", "destination"),
+         "contrasting content environments connected by one coherent visual system"),
+        (("source", "raw material", "notes", "organise", "organize"),
+         "raw source materials being examined, sorted, and shaped into a clear idea"),
+        (("angle", "perspective", "viewpoint", "different view"),
+         "one focal object interpreted from clearly different visual perspectives"),
+        (("publish", "campaign", "ready", "complete", "content system"),
+         "a finished cohesive campaign system with distinct prepared outputs"),
+        (("step", "sequence", "process", "journey"),
+         "a clear progression of objects through distinct stages without labels"),
+        (("problem", "mismatch", "doesn't fit", "does not fit"),
+         "one rigid form contrasted against several differently shaped destinations"),
+        (("word", "phrase", "vocabulary", "language", "conversation"),
+         "a culturally relevant everyday context supporting language learning"),
+        (("food", "travel", "object"),
+         "a clean arrangement of relevant everyday objects in a specific setting"),
+        (("fact", "research", "information", "evidence"),
+         "source materials and abstract evidence shapes arranged around one focal insight"),
+        (("product", "tool", "software", "workflow"),
+         "a polished system of purposeful objects showing a practical workflow without UI"),
+        (("sunset", "sunrise", "golden hour"), "warm sunset atmosphere"),
+        (("people", "person", "smiling", "waving", "greeting"),
+         "a friendly conversational interaction in purposeful environmental context"),
+        (("phone", "mobile", "app"),
+         "a smartphone used as a secondary prop with abstract text-free interface shapes"),
+    )
+    for keywords, direction in scene_categories:
+        if any(keyword in normalized for keyword in keywords):
+            directions.append(direction)
+        if len(directions) == 2:
+            break
+    return "; ".join(directions) if directions else None
 
 
 def _build_slide_background_prompt(

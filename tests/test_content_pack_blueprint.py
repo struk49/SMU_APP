@@ -692,6 +692,39 @@ def test_visual_direction_is_categorical_and_strips_text_request():
     assert "no readable text" in prompt
 
 
+@pytest.mark.parametrize(
+    ("visual", "expected"),
+    [
+        ("One source branching into platform destinations", "one original object branching"),
+        ("Raw notes organised into a source idea", "raw source materials being examined"),
+        ("One object from a different angle", "different visual perspectives"),
+        ("A completed campaign ready to publish", "finished cohesive campaign system"),
+        ("Polish vocabulary used in conversation", "language learning"),
+    ],
+)
+def test_visual_direction_maps_meaning_to_safe_text_free_metaphors(visual, expected):
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "Balanced editorial style", 2, visual, "info"
+    )
+
+    assert expected in prompt
+    assert visual not in prompt
+    assert "no readable text" in prompt
+
+
+def test_visual_direction_does_not_default_to_generic_laptop_scene():
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "Balanced editorial style",
+        3,
+        "A person at a laptop changing the content angle",
+        "info",
+    )
+
+    assert "different visual perspectives" in prompt
+    assert "person at a laptop" not in prompt
+    assert "smartphone" not in prompt
+
+
 def test_background_prompts_reserve_role_specific_negative_space():
     cover = content_pack_routes._build_slide_background_prompt("Style", 0)
     phrase = content_pack_routes._build_slide_background_prompt(

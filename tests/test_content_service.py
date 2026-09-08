@@ -448,7 +448,7 @@ def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
     normalized_prompt = " ".join(prompt.split())
 
     assert "ONE PRIMARY IDEA PER SLIDE" in prompt
-    assert "Use 2 to 6 consecutively numbered slides" in prompt
+    assert "Use 2 to 6 `Slide N:` structural blocks" in prompt
     assert "without filler" in prompt
     assert "Image copy must be fast to understand, minimal, swipeable" in prompt
     assert "Caption copy carries context, explanation, story" in prompt
@@ -542,8 +542,8 @@ def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
     )
     prompt = " ".join(client.calls[0]["input"].split())
 
-    assert "Use 2 to 6 consecutively numbered slides" in prompt
-    assert "Body is limited to two short sentences" in prompt
+    assert "Use 2 to 6 `Slide N:` structural blocks" in prompt
+    assert "Body is normally one concise sentence" in prompt
     assert "A closing CTA is one short action, never a paragraph" in prompt
     assert "educational content moves from hook to lesson" in prompt
     assert "products move from problem to solution" in prompt
@@ -556,6 +556,83 @@ def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
     assert "Start creating smarter" in prompt
     assert "Get started today" in prompt
     assert "Refer to a concrete next action" in prompt
+
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
+        (
+            "I've been building SMU to make social media content creation easier. "
+            "The idea is that you can start with one topic or piece of source content "
+            "and turn it into posts for different social platforms. One thing I've "
+            "learned while building it is that simply rewriting the same post for every "
+            "platform isn't good enough. Instagram, Facebook, LinkedIn, Pinterest, "
+            "Reddit and X all need different types of content. I'm now improving SMU so "
+            "it understands the source first, finds the strongest ideas, and creates "
+            "content specifically for each platform."
+        ),
+        "Teach the Polish phrase 'Miłego dnia' and explain that it means 'Have a nice day'.",
+        "Explain why retrieval practice helps learners remember factual material.",
+        "A scheduling product groups campaign tasks so a team can review work together.",
+        "The museum opened in 1982 and its archive contains regional transport records.",
+    ],
+)
+def test_content_pack_creative_director_rules_cover_representative_sources(source_text):
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        source_text,
+        "Clear, evidence-led voice",
+        openai_api_key="key",
+        openai_client=client,
+    )
+
+    assert len(client.calls) == 1
+    prompt = client.calls[0]["input"]
+    normalized = " ".join(prompt.split())
+    assert f"Source content:\n{source_text}" in prompt
+    assert "Creative-director planning (internal only)" in prompt
+    assert "one visual story with a deliberate beginning, progression" in normalized
+    assert "Every slide must advance the idea" in prompt
+    assert "3-8 word" in prompt
+    assert "0-18 words" in prompt
+    assert "parser metadata, not customer-visible copy" in normalized
+    assert "only for genuine steps, rankings, defined lists" in normalized
+    assert "Vary adjacent Visual concepts meaningfully" in prompt
+    assert "one shared, text-free carousel art direction" in prompt
+    assert "Never put exact overlay copy in Visual" in prompt
+    assert "Do not output the planning" in prompt
+
+
+def test_creative_director_preserves_build_in_public_tense_and_avoids_hardcoded_example():
+    client = FakeOpenAIClient()
+    source = "I'm improving SMU so it can understand source content before writing posts."
+    content.generate_content_pack(
+        source,
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = client.calls[0]["input"]
+
+    assert "build-in-public content moves from observed problem to learning" in prompt
+    assert "honest forward-looking close" in prompt
+    assert "must not be rewritten as completed or proven" in prompt
+    assert "STOP COPYING YOUR POSTS" not in prompt
+
+
+def test_creative_director_requires_scene_variety_and_campaign_consistency():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "A supported educational source.",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = " ".join(client.calls[0]["input"].split())
+
+    assert "adjacent slides repeat substantially the same claim" in prompt
+    assert "person at a laptop, desk, generic phone, meeting" in prompt
+    assert "same desk/laptop scene" in prompt
+    assert "coherent visual medium, controlled palette, lighting" in prompt
+    assert "without unexpectedly changing visual medium" in prompt
 
 
 def test_content_pack_section_extraction_image_style_and_placeholder_behaviour():

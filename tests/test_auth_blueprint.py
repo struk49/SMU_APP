@@ -194,7 +194,62 @@ def test_invalid_login_does_not_authenticate(client, module):
     assert response.status_code == 302
     assert response.location.endswith("/login")
     with client.session_transaction() as session:
+        flashes = session.get("_flashes", [])
         assert "_user_id" not in session
+    assert ("danger", "Invalid email or password.") in flashes
+
+
+@pytest.mark.parametrize(
+    "password",
+    [
+        " leading-space-password",
+        "trailing-space-password ",
+        " both-space-password ",
+    ],
+)
+def test_login_preserves_password_whitespace(client, module, password):
+    user = module.User(
+        email="whitespace-auth@example.com",
+        password_hash=generate_password_hash(password),
+    )
+    module.db.session.add(user)
+    module.db.session.commit()
+
+    response = client.post(
+        "/login",
+        data={"email": user.email, "password": password},
+    )
+
+    assert response.status_code == 302
+    assert response.location.endswith("/pricing")
+    with client.session_transaction() as session:
+        assert session["_user_id"] == str(user.id)
+
+
+@pytest.mark.parametrize(
+    "submitted_email",
+    [
+        "NORMALIZED-AUTH@EXAMPLE.COM",
+        "  normalized-auth@example.com  ",
+    ],
+)
+def test_login_normalizes_email(client, module, submitted_email):
+    user = module.User(
+        email="normalized-auth@example.com",
+        password_hash=generate_password_hash("correct-password"),
+    )
+    module.db.session.add(user)
+    module.db.session.commit()
+
+    response = client.post(
+        "/login",
+        data={"email": submitted_email, "password": "correct-password"},
+    )
+
+    assert response.status_code == 302
+    assert response.location.endswith("/pricing")
+    with client.session_transaction() as session:
+        assert session["_user_id"] == str(user.id)
 
 
 @pytest.mark.parametrize("next_path", ["/calendar", "/tiktok"])

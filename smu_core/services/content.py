@@ -697,6 +697,17 @@ audience questions, and any genuine educational, discussion, or story angles.
 Use only the opportunities the source actually supports; do not output this internal
 analysis or add new section headings.
 
+Creative-director planning (internal only):
+- Before drafting, silently decide what the source is truly about, why its intended
+  audience would care, the strongest supported social angle, what deserves to appear
+  on carousel artwork, what belongs in the caption, and what the viewer should
+  understand by the final slide.
+- Plan the carousel as one visual story with a deliberate beginning, progression,
+  and ending. Every slide must advance the idea rather than paraphrase another slide.
+- Silently reject a draft if adjacent slides repeat substantially the same claim,
+  scene, subject, environment, activity, framing, perspective, object, or metaphor.
+- Do not output the planning, evaluation, classification, or hidden reasoning.
+
 Semantic classification:
 - Silently choose exactly one category before writing: Product / SaaS, Educational,
   Tutorial / How-to, Build in Public, Story, Opinion, Announcement, List / Tips,
@@ -761,24 +772,37 @@ Hook selection:
 - Choose a curiosity, contrarian, problem, promise, story, or educational hook from
   the source meaning. It must be specific, supported, and non-clickbait.
 - Never reuse the same hook across platforms or fabricate controversy or urgency.
+- The carousel cover has one job: earn the swipe. Prefer a concise 3-8 word
+  observation, problem, useful promise, supported contrast, meaningful question, or
+  source-grounded curiosity gap. Allow longer only when meaning requires it.
+- Reject vague cover hooks such as "Unlock your potential", "Discover the power of",
+  "Ready to elevate", "Transform your social media", "Start your journey",
+  "See the impact", or unsupported claims that something is a "game changer".
 
 Carousel strategy:
-- Use 2 to 6 consecutively numbered slides and only as many as the source can
-  support without filler. Give the carousel progression: hook/cover, distinct value
-  or ideas, then a useful takeaway, conclusion, or CTA.
+- Use 2 to 6 `Slide N:` structural blocks and only as many as the source can support
+  without filler. Prefer 4-6 for a normally substantive source, but never pad weak
+  material. The `Slide N:` markers are parser metadata, not customer-visible copy.
+- Give the carousel a deliberate progression: hook/cover, development through
+  genuinely distinct ideas, then a useful takeaway, result, conclusion, or CTA when
+  justified. Do not require every stage, but ensure each slide adds new meaning.
+- Do not add numbers to Title, Subtitle, Body, Phrase, Translation, Tip, or CTA merely
+  because the content is a carousel. Preserve or introduce customer-visible numbering
+  only for genuine steps, rankings, defined lists, chronological sequences, or
+  explicitly numbered lessons or tips.
 - Put ONE PRIMARY IDEA PER SLIDE. Never use the artwork as an article, repeat the
   title six ways, add a CTA to every slide, or write mini paragraphs.
 - Image copy must be fast to understand, minimal, swipeable, and large-text friendly.
   Caption copy carries context, explanation, story, supporting details, and optional
   CTA/hashtags. The Instagram caption must complement rather than duplicate the
   carousel, and carousel slides must not reproduce the full caption.
-- Prefer a 2-8 word cover title and optional 3-10 word subtitle; one phrase and short
-  translation for vocabulary; a 2-7 word info title with one short supporting
-  sentence; and a 2-10 word closing CTA. These are writing targets, not truncation
+- Prefer a 3-8 word cover title and optional supporting copy of 0-18 words; one phrase
+  and short translation for vocabulary; a 2-7 word info title with 0-18 supporting
+  words; and a short natural closing CTA. These are writing targets, not truncation
   rules: preserve meaning and never cut supplied wording blindly.
 - The cover uses Title and optional Subtitle. Content uses either Title with Body,
-  or the vocabulary structure below. Body is limited to two short sentences.
-  A closing CTA is one short action, never a paragraph.
+  or the vocabulary structure below. Body is normally one concise sentence and must
+  not restate the headline. A closing CTA is one short action, never a paragraph.
 - ONLY when the source genuinely teaches vocabulary or language terms, use Phrase,
   Translation, optional Tip, and Visual. Put the target-language wording in Phrase
   and its meaning in Translation rather than combining both into one field.
@@ -790,12 +814,22 @@ Carousel strategy:
   general Title/Body structure unless they genuinely teach language vocabulary.
 - Adapt story flow to the category: educational content moves from hook to lesson,
   example, and takeaway; products move from problem to solution, operation, and
-  benefit; stories move from situation to challenge, turning point, and lesson;
+  supported benefit; build-in-public content moves from observed problem to learning,
+  current work, and an honest forward-looking close; stories move from situation to
+  challenge, turning point, and lesson;
   vocabulary moves from cover through distinct terms to an optional closing CTA.
 - Structural labels are metadata and must not be repeated inside their values.
-- Visual describes only a simple, relevant, text-free scene or composition. Avoid
-  overly literal diagrams, written signs, logos, fake interfaces, and instructions
-  to render the overlay wording. Never put exact overlay copy in Visual.
+- Visual describes only a simple, relevant, text-free scene or composition: a
+  concise semantic scene, object, action, or visual metaphor for that slide's
+  specific meaning. Translate abstract ideas into
+  visual storytelling rather than defaulting to a person at a laptop, desk, generic
+  phone, meeting, smiling professional, notebook, or coffee.
+- Vary adjacent Visual concepts meaningfully through subject, environment, camera
+  framing, metaphor, object, perspective, activity, or composition while keeping one
+  coherent campaign-level art direction. Never make several slides minor variants of
+  the same desk/laptop scene.
+- Avoid overly literal diagrams, written signs, logos, fake interfaces, and
+  instructions to render overlay wording. Never put exact overlay copy in Visual.
 - Overlay copy must use normal textual characters supported by a conventional
   sans-serif font; do not use emoji, decorative symbols, or icon glyphs.
 
@@ -811,10 +845,19 @@ CTA selection:
   brief specifically supports it. Refer to a concrete next action where possible.
 
 Image direction:
-- IMAGE_PROMPT describes one adaptable, text-free visual concept that supports the
-  pack without attempting to display captions, headings, labels, logos, or UI text.
-- Prefer a clear mood, subject, setting, and composition over a literal illustration
-  of every sentence.
+- IMAGE_PROMPT defines one shared, text-free carousel art direction rather than one
+  repeated scene. Specify a coherent visual medium, controlled palette, lighting,
+  mood, texture, contrast, and general visual language that every slide can inherit.
+- The customer-selected image style remains authoritative. Keep Realistic as
+  believable editorial photography; Viral Carousel bold and dynamically framed;
+  Luxury restrained and spacious; Minimalist uncluttered with very few focal
+  elements; Corporate structured and polished; and 3D Animated within one coherent,
+  friendly professional 3D world. Default is balanced modern editorial design.
+- Individual Visual fields change scene, subject, props, perspective, camera angle,
+  and framing without unexpectedly changing visual medium or campaign identity.
+- Prefer a clear focal idea over a literal illustration of every sentence. Never ask
+  for captions, headings, labels, signs, logos, readable screens, UI text,
+  handwriting, pseudo-text, or exact overlay wording.
 
 Return in this exact format:
 
