@@ -12,7 +12,7 @@ from yt_dlp import YoutubeDL
 
 logger = logging.getLogger(__name__)
 NO_TIKTOK_TRANSCRIPT_ERROR = "No transcript or usable text found for this TikTok."
-PLACEHOLDER_IMAGE_URL = "https://res.cloudinary.com/demo/image/upload/w_1080,h_1080,c_fill,b_rgb:111111/l_text:Arial_60_bold:Generating%20Image,co_rgb:ffffff/sample.jpg"
+PLACEHOLDER_IMAGE_URL = "/static/generating-image.svg"
 TIKTOK_HOST_SUFFIX = "tiktok.com"
 TIKTOK_SHORTLINK_HOSTS = {"vm.tiktok.com", "vt.tiktok.com"}
 TIKTOK_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
@@ -28,7 +28,7 @@ def apply_image_style(prompt, style):
 Style: realistic social media image, high-quality photography, natural lighting, sharp details, professional composition.
 """,
         "viral_carousel": """
-Style: viral Instagram business carousel, dark background, bold typography, yellow highlight blocks, white headline text, green and blue accents, premium creator aesthetic, high contrast, clean infographic layout.
+Style: viral Instagram business carousel, text-free vector-like supporting illustration or isolated symbolic object, strong subject separation, restrained yellow and green accents, modern creator aesthetic, high contrast, clean infographic composition, no photography unless the source specifically requires it. The deterministic SMU canvas supplies all typography and primary graphic structure.
 """,
         "luxury": """
 Style: luxury brand aesthetic, premium editorial design, elegant lighting, rich contrast, high-end visual style, polished social media advert.
@@ -826,6 +826,9 @@ Carousel strategy:
   specific meaning. Translate abstract ideas into
   visual storytelling rather than defaulting to a person at a laptop, desk, generic
   phone, meeting, smiling professional, notebook, or coffee.
+- Visual may explicitly say `typography-only` when the message is strongest without
+  illustration. Describe a process, comparison, branching relationship, or connected
+  diagram only when the source actually contains that semantic structure.
 - Vary adjacent Visual concepts meaningfully through subject, environment, camera
   framing, metaphor, object, perspective, activity, or composition while keeping one
   coherent campaign-level art direction. Never make several slides minor variants of
@@ -834,6 +837,10 @@ Carousel strategy:
   instructions to render overlay wording. Never put exact overlay copy in Visual.
 - Overlay copy must use normal textual characters supported by a conventional
   sans-serif font; do not use emoji, decorative symbols, or icon glyphs.
+- Optionally add `Eyebrow:` with a short contextual category and `Emphasis:` with
+  one exact substring copied from Title. Emphasis marks meaning only; never output
+  fonts, colours, coordinates, sizes, CSS, or other styling instructions. Omit both
+  when they do not improve comprehension.
 
 CTA selection:
 - Match any CTA to the category and goal. Educational content may invite saving,

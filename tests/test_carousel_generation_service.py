@@ -236,6 +236,73 @@ def test_row_failure_log_omits_provider_and_row_secrets(
     assert "Cloudinary AuthorizationRequired" not in caplog.text
     assert "OPENAI_API_KEY=do-not-log" not in caplog.text
     assert "access_token=do-not-log" not in caplog.text
+    assert "failure_reason=provider_or_processing_error" in record.message
+
+
+def test_safe_renderer_failure_reason_is_logged_without_overlay_copy(
+    app, module, caplog
+):
+    user = create_user(module)
+    post = make_pending(module, user, group_id="safe-render-reason", sort_order=0)
+    private_title = "Private customer headline"
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        private_title,
+        layout_role="cover",
+        layout_variant="hero_left",
+    )
+    module.db.session.commit()
+    caplog.set_level(logging.ERROR, logger="smu_core.services.carousel_generation")
+
+    class SafeRenderFailure(Exception):
+        reason = "text_does_not_fit"
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: (_ for _ in ()).throw(SafeRenderFailure()),
+    )
+
+    assert result["failed_count"] == 1
+    assert "failure_reason=text_does_not_fit" in caplog.text
+    assert private_title not in caplog.text
+
+
+def test_five_failed_rows_and_successful_sixth_match_worker_batch_boundaries(
+    app, module
+):
+    user = create_user(module)
+    posts = [
+        make_pending(module, user, group_id="six-slide", sort_order=index)
+        for index in range(6)
+    ]
+
+    class SafeRenderFailure(Exception):
+        reason = "text_does_not_fit"
+
+    def generate(prompt):
+        if prompt != posts[5].prompt:
+            raise SafeRenderFailure()
+        return "https://cdn.test/completed-sixth.jpg"
+
+    first = run_worker(module, generate)
+    second = run_worker(module, generate)
+    refreshed = [module.db.session.get(module.Post, post.id) for post in posts]
+
+    assert first == {
+        "selected_count": 5,
+        "processed_count": 5,
+        "succeeded_count": 0,
+        "failed_count": 5,
+    }
+    assert second["succeeded_count"] == 1
+    assert [post.status for post in refreshed] == [
+        "generation_failed",
+        "generation_failed",
+        "generation_failed",
+        "generation_failed",
+        "generation_failed",
+        "draft",
+    ]
 
 
 def test_tiktok_and_content_pack_carousel_rows_share_worker(app, module):
@@ -322,6 +389,49 @@ def test_phase_two_payload_supports_structured_overlay_and_old_v1_payloads():
         "cta": None,
         "brand": None,
     }
+
+
+def test_v1_payload_accepts_safe_typography_and_worker_forwards_it(app, module):
+    user = create_user(module, email="typography@example.com")
+    post = make_pending(module, user, group_id="typography")
+    typography = {
+        "eyebrow": "KATEGORIA",
+        "emphasis": {"text": "WAŻNE!", "role": "accent"},
+    }
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "TO WAŻNE!",
+        typography=typography,
+        visual_treatment="typography_only",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert calls[0]["overlay"]["eyebrow"] == "KATEGORIA"
+    assert calls[0]["overlay"]["emphasis"] == typography["emphasis"]
+    assert calls[0]["overlay"]["visual_treatment"] == "typography_only"
+
+
+@pytest.mark.parametrize(
+    "typography",
+    [
+        {"eyebrow": None, "emphasis": {"text": "Title", "role": "accent", "color": "red"}},
+        {"eyebrow": None, "emphasis": {"text": "Title", "role": "accent", "font": "Other"}},
+        {"eyebrow": None, "emphasis": {"text": "Title", "role": "accent", "size": 200}},
+    ],
+)
+def test_v1_typography_rejects_arbitrary_visual_styling(typography):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", typography=typography
+        )
 
 
 @pytest.mark.parametrize("layout_role", ["cover", "phrase", "info", "cta"])

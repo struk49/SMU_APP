@@ -665,6 +665,51 @@ def test_viral_headline_is_larger_than_default_when_safe(monkeypatch):
     assert sizes["viral_carousel"] > sizes["default"]
 
 
+def test_viral_carousel_uses_deterministic_dark_designed_canvas():
+    source = source_bytes_with_color((220, 70, 60), size=(1024, 1024))
+    kwargs = {
+        "title": "START WITH THE SOURCE",
+        "body": "Find the strongest idea.",
+        "layout_role": "cover",
+        "layout_variant": "hero_left",
+        "design_style": "viral_carousel",
+    }
+
+    first = social_text.render_social_text(source, **kwargs)
+    second = social_text.render_social_text(source, **kwargs)
+    with Image.open(BytesIO(first)) as rendered:
+        assert rendered.getpixel((0, 0)) == (9, 18, 34, 255)
+        assert rendered.getpixel((900, 300)) != (9, 18, 34, 255)
+
+    assert first == second
+
+
+def test_dense_role_copy_uses_safe_wide_fallback_without_truncation(monkeypatch):
+    rendered_text = []
+    original = ImageDraw.ImageDraw.multiline_text
+
+    def capture(self, position, text, *args, **kwargs):
+        rendered_text.append(text)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "multiline_text", capture)
+    title = "UNDERSTAND THE SOURCE BEFORE BUILDING DISTINCT PLATFORM CONTENT"
+    body = "Find the strongest grounded idea, then adapt its structure for every channel."
+
+    output = social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        title=title,
+        body=body,
+        layout_role="phrase",
+        layout_variant="split_left",
+        design_style="viral_carousel",
+    )
+
+    assert output.startswith(b"\x89PNG")
+    assert " ".join(rendered_text[0].splitlines()) == title
+    assert " ".join(rendered_text[1].splitlines()) == body
+
+
 def test_output_remains_compatible_with_existing_jpeg_normalization():
     rendered = social_text.render_social_text(source_bytes(), title="Title")
     normalized = media.normalize_image_to_jpeg(rendered)
@@ -853,3 +898,203 @@ def test_every_role_keeps_text_inside_safe_area(monkeypatch, layout_role):
         assert bounds[1] >= safe_margin
         assert bounds[2] <= 1024 - safe_margin
         assert bounds[3] <= 1024 - safe_margin
+
+
+def test_bundled_variable_font_exposes_real_weight_instances():
+    sample = "Premium typography"
+    widths = {
+        weight: social_text._load_font(64, weight).getlength(sample)
+        for weight in social_text.FONT_WEIGHTS
+    }
+
+    assert widths["regular"] != widths["black"]
+    assert widths["medium"] != widths["extrabold"]
+
+
+def test_exact_polish_punctuation_emphasis_is_rendered_unchanged(monkeypatch):
+    captured = []
+    original = ImageDraw.ImageDraw.text
+
+    def capture(self, position, text, *args, **kwargs):
+        captured.append(text)
+        return original(self, position, text, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "text", capture)
+    title = "DZIĘKUJĘ — TO WAŻNE!"
+    emphasis = "TO WAŻNE!"
+    output = social_text.render_social_text(
+        source_bytes(),
+        title=title,
+        emphasis={"text": emphasis, "role": "accent"},
+        layout_role="cover",
+        design_style="viral_carousel",
+    )
+
+    assert output.startswith(b"\x89PNG")
+    assert emphasis in captured
+
+
+@pytest.mark.parametrize(
+    "emphasis",
+    [
+        {"text": "Title", "role": "accent", "color": "#ffffff"},
+        {"text": "Title", "role": "accent", "font": "Comic Sans"},
+        {"text": "Title", "role": "accent", "size": 200},
+    ],
+)
+def test_emphasis_rejects_arbitrary_visual_styling(emphasis):
+    with pytest.raises(social_text.SocialTextRenderError) as raised:
+        social_text.render_social_text(
+            source_bytes(), title="Title", emphasis=emphasis
+        )
+
+    assert raised.value.reason == "invalid_typography_metadata"
+
+
+def test_typography_only_viral_slide_does_not_prepare_artwork(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("typography-only treatment prepared artwork")
+
+    monkeypatch.setattr(social_text.ImageOps, "fit", forbidden)
+    output = social_text.render_social_text(
+        source_bytes(),
+        title="Typography leads",
+        layout_role="info",
+        design_style="viral_carousel",
+        visual_treatment="typography_only",
+    )
+
+    assert output.startswith(b"\x89PNG")
+
+
+def test_illustration_viral_slide_uses_supplied_artwork(monkeypatch):
+    calls = []
+    original = social_text.ImageOps.fit
+
+    def capture(*args, **kwargs):
+        calls.append(args[1])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(social_text.ImageOps, "fit", capture)
+    social_text.render_social_text(
+        source_bytes(),
+        title="Artwork supports the idea",
+        layout_role="cover",
+        design_style="viral_carousel",
+        visual_treatment="illustration",
+    )
+
+    assert calls
+
+
+def test_semantic_visual_treatments_are_distinct_and_deterministic():
+    outputs = []
+    for treatment in ("typography_only", "illustration", "diagram", "process", "comparison"):
+        first = social_text.render_social_text(
+            source_bytes(),
+            title="One exact headline",
+            layout_role="info",
+            design_style="viral_carousel",
+            visual_treatment=treatment,
+        )
+        second = social_text.render_social_text(
+            source_bytes(),
+            title="One exact headline",
+            layout_role="info",
+            design_style="viral_carousel",
+            visual_treatment=treatment,
+        )
+        assert first == second
+        outputs.append(first)
+
+    assert len(set(outputs)) == len(outputs)
+
+
+def test_mixed_headline_runs_flow_sequentially_without_overlap():
+    draw = ImageDraw.Draw(Image.new("RGBA", (1000, 1000)))
+    title = "Jeden pomysł, wiele możliwości"
+    emphasis = {"text": "wiele możliwości", "role": "accent"}
+    block = social_text._fit_mixed_headline(
+        draw,
+        title,
+        emphasis,
+        (80, 80, 650, 650),
+        max_lines=4,
+        start_size=120,
+        min_size=52,
+        align="left",
+        stroke_width=2,
+    )
+
+    flattened = " ".join(
+        "".join(value for value, _, _ in line) for line in block["mixed_lines"]
+    )
+    assert flattened == title
+    emphasized_text = " ".join(
+        "".join(value for value, _, emphasized in line if emphasized)
+        for line in block["mixed_lines"]
+        if any(emphasized for _, _, emphasized in line)
+    )
+    assert emphasized_text == emphasis["text"]
+    for line, expected_width in zip(block["mixed_lines"], block["line_widths"]):
+        widths = [draw.textlength(value, font=font) for value, font, _ in line]
+        assert sum(widths) == pytest.approx(expected_width)
+        assert all(width > 0 for width in widths)
+
+
+def test_mixed_headline_preserves_spaces_punctuation_and_polish_exactly():
+    draw = ImageDraw.Draw(Image.new("RGBA", (1400, 800)))
+    title = "Zażółć gęślą jaźń — jeden pomysł, wiele możliwości!"
+    block = social_text._fit_mixed_headline(
+        draw,
+        title,
+        {"text": "jeden pomysł,", "role": "accent"},
+        (40, 40, 1360, 760),
+        max_lines=3,
+        start_size=90,
+        min_size=52,
+        align="left",
+        stroke_width=2,
+    )
+
+    reconstructed = " ".join(
+        "".join(value for value, _, _ in line) for line in block["mixed_lines"]
+    )
+    assert reconstructed == title
+
+
+def test_long_polish_mixed_headline_uses_safe_measured_fallback():
+    output = social_text.render_social_text(
+        source_bytes(),
+        title="Jeden pomysł, wiele możliwości dla każdego ważnego kanału",
+        emphasis={"text": "wiele możliwości", "role": "accent"},
+        layout_role="info",
+        layout_variant="editorial_statement",
+        design_style="viral_carousel",
+        visual_treatment="typography_only",
+    )
+
+    assert output.startswith(b"\x89PNG")
+
+
+def test_viral_diagram_headline_keeps_mobile_readable_minimum(monkeypatch):
+    sizes = []
+    original = social_text._draw_mixed_headline
+
+    def capture(draw, block, emphasis, **kwargs):
+        sizes.append(block["font"].size)
+        return original(draw, block, emphasis, **kwargs)
+
+    monkeypatch.setattr(social_text, "_draw_mixed_headline", capture)
+    social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        title="ONE SOURCE. MANY DESTINATIONS.",
+        body="A clear supporting thought.",
+        emphasis={"text": "MANY DESTINATIONS.", "role": "accent"},
+        layout_role="info",
+        layout_variant="split_right",
+        design_style="viral_carousel",
+        visual_treatment="diagram",
+    )
+
+    assert sizes and sizes[0] >= round(1024 * 0.052)

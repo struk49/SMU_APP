@@ -14,7 +14,7 @@ content_pack_bp = Blueprint("content_pack", __name__)
 
 SLIDE_MARKER_RE = re.compile(r"^Slide\s+\d+\s*:\s*(.*)$", re.IGNORECASE)
 SLIDE_FIELD_RE = re.compile(
-    r"^(Title|Subtitle|Phrase|Translation|Body|Tip|CTA|Visual)\s*:\s*(.*)$",
+    r"^(Title|Subtitle|Phrase|Translation|Body|Tip|CTA|Visual|Eyebrow|Emphasis)\s*:\s*(.*)$",
     re.IGNORECASE,
 )
 BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
@@ -46,10 +46,26 @@ def _select_layout_variant(layout_role, slide_index):
     return ("editorial_statement", "visual_focus", "split_right")[slide_index % 3]
 
 
+def _select_visual_treatment(visual, layout_role):
+    normalized = (visual or "").lower()
+    if layout_role == "cta" or not normalized or "typography-only" in normalized:
+        return "typography_only"
+    if any(word in normalized for word in ("generic", "decorative", "abstract shape", "random geometry")):
+        return "typography_only"
+    if any(word in normalized for word in ("compare", "comparison", "before", "after", "versus")):
+        return "comparison"
+    if any(word in normalized for word in ("step", "sequence", "stage", "process", "progression")):
+        return "process"
+    if any(word in normalized for word in ("branch", "flow", "connect", "platform", "channel", "node")):
+        return "diagram"
+    return "illustration"
+
+
 def _append_slide_value(slide, field, value):
     if not value:
         return
-    slide[field] = f"{slide[field]}\n{value}" if slide[field] else value
+    existing = slide.get(field)
+    slide[field] = f"{existing}\n{value}" if existing else value
 
 
 def _parse_slide_block(lines):
@@ -78,6 +94,10 @@ def _parse_slide_block(lines):
                 active_field = "body"
             elif label == "visual":
                 active_field = "visual"
+            elif label == "eyebrow":
+                active_field = "eyebrow"
+            elif label == "emphasis":
+                active_field = "emphasis"
             else:
                 active_field = "cta"
                 if slide["layout_role"] != "phrase":
@@ -423,6 +443,7 @@ def create_content_pack_carousel():
         for index, slide in enumerate(slides):
             layout_role = "cover" if index == 0 else slide["layout_role"]
             layout_variant = _select_layout_variant(layout_role, index)
+            visual_treatment = _select_visual_treatment(slide["visual"], layout_role)
             background_prompt = _build_slide_background_prompt(
                 styled_image_prompt,
                 index,
@@ -439,6 +460,15 @@ def create_content_pack_carousel():
                 credits_reserved=True,
                 layout_role=layout_role,
                 layout_variant=layout_variant,
+                typography={
+                    "eyebrow": slide.get("eyebrow"),
+                    "emphasis": (
+                        {"text": slide["emphasis"], "role": "accent"}
+                        if slide.get("emphasis") and slide["emphasis"] in slide["title"]
+                        else None
+                    ),
+                },
+                visual_treatment=visual_treatment,
             )
 
             post = Post(

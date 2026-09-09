@@ -2,8 +2,9 @@
 
 from io import BytesIO
 from pathlib import Path
+import re
 
-from PIL import Image, ImageDraw, ImageFont, ImageStat, UnidentifiedImageError
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageStat, UnidentifiedImageError
 
 
 FONT_PATH = (
@@ -12,6 +13,14 @@ FONT_PATH = (
     / "fonts"
     / "SMUSocialText-Regular.ttf"
 )
+FONT_WEIGHTS = {
+    "regular": "Regular",
+    "medium": "Medium",
+    "semibold": "SemiBold",
+    "bold": "Bold",
+    "extrabold": "ExtraBold",
+    "black": "Black",
+}
 
 MAX_INPUT_BYTES = 20 * 1024 * 1024
 MAX_DIMENSION = 4096
@@ -23,6 +32,7 @@ TEXT_LIMITS = {
     "body": 600,
     "cta": 120,
     "brand": 120,
+    "eyebrow": 60,
 }
 
 LINE_LIMITS = {
@@ -41,6 +51,13 @@ LAYOUT_VARIANTS = {
     "editorial_statement",
     "visual_focus",
     "closing",
+}
+VISUAL_TREATMENTS = {
+    "typography_only",
+    "illustration",
+    "diagram",
+    "process",
+    "comparison",
 }
 ROLE_DESIGN_LAYOUTS = {
     "cover": "hero_left",
@@ -109,11 +126,22 @@ def _validated_text(name, value, *, required=False):
     return value
 
 
-def _load_font(size):
+def _load_font(size, weight="regular"):
     try:
-        return ImageFont.truetype(str(FONT_PATH), size=size)
+        font = ImageFont.truetype(str(FONT_PATH), size=size)
     except (OSError, ValueError) as exc:
         raise SocialTextRenderError("font_unavailable") from exc
+    variation = FONT_WEIGHTS.get(weight, FONT_WEIGHTS["regular"])
+    try:
+        font.set_variation_by_name(variation)
+    except (AttributeError, OSError, ValueError):
+        if weight == "regular":
+            return font
+        try:
+            font.set_variation_by_name(FONT_WEIGHTS["regular"])
+        except (AttributeError, OSError, ValueError):
+            pass
+    return font
 
 
 def _validate_font_support(*values):
@@ -169,6 +197,7 @@ def _fit_block(
     start_size,
     min_size=MIN_FONT_SIZE,
     preferred_max_lines=None,
+    weight="regular",
 ):
     min_size = max(min_size, MIN_FONT_SIZE)
     start_size = max(start_size, min_size)
@@ -177,7 +206,7 @@ def _fit_block(
         line_targets.insert(0, preferred_max_lines)
     for line_target in line_targets:
         for size in range(start_size, min_size - 1, -1):
-            font = _load_font(size)
+            font = _load_font(size, weight)
             lines = _wrap_text(draw, text, font, max_width)
             spacing = max(4, size // 5)
             if lines is not None and len(lines) <= line_target:
@@ -250,6 +279,7 @@ def _prepare_composition_block(
     align,
     stroke_width,
     preferred_max_lines=None,
+    weight="regular",
 ):
     if not text:
         return None
@@ -263,6 +293,7 @@ def _prepare_composition_block(
         start_size=start_size,
         min_size=min_size,
         preferred_max_lines=preferred_max_lines,
+        weight=weight,
     )
     measured = draw.multiline_textbbox(
         (0, 0), rendered, font=font, spacing=spacing, stroke_width=stroke_width
@@ -291,6 +322,139 @@ def _prepare_composition_block(
         "align": align,
         "bounds": bounds,
     }
+
+
+def _mixed_line_runs(text, start, end, emphasis_start, emphasis_end, fonts):
+    boundaries = sorted({start, end, emphasis_start, emphasis_end})
+    runs = []
+    for left, right in zip(boundaries, boundaries[1:]):
+        left = max(left, start)
+        right = min(right, end)
+        if left >= right:
+            continue
+        emphasized = left >= emphasis_start and right <= emphasis_end
+        runs.append((text[left:right], fonts[1 if emphasized else 0], emphasized))
+    return runs
+
+
+def _fit_mixed_headline(
+    draw,
+    text,
+    emphasis,
+    box,
+    *,
+    max_lines,
+    start_size,
+    min_size,
+    align,
+    stroke_width,
+    preferred_max_lines=None,
+):
+    left, top, right, bottom = box
+    emphasis_start = text.index(emphasis["text"])
+    emphasis_end = emphasis_start + len(emphasis["text"])
+    line_targets = [max_lines]
+    if preferred_max_lines and preferred_max_lines < max_lines:
+        line_targets.insert(0, preferred_max_lines)
+
+    for line_target in line_targets:
+        for size in range(max(start_size, min_size), min_size - 1, -1):
+            base_font = _load_font(size, "black")
+            emphasis_weight = {
+                "primary": "black", "accent": "black", "normal": "bold"
+            }[emphasis["role"]]
+            fonts = (base_font, _load_font(size, emphasis_weight))
+            lines = []
+            offset = 0
+            failed = False
+            for paragraph in text.split("\n"):
+                paragraph_end = offset + len(paragraph)
+                words = list(re.finditer(r"\S+", text[offset:paragraph_end]))
+                if not words:
+                    lines.append([])
+                else:
+                    line_start = offset + words[0].start()
+                    line_end = offset + words[0].end()
+                    for word in words[1:]:
+                        candidate_end = offset + word.end()
+                        candidate = _mixed_line_runs(
+                            text, line_start, candidate_end,
+                            emphasis_start, emphasis_end, fonts,
+                        )
+                        candidate_width = sum(
+                            draw.textlength(value, font=font)
+                            for value, font, _ in candidate
+                        )
+                        if candidate_width <= right - left:
+                            line_end = candidate_end
+                        else:
+                            runs = _mixed_line_runs(
+                                text, line_start, line_end,
+                                emphasis_start, emphasis_end, fonts,
+                            )
+                            if sum(draw.textlength(value, font=font) for value, font, _ in runs) > right - left:
+                                failed = True
+                                break
+                            lines.append(runs)
+                            line_start = offset + word.start()
+                            line_end = candidate_end
+                    if failed:
+                        break
+                    lines.append(_mixed_line_runs(
+                        text, line_start, line_end,
+                        emphasis_start, emphasis_end, fonts,
+                    ))
+                offset = paragraph_end + 1
+            if failed or len(lines) > line_target:
+                continue
+            widths = [
+                sum(draw.textlength(value, font=font) for value, font, _ in runs)
+                for runs in lines
+            ]
+            spacing = max(4, size // 5)
+            metrics = [font.getbbox("Ag") for font in fonts]
+            line_height = max(metric[3] - metric[1] for metric in metrics)
+            total_height = len(lines) * line_height + max(0, len(lines) - 1) * spacing
+            if max(widths, default=0) <= right - left and total_height <= bottom - top:
+                max_width = max(widths, default=0)
+                if align == "center":
+                    x = left + ((right - left) - max_width) / 2
+                elif align == "right":
+                    x = right - max_width
+                else:
+                    x = left
+                return {
+                    "position": (x, top), "text": text, "font": base_font,
+                    "spacing": spacing, "align": align,
+                    "bounds": (x, top, x + max_width, top + total_height),
+                    "mixed_lines": lines, "line_widths": widths,
+                    "line_height": line_height,
+                }
+    raise SocialTextRenderError("text_does_not_fit")
+
+
+def _draw_mixed_headline(draw, block, emphasis, *, foreground, stroke_width, stroke_fill):
+    accent = (244, 211, 94, 255)
+    max_width = max(block["line_widths"], default=0)
+    for index, (runs, line_width) in enumerate(
+        zip(block["mixed_lines"], block["line_widths"])
+    ):
+        x = block["position"][0]
+        if block["align"] == "center":
+            x += (max_width - line_width) / 2
+        elif block["align"] == "right":
+            x += max_width - line_width
+        glyph_top = block["position"][1] + index * (
+            block["line_height"] + block["spacing"]
+        )
+        for value, font, emphasized in runs:
+            font_box = font.getbbox("Ag")
+            fill = accent if emphasized and emphasis["role"] == "accent" else foreground
+            draw.text(
+                (x, glyph_top - font_box[1]), value, font=font, fill=fill,
+                stroke_width=stroke_width, stroke_fill=stroke_fill,
+            )
+            x += draw.textlength(value, font=font)
 
 
 def select_design_layout(layout_role, layout_variant=None):
@@ -328,6 +492,111 @@ def _analyze_text_region(image, box):
     }
 
 
+def _build_designed_carousel_canvas(
+    source_image, layout_variant, visual_treatment="illustration"
+):
+    """Make artwork secondary to a deterministic, branded social-card canvas."""
+    width, height = source_image.size
+    scale = min(width, height)
+    canvas = Image.new("RGBA", source_image.size, (9, 18, 34, 255))
+    draw = ImageDraw.Draw(canvas)
+    accent_yellow = (244, 211, 94, 255)
+    accent_green = (101, 214, 166, 255)
+    accent_blue = (86, 142, 246, 255)
+    panel = (18, 34, 58, 255)
+
+    zones = {
+        "hero_left": (round(width * 0.66), round(height * 0.12), round(width * 0.94), round(height * 0.82)),
+        "hero_center": (round(width * 0.68), round(height * 0.10), round(width * 0.94), round(height * 0.42)),
+        "split_left": (round(width * 0.60), round(height * 0.14), round(width * 0.94), round(height * 0.86)),
+        "split_right": (round(width * 0.06), round(height * 0.14), round(width * 0.40), round(height * 0.86)),
+        "editorial_statement": (round(width * 0.72), round(height * 0.18), round(width * 0.94), round(height * 0.68)),
+        "visual_focus": (round(width * 0.12), round(height * 0.07), round(width * 0.88), round(height * 0.52)),
+        "closing": (round(width * 0.68), round(height * 0.62), round(width * 0.94), round(height * 0.88)),
+    }
+    radius = max(16, round(scale * 0.035))
+
+    def paste_artwork(zone, *, opacity=235):
+        zone_width = zone[2] - zone[0]
+        zone_height = zone[3] - zone[1]
+        artwork = ImageOps.fit(
+            source_image.convert("RGBA"),
+            (zone_width, zone_height),
+            method=Image.Resampling.LANCZOS,
+        )
+        artwork = Image.alpha_composite(
+            artwork, Image.new("RGBA", artwork.size, (8, 20, 38, 54))
+        )
+        mask = Image.new("L", artwork.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, zone_width, zone_height), radius=radius, fill=opacity
+        )
+        canvas.paste(artwork, (zone[0], zone[1]), mask)
+
+    zone = zones[layout_variant]
+    if visual_treatment == "typography_only":
+        draw.ellipse(
+            (round(width * 0.70), round(height * -0.12), round(width * 1.14), round(height * 0.32)),
+            outline=(86, 142, 246, 80),
+            width=max(4, round(scale * 0.010)),
+        )
+    elif visual_treatment == "comparison":
+        midpoint = (zone[0] + zone[2]) // 2
+        gap = round(scale * 0.018)
+        left_zone = (zone[0], zone[1], midpoint - gap, zone[3])
+        right_zone = (midpoint + gap, zone[1], zone[2], zone[3])
+        paste_artwork(left_zone, opacity=220)
+        paste_artwork(right_zone, opacity=180)
+        draw.line(
+            (midpoint, zone[1], midpoint, zone[3]),
+            fill=accent_yellow,
+            width=max(3, round(scale * 0.006)),
+        )
+    elif visual_treatment == "process":
+        y = (zone[1] + zone[3]) // 2
+        points = [zone[0] + round((zone[2] - zone[0]) * fraction) for fraction in (0.12, 0.50, 0.88)]
+        draw.line((points[0], y, points[-1], y), fill=accent_blue, width=max(4, round(scale * 0.008)))
+        node_radius = max(14, round(scale * 0.026))
+        for index, x in enumerate(points):
+            draw.ellipse(
+                (x - node_radius, y - node_radius, x + node_radius, y + node_radius),
+                fill=(accent_yellow, accent_green, accent_blue)[index],
+            )
+    elif visual_treatment == "diagram":
+        centre = ((zone[0] + zone[2]) // 2, (zone[1] + zone[3]) // 2)
+        destinations = (
+            (zone[2] - round(scale * 0.03), zone[1] + round(scale * 0.08)),
+            (zone[2] - round(scale * 0.03), centre[1]),
+            (zone[2] - round(scale * 0.03), zone[3] - round(scale * 0.08)),
+        )
+        for destination in destinations:
+            draw.line((*centre, *destination), fill=accent_blue, width=max(3, round(scale * 0.005)))
+        node_radius = max(12, round(scale * 0.022))
+        for point in (centre, *destinations):
+            draw.ellipse(
+                (point[0] - node_radius, point[1] - node_radius, point[0] + node_radius, point[1] + node_radius),
+                fill=accent_green if point == centre else panel,
+                outline=accent_yellow,
+                width=max(2, round(scale * 0.004)),
+            )
+    else:
+        paste_artwork(zone)
+
+    rail_height = max(8, round(scale * 0.012))
+    rail_y = height - round(scale * 0.055)
+    draw.rounded_rectangle(
+        (round(width * 0.08), rail_y, round(width * 0.32), rail_y + rail_height),
+        radius=rail_height // 2,
+        fill=accent_yellow,
+    )
+    draw.rounded_rectangle(
+        (round(width * 0.335), rail_y, round(width * 0.47), rail_y + rail_height),
+        radius=rail_height // 2,
+        fill=accent_green,
+    )
+    return canvas
+
+
 def _draw_role_composition(
     draw,
     *,
@@ -339,6 +608,8 @@ def _draw_role_composition(
     body,
     cta,
     brand,
+    eyebrow,
+    emphasis,
     layout_role,
     layout_variant,
     design_style,
@@ -349,7 +620,10 @@ def _draw_role_composition(
     scale = min(width, height)
     readable_body_size = max(MIN_FONT_SIZE, round(scale * 0.030))
     readable_brand_size = max(MIN_FONT_SIZE, round(min(width, height) * 0.022))
-    readable_title_size = max(MIN_FONT_SIZE, round(scale * 0.039))
+    readable_title_size = max(
+        MIN_FONT_SIZE,
+        round(scale * (0.052 if design_style == "viral_carousel" else 0.039)),
+    )
     padding = max(12, round(scale * 0.022))
     layout_tokens = {
         "hero_left": {
@@ -401,6 +675,13 @@ def _draw_role_composition(
             "lines": (3, 3, 2),
             "preferred": (2, None, None),
         },
+        "compact_statement": {
+            "region": (margin, round(height * 0.12), width - margin, round(height * 0.86)),
+            "align": "left",
+            "sizes": (0.130, 0.052, 0.054),
+            "lines": (6, 6, 2),
+            "preferred": (4, None, None),
+        },
     }
     config = layout_tokens[design_layout]
     region_left, region_top, region_right, region_bottom = config["region"]
@@ -410,43 +691,82 @@ def _draw_role_composition(
     analysis = _analyze_text_region(source_image, analysis_region)
     foreground = analysis["foreground"]
     shadow = (0, 0, 0, 145) if foreground[0] > 128 else (255, 255, 255, 135)
-    stroke_width = max(1, round(scale * 0.001))
+    stroke_width = max(
+        1,
+        round(scale * (0.0025 if design_style == "viral_carousel" else 0.001)),
+    )
     gap = max(10, round(scale * 0.026 * tokens["gap"]))
+    if eyebrow:
+        eyebrow_block = _prepare_composition_block(
+            draw,
+            eyebrow,
+            (
+                region_left + padding,
+                region_top,
+                region_right - padding,
+                region_top + round((region_bottom - region_top) * 0.10),
+            ),
+            max_lines=1,
+            start_size=round(content_width * 0.032),
+            min_size=readable_brand_size,
+            align=config["align"],
+            stroke_width=stroke_width,
+            weight="semibold",
+        )
+        eyebrow_block["kind"] = "eyebrow"
+        cursor = eyebrow_block["bounds"][3] + gap
+    else:
+        eyebrow_block = None
     values = (title, body, cta)
+    kinds = ("title", "body", "cta")
+    weights = ("black", "medium", "bold")
     minimums = (readable_title_size, readable_body_size, readable_body_size)
     height_shares = (
         (0.52, 0.31, 0.17)
         if design_style == "viral_carousel"
         else (0.45, 0.36, 0.19)
     )
-    blocks = []
-    cursor = region_top
-    for value, font_scale, max_lines, preferred, min_size, height_share in zip(
+    blocks = [eyebrow_block] if eyebrow_block else []
+    cursor = cursor if eyebrow_block else region_top
+    for kind, value, font_scale, max_lines, preferred, min_size, height_share, weight in zip(
+        kinds,
         values,
         config["sizes"],
         config["lines"],
         config["preferred"],
         minimums,
         height_shares,
+        weights,
     ):
         if not value:
             continue
-        block = _prepare_composition_block(
-            draw,
-            value,
-            (
-                region_left + padding,
-                cursor,
-                region_right - padding,
-                min(region_bottom, cursor + round((region_bottom - region_top) * height_share)),
-            ),
-            max_lines=max_lines,
-            start_size=round(content_width * font_scale * tokens["headline" if not blocks else "body"]),
-            min_size=min_size,
-            align=config["align"],
-            stroke_width=stroke_width,
-            preferred_max_lines=preferred,
+        block_box = (
+            region_left + padding,
+            cursor,
+            region_right - padding,
+            min(region_bottom, cursor + round((region_bottom - region_top) * height_share)),
         )
+        block_options = {
+            "max_lines": max_lines,
+            "start_size": round(
+                content_width
+                * font_scale
+                * tokens["headline" if kind == "title" else "body"]
+            ),
+            "min_size": min_size,
+            "align": config["align"],
+            "stroke_width": stroke_width,
+            "preferred_max_lines": preferred,
+        }
+        if kind == "title" and emphasis:
+            block = _fit_mixed_headline(
+                draw, value, emphasis, block_box, **block_options
+            )
+        else:
+            block = _prepare_composition_block(
+                draw, value, block_box, weight=weight, **block_options
+            )
+        block["kind"] = kind
         blocks.append(block)
         cursor = block["bounds"][3] + gap
 
@@ -478,16 +798,22 @@ def _draw_role_composition(
         )
 
     for block in blocks:
-        draw.multiline_text(
-            block["position"],
-            block["text"],
-            font=block["font"],
-            fill=foreground,
-            spacing=block["spacing"],
-            align=block["align"],
-            stroke_width=stroke_width,
-            stroke_fill=shadow,
-        )
+        if block["kind"] == "title" and "mixed_lines" in block:
+            _draw_mixed_headline(
+                draw, block, emphasis, foreground=foreground,
+                stroke_width=stroke_width, stroke_fill=shadow,
+            )
+        else:
+            draw.multiline_text(
+                block["position"],
+                block["text"],
+                font=block["font"],
+                fill=foreground,
+                spacing=block["spacing"],
+                align=block["align"],
+                stroke_width=stroke_width,
+                stroke_fill=shadow,
+            )
 
     if brand:
         brand_box = (
@@ -512,6 +838,7 @@ def _draw_role_composition(
             min_size=readable_brand_size,
             align="center" if design_layout in {"hero_center", "closing"} else config["align"],
             stroke_width=stroke_width,
+            weight="medium",
         )
         draw.multiline_text(
             brand_block["position"],
@@ -536,6 +863,9 @@ def render_social_text(
     layout_role=None,
     layout_variant=None,
     design_style=None,
+    eyebrow=None,
+    emphasis=None,
+    visual_treatment=None,
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
     if layout != "carousel":
@@ -550,6 +880,11 @@ def render_social_text(
         or layout_variant not in LAYOUT_VARIANTS
     ):
         raise SocialTextRenderError("unsupported_layout_variant")
+    if visual_treatment is not None and (
+        not isinstance(visual_treatment, str)
+        or visual_treatment not in VISUAL_TREATMENTS
+    ):
+        raise SocialTextRenderError("unsupported_visual_treatment")
     if not isinstance(image_bytes, bytes) or not image_bytes:
         raise SocialTextRenderError("invalid_image")
     if len(image_bytes) > MAX_INPUT_BYTES:
@@ -559,7 +894,24 @@ def render_social_text(
     body = _validated_text("body", body)
     cta = _validated_text("cta", cta)
     brand = _validated_text("brand", brand)
-    _validate_font_support(title, body, cta, brand)
+    eyebrow = _validated_text("eyebrow", eyebrow)
+    if emphasis is not None and (
+        not isinstance(emphasis, dict)
+        or set(emphasis) != {"text", "role"}
+        or not isinstance(emphasis.get("text"), str)
+        or not emphasis["text"]
+        or emphasis["text"] not in title
+        or emphasis.get("role") not in {"primary", "accent", "normal"}
+    ):
+        raise SocialTextRenderError("invalid_typography_metadata")
+    _validate_font_support(
+        title,
+        body,
+        cta,
+        brand,
+        eyebrow,
+        emphasis["text"] if emphasis else "",
+    )
 
     try:
         with Image.open(BytesIO(image_bytes)) as source:
@@ -586,21 +938,51 @@ def render_social_text(
     draw = ImageDraw.Draw(image)
     content_width = width - 2 * margin
     if layout_role is not None:
+        effective_variant = select_design_layout(layout_role, layout_variant)
+        if design_style == "viral_carousel":
+            image = _build_designed_carousel_canvas(
+                image,
+                effective_variant,
+                visual_treatment or "illustration",
+            )
         composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
-        _draw_role_composition(
-            ImageDraw.Draw(composition_layer),
-            source_image=image,
-            width=width,
-            height=height,
-            margin=margin,
-            title=title,
-            body=body,
-            cta=cta,
-            brand=brand,
-            layout_role=layout_role,
-            layout_variant=layout_variant,
-            design_style=design_style,
-        )
+        try:
+            _draw_role_composition(
+                ImageDraw.Draw(composition_layer),
+                source_image=image,
+                width=width,
+                height=height,
+                margin=margin,
+                title=title,
+                body=body,
+                cta=cta,
+                brand=brand,
+                eyebrow=eyebrow,
+                emphasis=emphasis,
+                layout_role=layout_role,
+                layout_variant=layout_variant,
+                design_style=design_style,
+            )
+        except SocialTextRenderError as exc:
+            if exc.reason != "text_does_not_fit":
+                raise
+            composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
+            _draw_role_composition(
+                ImageDraw.Draw(composition_layer),
+                source_image=image,
+                width=width,
+                height=height,
+                margin=margin,
+                title=title,
+                body=body,
+                cta=cta,
+                brand=brand,
+                eyebrow=eyebrow,
+                emphasis=emphasis,
+                layout_role=layout_role,
+                layout_variant="compact_statement",
+                design_style=design_style,
+            )
         image = Image.alpha_composite(image, composition_layer)
         output = BytesIO()
         image.save(output, format="PNG", optimize=True)

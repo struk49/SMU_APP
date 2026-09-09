@@ -73,6 +73,40 @@ def test_content_pack_blueprint_is_registered_once(module):
     assert list(module.app.blueprints).count("content_pack") == 1
 
 
+def test_visual_treatment_uses_only_semantically_supported_structure():
+    assert content_pack_routes._select_visual_treatment(
+        "A connected three-stage process", "info"
+    ) == "process"
+    assert content_pack_routes._select_visual_treatment(
+        "A before and after comparison", "info"
+    ) == "comparison"
+    assert content_pack_routes._select_visual_treatment(
+        "A calm relevant object", "info"
+    ) == "illustration"
+    assert content_pack_routes._select_visual_treatment(None, "info") == "typography_only"
+
+
+def test_visual_treatment_does_not_fabricate_process_or_comparison():
+    generic = "A clean focal subject with generous negative space"
+
+    assert content_pack_routes._select_visual_treatment(generic, "info") == "illustration"
+
+
+def test_weak_decorative_visual_semantics_fall_back_to_typography_only():
+    assert content_pack_routes._select_visual_treatment(
+        "Generic decorative abstract shape", "info"
+    ) == "typography_only"
+
+
+def test_cover_visual_treatment_is_derived_from_semantic_concept():
+    assert content_pack_routes._select_visual_treatment(
+        "One source card branching into multiple destination cards", "cover"
+    ) == "diagram"
+    assert content_pack_routes._select_visual_treatment(
+        "A learning book and speech symbol", "cover"
+    ) == "illustration"
+
+
 def test_content_pack_routes_preserve_old_endpoints_and_methods(module):
     expected = {
         "/content-pack": ("content_pack", {"GET", "POST"}),

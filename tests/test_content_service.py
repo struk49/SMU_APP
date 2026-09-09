@@ -659,5 +659,8 @@ HASHTAGS:
     assert content.apply_image_style("Prompt", "unknown") == "Prompt"
     styled = content.apply_image_style("Prompt", "viral_carousel")
     assert "Style: viral Instagram business carousel" in styled
+    assert "text-free vector-like supporting illustration" in styled
+    assert "no photography unless the source specifically requires it" in styled
+    assert "deterministic SMU canvas supplies all typography" in styled
     assert "- square 1:1 format" in styled
-    assert content.get_placeholder_image_url() == content.PLACEHOLDER_IMAGE_URL
+    assert content.get_placeholder_image_url() == "/static/generating-image.svg"
