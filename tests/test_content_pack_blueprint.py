@@ -9,6 +9,7 @@ from conftest import create_user, login
 from smu_core.models import BrandBrief, Post
 from smu_core.blueprints.content_pack import routes as content_pack_routes
 from smu_core.services import carousel_generation
+from smu_core.services.content import ContentPackGenerationError
 from smu_core.services.time_utils import utc_now
 
 
@@ -196,6 +197,42 @@ def test_content_pack_post_uses_current_user_brand_context(client, app, module, 
     }
     assert templates[0][1]["source_text"] == "Topic idea"
     assert templates[0][1]["content_pack_result"] == CONTENT_PACK_RESULT
+
+
+def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="provider-timeout@example.com")
+    login(client, user)
+    released = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_content_pack_credits", lambda current_user: True
+    )
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "release_content_pack_credits",
+        lambda current_user: released.append(current_user.id),
+    )
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda source_text, brand_context: (_ for _ in ()).throw(
+            ContentPackGenerationError("provider_timeout")
+        ),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={"source_type": "text", "source_input": "PRIVATE SOURCE"},
+    )
+
+    assert response.status_code == 200
+    assert released == [user.id]
+    assert b"We couldn&#39;t generate your Content Pack. Please try again." in response.data
+    assert b"provider_timeout" not in response.data
 
 
 def test_content_pack_tiktok_source_uses_transcript_helper(client, app, module, monkeypatch):

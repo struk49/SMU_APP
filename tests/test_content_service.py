@@ -1,5 +1,6 @@
 import logging
 
+import httpx
 import pytest
 
 import app as smu_app
@@ -372,7 +373,8 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
     call = client.calls[0]
 
     assert call["model"] == "gpt-4.1-mini"
-    assert set(call.keys()) == {"model", "input"}
+    assert set(call.keys()) == {"model", "input", "timeout"}
+    assert call["timeout"] == content.CONTENT_PACK_TIMEOUT_SECONDS
     assert call["input"].count("/human") == 1
     assert "Brand Brief:\nBrand context" in call["input"]
     assert "Source content:\nTranscript text" in call["input"]
@@ -393,6 +395,60 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
             openai_api_key="",
             openai_client=client,
         )
+
+
+class FailingContentPackClient:
+    def __init__(self, error):
+        self.error = error
+        self.calls = []
+        self.options = []
+        self.responses = self
+
+    def with_options(self, **kwargs):
+        self.options.append(kwargs)
+        return self
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        raise self.error
+
+
+@pytest.mark.parametrize(
+    ("error", "reason"),
+    [
+        (httpx.ReadTimeout("FAKE_API_KEY timeout"), "provider_timeout"),
+        (httpx.ConnectError("FAKE_API_KEY connection"), "provider_connection_error"),
+        (RuntimeError("FAKE_API_KEY provider response"), "provider_error"),
+    ],
+)
+def test_content_pack_provider_failures_are_bounded_safe_and_secret_free(
+    error, reason, caplog
+):
+    source = "PRIVATE SOURCE CONTENT"
+    client = FailingContentPackClient(error)
+    caplog.set_level(logging.ERROR, logger="smu_core.services.content")
+
+    with pytest.raises(content.ContentPackGenerationError) as raised:
+        content.generate_content_pack(
+            source,
+            openai_api_key="FAKE_API_KEY",
+            openai_client=client,
+        )
+
+    assert raised.value.reason == reason
+    assert str(raised.value) == reason
+    assert client.options == [{
+        "timeout": content.CONTENT_PACK_TIMEOUT_SECONDS,
+        "max_retries": content.CONTENT_PACK_MAX_RETRIES,
+    }]
+    assert len(client.calls) == 1
+    assert client.calls[0]["timeout"] == content.CONTENT_PACK_TIMEOUT_SECONDS
+    assert "content_pack_generation_failed" in caplog.text
+    assert "operation=content_pack_generation" in caplog.text
+    assert f"reason={reason}" in caplog.text
+    assert error.__class__.__name__ in caplog.text
+    assert source not in caplog.text
+    assert "FAKE_API_KEY" not in caplog.text
 
 
 def test_content_pack_prompt_is_source_faithful_and_platform_native():

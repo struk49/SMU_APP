@@ -6,7 +6,9 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 
+import httpx
 import requests
+from openai import APIConnectionError, APITimeoutError
 from yt_dlp import YoutubeDL
 
 
@@ -16,6 +18,24 @@ PLACEHOLDER_IMAGE_URL = "/static/generating-image.svg"
 TIKTOK_HOST_SUFFIX = "tiktok.com"
 TIKTOK_SHORTLINK_HOSTS = {"vm.tiktok.com", "vt.tiktok.com"}
 TIKTOK_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
+CONTENT_PACK_TIMEOUT_SECONDS = 35.0
+CONTENT_PACK_MAX_RETRIES = 0
+
+
+class ContentPackGenerationError(RuntimeError):
+    """Safe provider failure exposed to the Content Pack web boundary."""
+
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def _content_pack_provider_reason(error):
+    if isinstance(error, (APITimeoutError, httpx.TimeoutException)):
+        return "provider_timeout"
+    if isinstance(error, (APIConnectionError, httpx.NetworkError)):
+        return "provider_connection_error"
+    return "provider_error"
 
 
 def get_placeholder_image_url():
@@ -929,10 +949,29 @@ Source content:
 {source_text}
 """
 
-    response = openai_client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt,
+    request_client = (
+        openai_client.with_options(
+            timeout=CONTENT_PACK_TIMEOUT_SECONDS,
+            max_retries=CONTENT_PACK_MAX_RETRIES,
+        )
+        if hasattr(openai_client, "with_options")
+        else openai_client
     )
+    try:
+        response = request_client.responses.create(
+            model="gpt-4.1-mini",
+            input=prompt,
+            timeout=CONTENT_PACK_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        reason = _content_pack_provider_reason(exc)
+        logger.error(
+            "content_pack_generation_failed operation=%s exception_class=%s reason=%s",
+            "content_pack_generation",
+            exc.__class__.__name__,
+            reason,
+        )
+        raise ContentPackGenerationError(reason) from None
 
     return response.output_text
 

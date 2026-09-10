@@ -8,6 +8,7 @@ from smu_core.extensions import db
 from smu_core.models import Post
 from smu_core.services.access import subscription_required
 from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
+from smu_core.services.content import ContentPackGenerationError
 
 
 content_pack_bp = Blueprint("content_pack", __name__)
@@ -414,6 +415,15 @@ def content_pack():
                 brand_context,
             )
 
+        except ContentPackGenerationError:
+            if reserved_content_pack_credit:
+                _content_pack_helper("release_content_pack_credits")(
+                    current_user._get_current_object()
+                )
+            flash(
+                "We couldn't generate your Content Pack. Please try again.",
+                "danger",
+            )
         except Exception as e:
             if reserved_content_pack_credit:
                 _content_pack_helper("release_content_pack_credits")(
