@@ -31,7 +31,12 @@ VIRAL_CAROUSEL_MAX_INTERNAL_CHARACTERS = 80
 VIRAL_CAROUSEL_LONG_INTERNAL_WORD_THRESHOLD = 8
 VIRAL_CAROUSEL_LONG_INTERNAL_CHARACTER_THRESHOLD = 64
 VIRAL_CAROUSEL_MAX_CTA_CHARACTERS = 72
-VIRAL_CAROUSEL_MAX_SUPPORT_WORDS = 12
+VIRAL_CAROUSEL_MAX_COVER_SUPPORT_WORDS = 10
+VIRAL_CAROUSEL_MAX_COVER_SUPPORT_CHARACTERS = 72
+VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_WORDS = 16
+VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_CHARACTERS = 100
+VIRAL_CAROUSEL_MAX_CTA_SUPPORT_WORDS = 8
+VIRAL_CAROUSEL_MAX_CTA_SUPPORT_CHARACTERS = 64
 GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
 COPY_WORD_RE = re.compile(r"\b[\w']+(?:[-‐‑–][\w']+)*\b", re.UNICODE)
 SLIDE_VISUAL_CONCEPTS = (
@@ -283,7 +288,19 @@ def _validate_viral_carousel_copy(slides):
                 role=role,
                 value=title,
             )
-        if _copy_word_count(body) > VIRAL_CAROUSEL_MAX_SUPPORT_WORDS:
+        if role == "cover":
+            support_word_limit = VIRAL_CAROUSEL_MAX_COVER_SUPPORT_WORDS
+            support_character_limit = VIRAL_CAROUSEL_MAX_COVER_SUPPORT_CHARACTERS
+        elif role == "cta":
+            support_word_limit = VIRAL_CAROUSEL_MAX_CTA_SUPPORT_WORDS
+            support_character_limit = VIRAL_CAROUSEL_MAX_CTA_SUPPORT_CHARACTERS
+        else:
+            support_word_limit = VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_WORDS
+            support_character_limit = VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_CHARACTERS
+        if (
+            _copy_word_count(body) > support_word_limit
+            or len(body.strip()) > support_character_limit
+        ):
             _reject_carousel_copy(
                 "carousel_support_too_dense",
                 slide_index=slide_index,
