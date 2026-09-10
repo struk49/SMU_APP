@@ -20,6 +20,10 @@ SLIDE_FIELD_RE = re.compile(
 BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
 CONTENT_PACK_CAROUSEL_MIN_SLIDES = 2
 CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
+VIRAL_CAROUSEL_MAX_COVER_WORDS = 8
+VIRAL_CAROUSEL_MAX_HEADLINE_WORDS = 8
+VIRAL_CAROUSEL_MAX_SUPPORT_WORDS = 12
+GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
     "negative space, without trying to illustrate every detail of the source.",
@@ -178,6 +182,48 @@ def _normalize_content_pack_carousel_slides(slides):
         if index != final_cta_index and slide["layout_role"] != "cta"
     ][: CONTENT_PACK_CAROUSEL_MAX_SLIDES - 2]
     return [slides[0], *retained_content, slides[final_cta_index]]
+
+
+def _normalized_copy(value):
+    return " ".join(re.findall(r"[\w']+", (value or "").lower(), re.UNICODE))
+
+
+def _copy_word_count(value):
+    return len(re.findall(r"\b[\w']+\b", value or "", re.UNICODE))
+
+
+def _validate_viral_carousel_copy(slides):
+    """Reject structurally poor artwork copy without rewriting approved wording."""
+    seen_headlines = set()
+    previous_message = None
+    for index, slide in enumerate(slides):
+        title = slide["title"] or ""
+        body = slide["body"] or ""
+        normalized_title = _normalized_copy(title)
+        normalized_body = _normalized_copy(body)
+        headline_limit = (
+            VIRAL_CAROUSEL_MAX_COVER_WORDS
+            if index == 0
+            else VIRAL_CAROUSEL_MAX_HEADLINE_WORDS
+        )
+        if _copy_word_count(title) > headline_limit:
+            raise ValueError("carousel_headline_too_dense")
+        if _copy_word_count(body) > VIRAL_CAROUSEL_MAX_SUPPORT_WORDS:
+            raise ValueError("carousel_support_too_dense")
+        if len(re.findall(r"[.!?]+(?:\s|$)", body)) > 1:
+            raise ValueError("carousel_support_too_dense")
+        if normalized_body and normalized_body == normalized_title:
+            raise ValueError("carousel_support_repeats_headline")
+        if normalized_title in seen_headlines:
+            raise ValueError("carousel_repeats_slide")
+        seen_headlines.add(normalized_title)
+        message = " ".join(value for value in (normalized_title, normalized_body) if value)
+        if previous_message and message == previous_message:
+            raise ValueError("carousel_repeats_slide")
+        previous_message = message
+
+    if _normalized_copy(slides[-1]["title"]) in GENERIC_CLOSING_HEADLINES:
+        raise ValueError("carousel_generic_closing")
 
 
 def _safe_visual_direction(visual):
@@ -423,6 +469,9 @@ def create_content_pack_carousel():
                 "danger",
             )
             return redirect(url_for("content_pack"))
+
+        if image_style == "viral_carousel":
+            _validate_viral_carousel_copy(slides)
 
         required_images = len(slides)
         user = current_user._get_current_object()

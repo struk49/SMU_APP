@@ -706,6 +706,10 @@ Creative-director planning (internal only):
   and ending. Every slide must advance the idea rather than paraphrase another slide.
 - Silently reject a draft if adjacent slides repeat substantially the same claim,
   scene, subject, environment, activity, framing, perspective, object, or metaphor.
+- Before finalizing, compare every headline and support line across the complete
+  carousel. Merge, replace, or remove semantic duplicates rather than expressing
+  one point several ways. Silently identify the ONE thing each slide should leave
+  with the viewer; if a slide has two independent messages, simplify it.
 - Do not output the planning, evaluation, classification, or hidden reasoning.
 
 Semantic classification:
@@ -775,6 +779,11 @@ Hook selection:
 - The carousel cover has one job: earn the swipe. Prefer a concise 3-8 word
   observation, problem, useful promise, supported contrast, meaningful question, or
   source-grounded curiosity gap. Allow longer only when meaning requires it.
+- The cover must express the strongest source-backed idea, not summarize the topic.
+  Prefer genuine tension, contrast, transformation, challenge, surprising
+  distinction, immediate relevance, or a supported promise. Normally use 2-6 words
+  and never exceed about 8 words merely to explain the subject. Support is optional
+  and must be very short; never put a paragraph on the cover.
 - Reject vague cover hooks such as "Unlock your potential", "Discover the power of",
   "Ready to elevate", "Transform your social media", "Start your journey",
   "See the impact", or unsupported claims that something is a "game changer".
@@ -792,6 +801,8 @@ Carousel strategy:
   explicitly numbered lessons or tips.
 - Put ONE PRIMARY IDEA PER SLIDE. Never use the artwork as an article, repeat the
   title six ways, add a CTA to every slide, or write mini paragraphs.
+- For each slide, silently answer: "What is the one thing the viewer should remember?"
+  A slide with more than one answer must be simplified before output.
 - Image copy must be fast to understand, minimal, swipeable, and large-text friendly.
   Caption copy carries context, explanation, story, supporting details, and optional
   CTA/hashtags. The Instagram caption must complement rather than duplicate the
@@ -805,6 +816,12 @@ Carousel strategy:
 - The cover uses Title and optional Subtitle. Content uses either Title with Body,
   or the vocabulary structure below. Body is normally one concise sentence and must
   not restate the headline. A closing CTA is one short action, never a paragraph.
+- Treat 2-6 headline words and 0-12 support words as the normal internal-slide
+  budget. Reject caption-like prose, multiple sentences, stacked claims, and support
+  that merely repeats the headline. Put explanation in the Instagram caption.
+- End the narrative with a source-grounded conclusion, principle, challenge, result,
+  practical next step, or justified CTA. Never use "Takeaway", "Summary",
+  "Final Thought", "Conclusion", or another generic closing as the headline.
 - ONLY when the source genuinely teaches vocabulary or language terms, use Phrase,
   Translation, optional Tip, and Visual. Put the target-language wording in Phrase
   and its meaning in Translation rather than combining both into one field.
@@ -841,6 +858,14 @@ Carousel strategy:
   one exact substring copied from Title. Emphasis marks meaning only; never output
   fonts, colours, coordinates, sizes, CSS, or other styling instructions. Omit both
   when they do not improve comprehension.
+- Usually emphasize one meaningful contrast, result, key noun, key action, or
+  distinction, covering roughly 30-45% or less of the headline. Never emphasize
+  filler randomly. Use Eyebrow sparingly for useful context; avoid boilerplate such
+  as `SLIDE 1`, `TAKEAWAY`, `INFO`, or `TIP`.
+- Deliberately vary carousel rhythm. For a substantive 5-6 slide Viral Carousel,
+  actively consider one or two `typography-only` Visual fields as rhythm breaks or
+  when illustration would be decorative. Do not force every treatment, and use
+  process or comparison only when the source genuinely contains that structure.
 
 CTA selection:
 - Match any CTA to the category and goal. Educational content may invite saving,

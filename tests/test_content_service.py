@@ -636,6 +636,31 @@ def test_creative_director_requires_scene_variety_and_campaign_consistency():
     assert "without unexpectedly changing visual medium" in prompt
 
 
+def test_phase_2_9_prompt_requires_scroll_stopping_source_backed_carousel_copy():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "A source-backed product lesson.",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = " ".join(client.calls[0]["input"].split())
+
+    assert len(client.calls) == 1
+    assert "strongest source-backed idea, not summarize the topic" in prompt
+    assert "Normally use 2-6 words" in prompt
+    assert "never exceed about 8 words" in prompt
+    assert "ONE PRIMARY IDEA PER SLIDE" in prompt
+    assert "0-12 support words" in prompt
+    assert "compare every headline and support line across the complete carousel" in prompt
+    assert "What is the one thing the viewer should remember?" in prompt
+    assert 'Never use "Takeaway", "Summary"' in prompt
+    assert "source-grounded conclusion, principle, challenge, result" in prompt
+    assert "roughly 30-45% or less of the headline" in prompt
+    assert "Use Eyebrow sparingly" in prompt
+    assert "actively consider one or two `typography-only`" in prompt
+    assert "must not be rewritten as completed or proven" in prompt
+
+
 def test_content_pack_section_extraction_image_style_and_placeholder_behaviour():
     pack = """INSTAGRAM_CAPTION:
 Instagram caption

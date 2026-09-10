@@ -495,6 +495,58 @@ def test_carousel_normalizer_accepts_valid_slide_counts_unchanged(slide_count):
     assert content_pack_routes._normalize_content_pack_carousel_slides(slides) == slides
 
 
+def test_viral_carousel_quality_accepts_short_distinct_progression():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1: Start with the source
+Slide 2: Find the strongest idea
+Slide 3: Build for each platform
+Slide 4: Adapt with purpose"""
+    )
+
+    assert content_pack_routes._validate_viral_carousel_copy(slides) is None
+
+
+@pytest.mark.parametrize(
+    ("carousel", "reason"),
+    [
+        (
+            "Slide 1: This cover contains far too many words to communicate one clear idea quickly\nSlide 2: Distinct point",
+            "carousel_headline_too_dense",
+        ),
+        (
+            "Slide 1: Strong cover\nSlide 2:\nTitle: Clear point\nBody: This support contains far too many words and reads like caption prose inside the artwork",
+            "carousel_support_too_dense",
+        ),
+        (
+            "Slide 1: Strong cover\nSlide 2: Repeated point\nSlide 3: Repeated point",
+            "carousel_repeats_slide",
+        ),
+        (
+            "Slide 1: Strong cover\nSlide 2: Takeaway",
+            "carousel_generic_closing",
+        ),
+    ],
+)
+def test_viral_carousel_quality_rejects_dense_repetitive_or_generic_copy(
+    carousel, reason
+):
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+
+    with pytest.raises(ValueError, match=reason):
+        content_pack_routes._validate_viral_carousel_copy(slides)
+
+
+def test_viral_carousel_quality_preserves_polish_exactly():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "Slide 1: Jeden pomysł\nSlide 2: Wiele możliwości"
+    )
+
+    content_pack_routes._validate_viral_carousel_copy(slides)
+    assert [slide["title"] for slide in slides] == [
+        "Jeden pomysł", "Wiele możliwości"
+    ]
+
+
 @pytest.mark.parametrize("slide_count", [7, 9])
 def test_carousel_normalizer_caps_oversized_pack_and_preserves_final_cta(
     slide_count,
