@@ -1,0 +1,53 @@
+Slide 1
+Role: cover
+Headline: ONE IDEA. MANY OUTCOMES.
+Support: (none)
+Emphasis substring: OUTCOMES.
+Visual treatment: diagram
+Visual concept: one source card branching to distinct destinations
+Why distinct: Introduces the source-backed one-to-many promise.
+
+Slide 2
+Role: info
+Headline: STOP COPYING THE SAME POST EVERYWHERE
+Support: (none)
+Emphasis substring: EVERYWHERE
+Visual treatment: typography_only
+Visual concept: typography-only rhythm break
+Why distinct: Creates tension by naming the observed mistake.
+
+Slide 3
+Role: info
+Headline: START WITH THE SOURCE
+Support: Understand it before adapting it.
+Emphasis substring: SOURCE
+Visual treatment: illustration
+Visual concept: source document examined before transformation
+Why distinct: Moves from the problem to the first corrective principle.
+
+Slide 4
+Role: info
+Headline: FIND THE STRONGEST IDEA
+Support: Choose what deserves attention.
+Emphasis substring: STRONGEST IDEA
+Visual treatment: illustration
+Visual concept: one bright signal selected from several quiet nodes
+Why distinct: Explains selection rather than platform adaptation.
+
+Slide 5
+Role: info
+Headline: BUILD FOR EACH PLATFORM
+Support: Different channels need different forms.
+Emphasis substring: EACH PLATFORM
+Visual treatment: diagram
+Visual concept: one idea flowing into different destination forms
+Why distinct: Applies the selected idea to channel-specific creation.
+
+Slide 6
+Role: cta
+Headline: CREATE ONCE. ADAPT WITH PURPOSE.
+Support: (none)
+Emphasis substring: WITH PURPOSE.
+Visual treatment: typography_only
+Visual concept: minimal typography-led endpoint
+Why distinct: Closes with the source's own practical principle.

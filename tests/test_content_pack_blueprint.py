@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from datetime import timedelta
+import logging
 
 import pytest
 from flask import template_rendered, url_for
@@ -582,6 +583,114 @@ def test_viral_carousel_quality_preserves_polish_exactly():
     assert [slide["title"] for slide in slides] == [
         "Jeden pomysł", "Wiele możliwości"
     ]
+
+
+def test_density_gate_accepts_eight_word_cover_and_ten_short_internal_words():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1: One clear idea can become many better posts
+Slide 2: We can make it fit on each new platform now"""
+    )
+
+    assert content_pack_routes._copy_word_count(slides[0]["title"]) == 8
+    assert content_pack_routes._copy_word_count(slides[1]["title"]) == 10
+    assert content_pack_routes._validate_viral_carousel_copy(slides) is None
+
+
+@pytest.mark.parametrize(
+    "headline",
+    [
+        "Extraordinarily complicated transformations require disproportionately sophisticated contextual interpretation now",
+        "Supercalifragilisticexpialidocious pseudopseudohypoparathyroidism electroencephalographically counterdemonstrations",
+        "This explains one detailed claim. It also explains another unrelated claim for everyone.",
+    ],
+)
+def test_density_gate_rejects_character_heavy_or_paragraph_like_internal_headline(
+    headline
+):
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1: Strong cover\nSlide 2: {headline}"
+    )
+
+    with pytest.raises(
+        content_pack_routes.CarouselQualityError,
+        match="carousel_headline_too_dense",
+    ):
+        content_pack_routes._validate_viral_carousel_copy(slides)
+
+
+def test_density_gate_counts_hyphenated_term_as_one_word():
+    assert content_pack_routes._copy_word_count("source-first platform-native") == 2
+
+
+def test_density_rejection_logs_safe_metrics_without_headline(caplog):
+    private_headline = (
+        "This private customer headline contains several unrelated explanatory ideas "
+        "and belongs in a caption"
+    )
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1: Strong cover\nSlide 2: {private_headline}"
+    )
+    caplog.set_level(
+        logging.WARNING, logger="smu_core.blueprints.content_pack.routes"
+    )
+
+    with pytest.raises(content_pack_routes.CarouselQualityError) as raised:
+        content_pack_routes._validate_viral_carousel_copy(slides)
+
+    assert raised.value.slide_index == 2
+    assert raised.value.role == "info"
+    assert raised.value.word_count == 14
+    assert raised.value.character_count == len(private_headline)
+    assert "carousel_copy_quality_rejected" in caplog.text
+    assert "slide_index=2" in caplog.text
+    assert "role=info" in caplog.text
+    assert "word_count=14" in caplog.text
+    assert "character_count=" in caplog.text
+    assert private_headline not in caplog.text
+
+
+def test_density_rejection_is_user_safe_and_reserves_no_image_credits(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="density-gate@example.com")
+    usage = module.UserUsage(
+        user_id=user.id,
+        plan="starter",
+        content_packs_used=1,
+        ai_images_used=0,
+        usage_period_start=utc_now() - timedelta(days=1),
+        usage_period_end=utc_now() + timedelta(days=30),
+    )
+    module.db.session.add(usage)
+    module.db.session.commit()
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda current_user, count, commit=False: reserve_calls.append(count),
+    )
+    dense_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "Slide 1: Strong cover\n"
+        "Slide 2: This headline contains far too many different explanatory ideas for one carousel slide",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": dense_pack, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+    refreshed = module.db.session.get(module.UserUsage, usage.id)
+
+    assert response.status_code == 200
+    assert "one slide was too text-heavy" in response.get_data(as_text=True)
+    assert "carousel_headline_too_dense" not in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+    assert refreshed.ai_images_used == 0
+    assert refreshed.content_packs_used == 1
 
 
 @pytest.mark.parametrize("slide_count", [7, 9])

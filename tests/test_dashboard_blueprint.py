@@ -238,6 +238,39 @@ def test_dashboard_ordering_and_carousel_template_grouping(client, app, module):
     assert html.count("Carousel · 2") == 1
 
 
+def test_dashboard_carousel_uses_failed_group_state_instead_of_placeholder(
+    client, module
+):
+    user = create_user(module)
+    group_id = "failed-dashboard-carousel"
+    create_post(
+        module,
+        user,
+        group_id=group_id,
+        sort_order=0,
+        is_cover=True,
+        status="draft",
+        file_url="https://cdn.test/complete-cover.jpg",
+    )
+    create_post(
+        module,
+        user,
+        group_id=group_id,
+        sort_order=1,
+        status="generation_failed",
+        file_url="/static/generating-image.svg",
+    )
+    login(client, user)
+
+    response = client.get("/")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "One or more slides could not be completed." in html
+    assert ">Failed<" in html
+    assert "/static/generating-image.svg" not in html
+
+
 def test_dashboard_statistics_are_preserved(client, app, module):
     user = create_user(module)
     create_post(module, user, status="draft")

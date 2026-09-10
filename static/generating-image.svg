@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1080" role="img" aria-labelledby="title desc">
+  <title id="title">Generating image</title>
+  <desc id="desc">A neutral dark placeholder shown while SMU prepares an image.</desc>
+  <rect width="1080" height="1080" fill="#0b1324"/>
+  <rect x="88" y="88" width="904" height="904" rx="56" fill="#111d34" stroke="#263754" stroke-width="4"/>
+  <circle cx="540" cy="455" r="96" fill="none" stroke="#f4d35e" stroke-width="18" stroke-dasharray="105 36"/>
+  <path d="M462 455h156M540 377v156" stroke="#65d6a6" stroke-width="18" stroke-linecap="round"/>
+  <text x="540" y="650" fill="#ffffff" font-family="Arial, sans-serif" font-size="58" font-weight="700" text-anchor="middle">Generating image</text>
+  <text x="540" y="722" fill="#aebbd0" font-family="Arial, sans-serif" font-size="30" text-anchor="middle">SMU is preparing your visual</text>
+</svg>

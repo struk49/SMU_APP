@@ -1,3 +1,4 @@
+import logging
 import re
 import uuid
 
@@ -12,6 +13,7 @@ from smu_core.services.content import ContentPackGenerationError
 
 
 content_pack_bp = Blueprint("content_pack", __name__)
+logger = logging.getLogger(__name__)
 
 SLIDE_MARKER_RE = re.compile(r"^Slide\s+\d+\s*:\s*(.*)$", re.IGNORECASE)
 SLIDE_FIELD_RE = re.compile(
@@ -22,9 +24,16 @@ BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
 CONTENT_PACK_CAROUSEL_MIN_SLIDES = 2
 CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
 VIRAL_CAROUSEL_MAX_COVER_WORDS = 8
-VIRAL_CAROUSEL_MAX_HEADLINE_WORDS = 8
+VIRAL_CAROUSEL_MAX_INTERNAL_WORDS = 10
+VIRAL_CAROUSEL_MAX_CTA_WORDS = 9
+VIRAL_CAROUSEL_MAX_COVER_CHARACTERS = 64
+VIRAL_CAROUSEL_MAX_INTERNAL_CHARACTERS = 80
+VIRAL_CAROUSEL_LONG_INTERNAL_WORD_THRESHOLD = 8
+VIRAL_CAROUSEL_LONG_INTERNAL_CHARACTER_THRESHOLD = 64
+VIRAL_CAROUSEL_MAX_CTA_CHARACTERS = 72
 VIRAL_CAROUSEL_MAX_SUPPORT_WORDS = 12
 GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
+COPY_WORD_RE = re.compile(r"\b[\w']+(?:[-‐‑–][\w']+)*\b", re.UNICODE)
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
     "negative space, without trying to illustrate every detail of the source.",
@@ -190,7 +199,40 @@ def _normalized_copy(value):
 
 
 def _copy_word_count(value):
-    return len(re.findall(r"\b[\w']+\b", value or "", re.UNICODE))
+    return len(COPY_WORD_RE.findall(value or ""))
+
+
+class CarouselQualityError(ValueError):
+    """Safe categorical rejection containing metrics but never slide copy."""
+
+    def __init__(self, reason, *, slide_index, role, word_count, character_count):
+        self.reason = reason
+        self.slide_index = slide_index
+        self.role = role
+        self.word_count = word_count
+        self.character_count = character_count
+        super().__init__(reason)
+
+
+def _reject_carousel_copy(reason, *, slide_index, role, value):
+    word_count = _copy_word_count(value)
+    character_count = len((value or "").strip())
+    logger.warning(
+        "carousel_copy_quality_rejected slide_index=%s role=%s word_count=%s "
+        "character_count=%s reason=%s",
+        slide_index,
+        role,
+        word_count,
+        character_count,
+        reason,
+    )
+    raise CarouselQualityError(
+        reason,
+        slide_index=slide_index,
+        role=role,
+        word_count=word_count,
+        character_count=character_count,
+    )
 
 
 def _validate_viral_carousel_copy(slides):
@@ -198,21 +240,63 @@ def _validate_viral_carousel_copy(slides):
     seen_headlines = set()
     previous_message = None
     for index, slide in enumerate(slides):
+        slide_index = index + 1
         title = slide["title"] or ""
         body = slide["body"] or ""
+        role = "cover" if index == 0 else slide["layout_role"]
         normalized_title = _normalized_copy(title)
         normalized_body = _normalized_copy(body)
-        headline_limit = (
-            VIRAL_CAROUSEL_MAX_COVER_WORDS
-            if index == 0
-            else VIRAL_CAROUSEL_MAX_HEADLINE_WORDS
-        )
-        if _copy_word_count(title) > headline_limit:
-            raise ValueError("carousel_headline_too_dense")
+        title_words = _copy_word_count(title)
+        title_characters = len(title.strip())
+        if role == "cover":
+            headline_too_dense = (
+                title_words > VIRAL_CAROUSEL_MAX_COVER_WORDS
+                or title_characters > VIRAL_CAROUSEL_MAX_COVER_CHARACTERS
+            )
+        elif role == "cta":
+            headline_too_dense = (
+                title_words > VIRAL_CAROUSEL_MAX_CTA_WORDS
+                or title_characters > VIRAL_CAROUSEL_MAX_CTA_CHARACTERS
+            )
+        else:
+            headline_too_dense = (
+                title_words > VIRAL_CAROUSEL_MAX_INTERNAL_WORDS
+                or title_characters > VIRAL_CAROUSEL_MAX_INTERNAL_CHARACTERS
+                or (
+                    title_words > VIRAL_CAROUSEL_LONG_INTERNAL_WORD_THRESHOLD
+                    and title_characters
+                    > VIRAL_CAROUSEL_LONG_INTERNAL_CHARACTER_THRESHOLD
+                )
+            )
+        sentence_count = len(re.findall(r"[.!?]+(?:\s|$)", title))
+        if headline_too_dense or (
+            sentence_count > 1
+            and (
+                title_words > VIRAL_CAROUSEL_LONG_INTERNAL_WORD_THRESHOLD
+                or title_characters
+                > VIRAL_CAROUSEL_LONG_INTERNAL_CHARACTER_THRESHOLD
+            )
+        ):
+            _reject_carousel_copy(
+                "carousel_headline_too_dense",
+                slide_index=slide_index,
+                role=role,
+                value=title,
+            )
         if _copy_word_count(body) > VIRAL_CAROUSEL_MAX_SUPPORT_WORDS:
-            raise ValueError("carousel_support_too_dense")
+            _reject_carousel_copy(
+                "carousel_support_too_dense",
+                slide_index=slide_index,
+                role=role,
+                value=body,
+            )
         if len(re.findall(r"[.!?]+(?:\s|$)", body)) > 1:
-            raise ValueError("carousel_support_too_dense")
+            _reject_carousel_copy(
+                "carousel_support_too_dense",
+                slide_index=slide_index,
+                role=role,
+                value=body,
+            )
         if normalized_body and normalized_body == normalized_title:
             raise ValueError("carousel_support_repeats_headline")
         if normalized_title in seen_headlines:
@@ -560,6 +644,14 @@ def create_content_pack_carousel():
         )
         return redirect(url_for("view_post", post_id=first_post.id))
 
+    except CarouselQualityError:
+        db.session.rollback()
+        flash(
+            "We couldn't create this carousel because one slide was too "
+            "text-heavy. Please regenerate the Content Pack.",
+            "danger",
+        )
+        return redirect(url_for("content_pack"))
     except Exception as e:
         db.session.rollback()
         print("Create content pack carousel error:", e)

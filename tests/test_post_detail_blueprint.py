@@ -172,6 +172,39 @@ def test_carousel_post_loads_current_user_group_in_existing_order(
     assert "https://cdn.test/child.jpg" in html
 
 
+def test_failed_carousel_slide_does_not_render_generating_placeholder(
+    client, module
+):
+    user = create_user(module)
+    group_id = "partially-failed-carousel"
+    complete = create_post(
+        module,
+        user,
+        group_id=group_id,
+        sort_order=0,
+        is_cover=True,
+        status="draft",
+        file_url="https://cdn.test/complete.jpg",
+    )
+    create_post(
+        module,
+        user,
+        group_id=group_id,
+        sort_order=1,
+        status="generation_failed",
+        file_url="/static/generating-image.svg",
+    )
+    login(client, user)
+
+    response = client.get(f"/post/{complete.id}")
+    html = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Generation Failed" in html
+    assert "This slide could not be completed." in html
+    assert html.count("/static/generating-image.svg") == 0
+
+
 def test_carousel_group_lookup_is_user_scoped(client, app, module):
     owner = create_user(module, email="owner@example.com")
     other = create_user(module, email="other@example.com")

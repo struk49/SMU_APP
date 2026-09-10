@@ -255,12 +255,24 @@
             {% if post.group_id not in shown_groups %}
                 {% set _ = shown_groups.append(post.group_id) %}
                 {% set carousel_items = posts | selectattr("group_id", "equalto", post.group_id) | list %}
+                {% set failed_items = carousel_items | selectattr("status", "equalto", "generation_failed") | list %}
+                {% set generating_items = carousel_items | selectattr("status", "equalto", "generating") | list %}
+                {% set carousel_status = "generation_failed" if failed_items else ("generating" if generating_items else post.status) %}
 
                 <div class="col-md-6 col-xl-4">
                     <div class="content-card">
 
                         <div class="content-image-wrap">
-                            {% if carousel_items[0].file_type == 'image' %}
+                            {% if carousel_status == 'generation_failed' %}
+                                <div class="content-image d-flex flex-column align-items-center justify-content-center text-center p-4"
+                                     style="background:#241019;color:#fff;">
+                                    <div class="fw-bold">Generation failed</div>
+                                    <small class="mt-2" style="color:#e8b8c6;">One or more slides could not be completed.</small>
+                                </div>
+                            {% elif carousel_items[0].status == 'generating' %}
+                                <img src="{{ url_for('static', filename='generating-image.svg') }}"
+                                     class="content-image" alt="Generating carousel image">
+                            {% elif carousel_items[0].file_type == 'image' %}
                                 <img src="{{ carousel_items[0].file_url }}" class="content-image" alt="Carousel">
                             {% endif %}
 
@@ -271,7 +283,7 @@
 
                         <div class="content-card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
-                                {{ status_badge(post.status) }}
+                                {{ status_badge(carousel_status) }}
                                 <small class="text-muted">{{ post.created_at.strftime('%d %b %Y') }}</small>
                             </div>
 

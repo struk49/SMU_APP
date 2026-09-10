@@ -194,11 +194,27 @@
 
                         <div class="card h-100">
 
-                            <img
-                                src="{{ post.file_url }}"
-                                class="card-img-top"
-                                style="height:250px;object-fit:cover;"
-                            >
+                            {% if post.status == 'generating' %}
+                                <img
+                                    src="{{ url_for('static', filename='generating-image.svg') }}"
+                                    class="card-img-top"
+                                    alt="Generating carousel image"
+                                    style="height:250px;object-fit:cover;"
+                                >
+                            {% elif post.status == 'generation_failed' %}
+                                <div class="d-flex flex-column align-items-center justify-content-center text-center p-3"
+                                     style="height:250px;background:#241019;color:#fff;">
+                                    <div class="fw-bold">Generation failed</div>
+                                    <small class="mt-2" style="color:#e8b8c6;">This slide could not be completed.</small>
+                                </div>
+                            {% else %}
+                                <img
+                                    src="{{ post.file_url }}"
+                                    class="card-img-top"
+                                    alt="Carousel image"
+                                    style="height:250px;object-fit:cover;"
+                                >
+                            {% endif %}
 
                             <div class="card-body">
 
