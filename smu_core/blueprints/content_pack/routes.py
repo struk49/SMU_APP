@@ -55,18 +55,28 @@ SLIDE_VISUAL_CONCEPTS = (
 )
 
 
-def _select_layout_variant(layout_role, slide_index):
+def _select_layout_variant(
+    layout_role, slide_index, visual_treatment=None, title=None
+):
     if layout_role == "cover":
-        return "hero_left"
+        return "hero_center" if visual_treatment == "visual_focus" else "hero_left"
     if layout_role == "cta":
         return "closing"
     if layout_role == "phrase":
         return "split_left" if slide_index % 2 else "split_right"
+    if visual_treatment == "visual_focus":
+        return "visual_focus"
+    if visual_treatment == "diagram" and _copy_word_count(title) > 6:
+        return "editorial_statement"
+    if visual_treatment in {"diagram", "process", "comparison"}:
+        return "split_right" if slide_index % 2 else "split_left"
+    if visual_treatment == "illustration":
+        return "split_right" if slide_index % 2 else "split_left"
     return ("editorial_statement", "visual_focus", "split_right")[slide_index % 3]
 
 
-def _select_visual_treatment(visual, layout_role):
-    normalized = (visual or "").lower()
+def _select_visual_treatment(visual, layout_role, semantic_text=None):
+    normalized = " ".join(value for value in (visual, semantic_text) if value).lower()
     if layout_role == "cta" or not normalized or "typography-only" in normalized:
         return "typography_only"
     if any(word in normalized for word in ("generic", "decorative", "abstract shape", "random geometry")):
@@ -75,6 +85,12 @@ def _select_visual_treatment(visual, layout_role):
         return "comparison"
     if any(word in normalized for word in ("step", "sequence", "stage", "process", "progression")):
         return "process"
+    if any(word in normalized for word in ("instagram", "pinterest", "image frame", "media tile")):
+        return "visual_focus"
+    if any(word in normalized for word in ("linkedin", "editorial", "document", "article", "insight")):
+        return "illustration"
+    if any(word in normalized for word in ("reddit", "discussion", "thread", "community", "conversation")):
+        return "diagram"
     if any(word in normalized for word in ("branch", "flow", "connect", "platform", "channel", "node")):
         return "diagram"
     return "illustration"
@@ -328,11 +344,23 @@ def _validate_viral_carousel_copy(slides):
         raise ValueError("carousel_generic_closing")
 
 
-def _safe_visual_direction(visual):
+def _safe_visual_direction(visual, semantic_text=None):
     """Map untrusted visual prose to text-free scene categories."""
-    normalized = (visual or "").lower()
+    normalized = " ".join(value for value in (visual, semantic_text) if value).lower()
     directions = []
     scene_categories = (
+        (("instagram",),
+         "a bold image frame with layered text-free media cards and a strong visual focal area"),
+        (("linkedin",),
+         "a refined editorial document composition suggesting considered professional insight"),
+        (("reddit",),
+         "an organic network of conversation nodes suggesting discussion and shared context"),
+        (("pinterest",),
+         "a curated pinboard-inspired grid of varied text-free visual cards"),
+        (("facebook",),
+         "a connected community feed metaphor using text-free content cards"),
+        ((" x ", "short message"),
+         "a concise message-and-network metaphor without symbols, branding, or text"),
         (("copy", "duplicate", "same post", "rewrite", "branch"),
          "one original object branching into several visibly distinct destinations"),
         (("platform", "channel", "format", "destination"),
@@ -375,9 +403,11 @@ def _build_slide_background_prompt(
     visual=None,
     layout_role=None,
     layout_variant=None,
+    visual_treatment=None,
+    semantic_text=None,
 ):
     visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
-    safe_visual_direction = _safe_visual_direction(visual)
+    safe_visual_direction = _safe_visual_direction(visual, semantic_text)
     role = layout_role or ("cover" if slide_index == 0 else "info")
     design_layout = layout_variant or _select_layout_variant(role, slide_index)
     composition_directions = {
@@ -428,6 +458,7 @@ Slide-specific visual concept:
 {f"Additional sanitized scene direction: {safe_visual_direction}." if safe_visual_direction else ""}
 
 Slide role: {role}
+Selected visual treatment: {visual_treatment or "illustration"}
 Internal design layout: {design_layout}
 Text-overlay composition:
 {composition_direction}
@@ -441,6 +472,10 @@ Design:
 - leave suitable uncluttered visual space for a later text overlay
 - keep faces, facial features, and primary objects completely outside the text-safe zone
 - do not place an important subject beneath or behind the intended typography region
+- make the selected treatment structurally visible: diagrams use meaningful connected
+  geometry, illustrations use one semantic scene, and visual-focus slides use one
+  dominant object or bounded content metaphor
+- never use official platform logos, trademark-shaped icons, or readable platform names
 
 Critical text-free requirements:
 - no readable text
@@ -602,14 +637,23 @@ def create_content_pack_carousel():
 
         for index, slide in enumerate(slides):
             layout_role = "cover" if index == 0 else slide["layout_role"]
-            layout_variant = _select_layout_variant(layout_role, index)
-            visual_treatment = _select_visual_treatment(slide["visual"], layout_role)
+            semantic_text = " ".join(
+                value for value in (slide["title"], slide["body"]) if value
+            )
+            visual_treatment = _select_visual_treatment(
+                slide["visual"], layout_role, semantic_text
+            )
+            layout_variant = _select_layout_variant(
+                layout_role, index, visual_treatment, slide["title"]
+            )
             background_prompt = _build_slide_background_prompt(
                 styled_image_prompt,
                 index,
                 slide["visual"],
                 layout_role,
                 layout_variant,
+                visual_treatment,
+                semantic_text,
             )
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,

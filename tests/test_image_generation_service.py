@@ -179,6 +179,38 @@ def test_overlay_renders_decoded_bytes_before_existing_upload():
     assert client.images.calls[0]["prompt"] == "Text-free background"
 
 
+def test_typography_only_overlay_skips_openai_and_renders_local_canvas():
+    client = FakeOpenAIClient()
+    calls = []
+    overlay = {
+        "title": "A strong closing",
+        "body": None,
+        "cta": None,
+        "brand": None,
+        "visual_treatment": "typography_only",
+    }
+
+    def renderer(image_bytes, **kwargs):
+        with Image.open(BytesIO(image_bytes)) as source:
+            calls.append((source.size, source.getpixel((0, 0)), kwargs))
+        return b"rendered locally"
+
+    result = images.generate_openai_image(
+        "Unused text-free background prompt",
+        openai_api_key="key",
+        openai_client=client,
+        upload_jpeg_to_cloudinary_func=lambda image_bytes: {
+            "secure_url": "https://cdn.test/typography.jpg"
+        },
+        overlay=overlay,
+        render_social_text_func=renderer,
+    )
+
+    assert result == "https://cdn.test/typography.jpg"
+    assert client.images.calls == []
+    assert calls == [((1024, 1024), (9, 18, 34), overlay)]
+
+
 def test_overlay_none_does_not_invoke_renderer():
     client = FakeOpenAIClient()
 

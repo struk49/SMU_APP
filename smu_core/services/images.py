@@ -1,4 +1,7 @@
 import base64
+from io import BytesIO
+
+from PIL import Image
 
 from smu_core.services.social_text import render_social_text
 
@@ -18,17 +21,26 @@ def generate_openai_image(
     if not openai_api_key:
         raise Exception("OPENAI_API_KEY is missing from your .env file")
 
-    result = openai_client.images.generate(
-        model="gpt-image-1",
-        prompt=prompt,
-        size="1024x1024",
-        quality="medium",
-        output_format="jpeg",
-        timeout=OPENAI_IMAGE_TIMEOUT_SECONDS,
+    typography_only = (
+        isinstance(overlay, dict)
+        and overlay.get("visual_treatment") == "typography_only"
     )
+    if typography_only:
+        local_canvas = BytesIO()
+        Image.new("RGB", (1024, 1024), (9, 18, 34)).save(local_canvas, "PNG")
+        image_bytes = local_canvas.getvalue()
+    else:
+        result = openai_client.images.generate(
+            model="gpt-image-1",
+            prompt=prompt,
+            size="1024x1024",
+            quality="medium",
+            output_format="jpeg",
+            timeout=OPENAI_IMAGE_TIMEOUT_SECONDS,
+        )
 
-    image_base64 = result.data[0].b64_json
-    image_bytes = base64.b64decode(image_base64)
+        image_base64 = result.data[0].b64_json
+        image_bytes = base64.b64decode(image_base64)
 
     if overlay is not None:
         renderer = render_social_text_func or render_social_text

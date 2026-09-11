@@ -58,6 +58,7 @@ VISUAL_TREATMENTS = {
     "diagram",
     "process",
     "comparison",
+    "visual_focus",
 }
 ROLE_DESIGN_LAYOUTS = {
     "cover": "hero_left",
@@ -535,11 +536,7 @@ def _build_designed_carousel_canvas(
 
     zone = zones[layout_variant]
     if visual_treatment == "typography_only":
-        draw.ellipse(
-            (round(width * 0.70), round(height * -0.12), round(width * 1.14), round(height * 0.32)),
-            outline=(86, 142, 246, 80),
-            width=max(4, round(scale * 0.010)),
-        )
+        pass
     elif visual_treatment == "comparison":
         midpoint = (zone[0] + zone[2]) // 2
         gap = round(scale * 0.018)
@@ -579,6 +576,14 @@ def _build_designed_carousel_canvas(
                 outline=accent_yellow,
                 width=max(2, round(scale * 0.004)),
             )
+    elif visual_treatment == "visual_focus":
+        paste_artwork(zone)
+        draw.rounded_rectangle(
+            zone,
+            radius=radius,
+            outline=accent_green,
+            width=max(3, round(scale * 0.006)),
+        )
     else:
         paste_artwork(zone)
 
@@ -613,6 +618,7 @@ def _draw_role_composition(
     layout_role,
     layout_variant,
     design_style,
+    visual_treatment,
 ):
     design_layout = select_design_layout(layout_role, layout_variant)
     tokens = _style_tokens(design_style)
@@ -740,6 +746,12 @@ def _draw_role_composition(
     ):
         if not value:
             continue
+        if kind == "title" and design_style == "viral_carousel":
+            word_count = len(re.findall(r"\b[\w']+\b", value, re.UNICODE))
+            if word_count <= 4:
+                font_scale *= 1.16 if visual_treatment == "typography_only" else 1.08
+            elif word_count <= 7:
+                font_scale *= 1.08 if visual_treatment == "typography_only" else 1.03
         block_box = (
             region_left + padding,
             cursor,
@@ -962,6 +974,7 @@ def render_social_text(
                 layout_role=layout_role,
                 layout_variant=layout_variant,
                 design_style=design_style,
+                visual_treatment=visual_treatment,
             )
         except SocialTextRenderError as exc:
             if exc.reason != "text_does_not_fit":
@@ -982,6 +995,7 @@ def render_social_text(
                 layout_role=layout_role,
                 layout_variant="compact_statement",
                 design_style=design_style,
+                visual_treatment=visual_treatment,
             )
         image = Image.alpha_composite(image, composition_layer)
         output = BytesIO()

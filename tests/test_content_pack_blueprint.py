@@ -109,6 +109,74 @@ def test_cover_visual_treatment_is_derived_from_semantic_concept():
     ) == "illustration"
 
 
+@pytest.mark.parametrize(
+    ("semantic_text", "expected"),
+    [
+        ("Instagram wants quick visual connections", "visual_focus"),
+        ("LinkedIn values thoughtful professional insights", "illustration"),
+        ("Reddit thrives on genuine discussion and context", "diagram"),
+        ("A three-stage ordered workflow", "process"),
+        ("A genuine before and after contrast", "comparison"),
+    ],
+)
+def test_visual_treatment_uses_slide_semantics_when_visual_is_missing(
+    semantic_text, expected
+):
+    assert content_pack_routes._select_visual_treatment(
+        None, "info", semantic_text
+    ) == expected
+
+
+def test_platform_semantics_use_text_free_composition_not_logos():
+    directions = {
+        platform: content_pack_routes._safe_visual_direction(None, platform)
+        for platform in ("Instagram", "LinkedIn", "Reddit")
+    }
+
+    assert "media cards" in directions["Instagram"]
+    assert "editorial document" in directions["LinkedIn"]
+    assert "conversation nodes" in directions["Reddit"]
+    assert all("logo" not in direction for direction in directions.values())
+
+
+def test_production_shaped_carousel_has_semantic_rhythm_and_distinct_layouts():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1: Every platform speaks a different language
+Slide 2: Instagram wants quick, visual connections
+Slide 3: LinkedIn values thoughtful, professional insights
+Slide 4: Reddit thrives on genuine discussion and context
+Slide 5:
+Title: Tailoring content turns good ideas into great posts
+CTA: Adapt with purpose"""
+    )
+    treatments = []
+    layouts = []
+    for index, slide in enumerate(slides):
+        role = "cover" if index == 0 else slide["layout_role"]
+        semantic_text = " ".join(
+            value for value in (slide["title"], slide["body"]) if value
+        )
+        treatment = content_pack_routes._select_visual_treatment(
+            slide["visual"], role, semantic_text
+        )
+        treatments.append(treatment)
+        layouts.append(
+            content_pack_routes._select_layout_variant(
+                role, index, treatment, slide["title"]
+            )
+        )
+
+    assert treatments == [
+        "diagram", "visual_focus", "illustration", "diagram", "typography_only"
+    ]
+    assert len(set(treatments)) >= 3
+    assert len(set(layouts)) >= 4
+    assert layouts == [
+        "hero_left", "visual_focus", "split_left", "editorial_statement", "closing"
+    ]
+    assert all(left != right for left, right in zip(layouts, layouts[1:]))
+
+
 def test_content_pack_routes_preserve_old_endpoints_and_methods(module):
     expected = {
         "/content-pack": ("content_pack", {"GET", "POST"}),
@@ -1155,7 +1223,7 @@ CTA: Learn more Polish with Polish with Me"""
         "hero_left",
         "split_left",
         "split_right",
-        "editorial_statement",
+        "split_right",
         "split_right",
         "closing",
     ]

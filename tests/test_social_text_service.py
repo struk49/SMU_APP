@@ -967,6 +967,26 @@ def test_typography_only_viral_slide_does_not_prepare_artwork(monkeypatch):
     assert output.startswith(b"\x89PNG")
 
 
+def test_typography_only_has_no_automatic_corner_circle(monkeypatch):
+    ellipse_calls = []
+    original = social_text.ImageDraw.ImageDraw.ellipse
+
+    def capture(self, *args, **kwargs):
+        ellipse_calls.append((args, kwargs))
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(social_text.ImageDraw.ImageDraw, "ellipse", capture)
+    social_text.render_social_text(
+        source_bytes(),
+        title="Typography leads",
+        layout_role="info",
+        design_style="viral_carousel",
+        visual_treatment="typography_only",
+    )
+
+    assert ellipse_calls == []
+
+
 def test_illustration_viral_slide_uses_supplied_artwork(monkeypatch):
     calls = []
     original = social_text.ImageOps.fit
@@ -989,7 +1009,10 @@ def test_illustration_viral_slide_uses_supplied_artwork(monkeypatch):
 
 def test_semantic_visual_treatments_are_distinct_and_deterministic():
     outputs = []
-    for treatment in ("typography_only", "illustration", "diagram", "process", "comparison"):
+    for treatment in (
+        "typography_only", "illustration", "diagram", "process", "comparison",
+        "visual_focus",
+    ):
         first = social_text.render_social_text(
             source_bytes(),
             title="One exact headline",
@@ -1008,6 +1031,32 @@ def test_semantic_visual_treatments_are_distinct_and_deterministic():
         outputs.append(first)
 
     assert len(set(outputs)) == len(outputs)
+
+
+def test_short_typography_only_headline_uses_stronger_scale(monkeypatch):
+    title_sizes = []
+    original = social_text._prepare_composition_block
+
+    def capture(draw, text, box, **kwargs):
+        if text == "Short statement":
+            title_sizes.append(kwargs["start_size"])
+        return original(draw, text, box, **kwargs)
+
+    monkeypatch.setattr(social_text, "_prepare_composition_block", capture)
+    common = {
+        "title": "Short statement",
+        "layout_role": "info",
+        "layout_variant": "editorial_statement",
+        "design_style": "viral_carousel",
+    }
+    social_text.render_social_text(
+        source_bytes(), **common, visual_treatment="typography_only"
+    )
+    social_text.render_social_text(
+        source_bytes(), **common, visual_treatment="illustration"
+    )
+
+    assert title_sizes[0] > title_sizes[1]
 
 
 def test_mixed_headline_runs_flow_sequentially_without_overlap():

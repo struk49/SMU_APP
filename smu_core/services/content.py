@@ -886,6 +886,21 @@ Carousel strategy:
   actively consider one or two `typography-only` Visual fields as rhythm breaks or
   when illustration would be decorative. Do not force every treatment, and use
   process or comparison only when the source genuinely contains that structure.
+- Make every Visual earn its treatment from meaning. Use typography-only for a strong
+  statement or closing; illustration for a concept, person, object, learning, platform
+  context, or conversation; a connected diagram for one-to-many, networks, branching,
+  relationships, or source-to-output; process only for genuine ordered progression;
+  comparison only for genuine contrast; and one dominant focal object for visual focus.
+- Across a substantive 4-6 slide carousel, prefer at least three meaningfully justified
+  visual categories and visibly different adjacent compositions. If several slides would
+  otherwise be typography-only, give semantically visual slides a specific illustration,
+  diagram, or dominant-object Visual instead. Do not invent structure merely for variety.
+- For platform topics, describe text-free compositional metaphors rather than logos:
+  layered image/media cards for Instagram, an editorial document or article object for
+  LinkedIn, conversation nodes for Reddit, a pinboard/card grid for Pinterest, a short-
+  message network for X, and community/feed cards for Facebook.
+- Prefer one meaningful Emphasis substring on most slides when it improves the hierarchy;
+  keep it exact, selective, source-grounded, and omit it where no phrase deserves accent.
 
 CTA selection:
 - Match any CTA to the category and goal. Educational content may invite saving,

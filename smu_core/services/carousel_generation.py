@@ -24,6 +24,7 @@ OVERLAY_VISUAL_TREATMENTS = {
     "diagram",
     "process",
     "comparison",
+    "visual_focus",
 }
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
 OVERLAY_LAYOUT_VARIANTS = {

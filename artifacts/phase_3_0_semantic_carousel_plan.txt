@@ -1,0 +1,44 @@
+Slide 1
+Role: cover
+Treatment: diagram
+Layout: hero_left
+Visual concept: One source branching into distinct text-free content destinations
+Headline scale category: large cover
+Emphasis: different language
+Image generation required in production: yes
+
+Slide 2
+Role: info
+Treatment: visual_focus
+Layout: visual_focus
+Visual concept: Layered image and media cards around one dominant frame
+Headline scale category: medium-large
+Emphasis: visual connections
+Image generation required in production: yes
+
+Slide 3
+Role: info
+Treatment: illustration
+Layout: split_left
+Visual concept: Editorial document and thought-leadership composition
+Headline scale category: medium-large
+Emphasis: professional insights
+Image generation required in production: yes
+
+Slide 4
+Role: info
+Treatment: diagram
+Layout: editorial_statement
+Visual concept: Organic discussion nodes connected around a shared idea
+Headline scale category: medium-large
+Emphasis: genuine discussion
+Image generation required in production: yes
+
+Slide 5
+Role: cta
+Treatment: typography_only
+Layout: closing
+Visual concept: Confident typography-led endpoint with minimal visual noise
+Headline scale category: large closing
+Emphasis: great posts
+Image generation required in production: no; typography-only production treatment
