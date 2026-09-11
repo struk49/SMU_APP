@@ -59,7 +59,9 @@ VISUAL_TREATMENTS = {
     "process",
     "comparison",
     "visual_focus",
+    "feature_cards",
 }
+VISUAL_WEIGHTS = {"heavy", "medium", "light"}
 ROLE_DESIGN_LAYOUTS = {
     "cover": "hero_left",
     "phrase": "split_left",
@@ -95,6 +97,20 @@ STYLE_TOKENS = {
         "headline": 1.14, "body": 1.03, "region_width": 1.04,
         "gap": 1.18, "surface_alpha": 106,
     },
+}
+VIRAL_DESIGN_TOKENS = {
+    "display_weight": "black",
+    "headline_weight": "black",
+    "support_weight": "medium",
+    "eyebrow_weight": "semibold",
+    "spacing_unit": 8,
+    "accent_thickness": 0.006,
+    "panel_radius": 0.035,
+    "stroke_thickness": 0.0025,
+    "illustration_frame_radius": 0.035,
+    "artwork_padding": {"heavy": 0.0, "medium": 0.018, "light": 0.050},
+    "content_gutter": 0.04,
+    "visual_weight_scale": {"heavy": 1.10, "medium": 1.0, "light": 0.96},
 }
 
 VIRAL_COMPOSITION_ZONES = {
@@ -604,7 +620,8 @@ def _analyze_text_region(image, box):
 
 
 def _build_designed_carousel_canvas(
-    source_image, layout_variant, visual_treatment="illustration"
+    source_image, layout_variant, visual_treatment="illustration",
+    visual_weight="medium",
 ):
     """Make artwork secondary to a deterministic, branded social-card canvas."""
     width, height = source_image.size
@@ -652,6 +669,15 @@ def _build_designed_carousel_canvas(
         canvas.paste(artwork, (zone[0], zone[1]), mask)
 
     zone = composition["art_rect"]
+    artwork_padding = round(
+        scale * VIRAL_DESIGN_TOKENS["artwork_padding"][visual_weight]
+    )
+    zone = (
+        zone[0] + artwork_padding,
+        zone[1] + artwork_padding,
+        zone[2] - artwork_padding,
+        zone[3] - artwork_padding,
+    )
     if visual_treatment == "typography_only":
         pass
     elif visual_treatment == "comparison":
@@ -701,6 +727,18 @@ def _build_designed_carousel_canvas(
             outline=accent_green,
             width=max(3, round(scale * 0.006)),
         )
+    elif visual_treatment == "feature_cards":
+        gap = max(10, round(scale * 0.014))
+        card_height = (zone[3] - zone[1] - 2 * gap) // 3
+        for index in range(3):
+            top = zone[1] + index * (card_height + gap)
+            draw.rounded_rectangle(
+                (zone[0], top, zone[2], top + card_height),
+                radius=max(10, round(scale * 0.018)),
+                fill=panel,
+                outline=(accent_yellow, accent_green, accent_blue)[index],
+                width=max(2, round(scale * 0.004)),
+            )
     else:
         paste_artwork(zone)
 
@@ -736,6 +774,7 @@ def _draw_role_composition(
     layout_variant,
     design_style,
     visual_treatment,
+    visual_weight,
     measure_only=False,
 ):
     design_layout = select_design_layout(layout_role, layout_variant)
@@ -872,6 +911,7 @@ def _draw_role_composition(
         if not value:
             continue
         if kind == "title" and design_style == "viral_carousel":
+            font_scale *= VIRAL_DESIGN_TOKENS["visual_weight_scale"][visual_weight]
             word_count = len(re.findall(r"\b[\w']+\b", value, re.UNICODE))
             if word_count <= 4:
                 font_scale *= 1.16 if visual_treatment == "typography_only" else 1.08
@@ -1015,9 +1055,17 @@ def preflight_viral_carousel_text(
     layout_role,
     layout_variant,
     visual_treatment,
+    visual_weight="medium",
     allow_compact_fallback=True,
 ):
     """Measure the exact production typography path without rendering output."""
+    if visual_weight not in VISUAL_WEIGHTS:
+        return {
+            "fits": False,
+            "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": "unsupported_visual_weight",
+        }
     try:
         title = _validated_text("title", title, required=True)
         body = _validated_text("body", body)
@@ -1078,6 +1126,7 @@ def preflight_viral_carousel_text(
         "layout_role": layout_role,
         "design_style": "viral_carousel",
         "visual_treatment": visual_treatment,
+        "visual_weight": visual_weight,
         "measure_only": True,
     }
     used_layout = layout_variant
@@ -1154,6 +1203,7 @@ def render_social_text(
     eyebrow=None,
     emphasis=None,
     visual_treatment=None,
+    visual_weight="medium",
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
     if layout != "carousel":
@@ -1173,6 +1223,8 @@ def render_social_text(
         or visual_treatment not in VISUAL_TREATMENTS
     ):
         raise SocialTextRenderError("unsupported_visual_treatment")
+    if visual_weight not in VISUAL_WEIGHTS:
+        raise SocialTextRenderError("unsupported_visual_weight")
     if not isinstance(image_bytes, bytes) or not image_bytes:
         raise SocialTextRenderError("invalid_image")
     if len(image_bytes) > MAX_INPUT_BYTES:
@@ -1235,6 +1287,7 @@ def render_social_text(
                 image,
                 effective_variant,
                 visual_treatment or "illustration",
+                visual_weight,
             )
         composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
         try:
@@ -1254,13 +1307,14 @@ def render_social_text(
                 layout_variant=layout_variant,
                 design_style=design_style,
                 visual_treatment=visual_treatment,
+                visual_weight=visual_weight,
             )
         except SocialTextRenderError as exc:
             if exc.reason != "text_does_not_fit":
                 raise
             if design_style == "viral_carousel":
                 image = _build_designed_carousel_canvas(
-                    image, effective_variant, "typography_only"
+                    image, effective_variant, "typography_only", visual_weight
                 )
             composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
             _draw_role_composition(
@@ -1279,6 +1333,7 @@ def render_social_text(
                 layout_variant="compact_statement",
                 design_style=design_style,
                 visual_treatment=visual_treatment,
+                visual_weight=visual_weight,
             )
         image = Image.alpha_composite(image, composition_layer)
         output = BytesIO()

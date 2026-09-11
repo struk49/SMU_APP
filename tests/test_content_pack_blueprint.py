@@ -561,6 +561,124 @@ Slide 5: Często tu przychodzisz?"""
     )
 
 
+def test_carousel_plan_accepts_allowlisted_weight_and_anchors_endpoints():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: A strong opening
+Visual Weight: light
+Visual: One bold focal object
+Slide 2:
+Title: A measured explanation
+Visual Weight: medium
+Visual: Editorial document
+Slide 3:
+CTA: Finish with one action
+Visual Weight: heavy
+Visual: Small closing accent"""
+    )
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert [item["visual_weight"] for item in presentations] == [
+        "heavy", "medium", "light"
+    ]
+    assert all(
+        item["visual_weight"] in content_pack_routes.VISUAL_WEIGHTS
+        for item in presentations
+    )
+
+
+def test_carousel_plan_breaks_adjacent_diagram_and_metaphor_repetition():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Connected ideas
+Visual: A node network
+Slide 2:
+Title: More connected ideas
+Visual: Another node network
+Slide 3:
+Title: A clean conclusion
+Visual: One distinct object"""
+    )
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert presentations[0]["treatment"] == "diagram"
+    assert presentations[1]["treatment"] == "visual_focus"
+    assert presentations[1]["layout"] != presentations[0]["layout"]
+
+
+def test_carousel_plan_allows_repeated_metaphor_for_genuine_process():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Step one
+Visual: First process arrow in a workflow
+Slide 2:
+Title: Step two
+Visual: Second process arrow in the sequence"""
+    )
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert presentations[0]["treatment"] == "process"
+    assert presentations[1]["treatment"] == "process"
+
+
+def test_representative_plan_uses_professional_treatment_and_layout_variety():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: One bold opening
+Visual: A single hero object
+Slide 2:
+Title: A short statement
+Visual: Pure typography
+Slide 3:
+Title: Three useful outcomes
+Visual: Three benefits shown as grouped elements
+Slide 4:
+Title: Before and after
+Visual: A true side-by-side comparison
+Slide 5:
+CTA: Finish with one action
+Visual: Small closing accent"""
+    )
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert len({item["treatment"] for item in presentations}) >= 3
+    assert len({item["layout"] for item in presentations}) >= 4
+    assert any(item["treatment"] == "typography_only" for item in presentations)
+
+
+def test_feature_cards_require_explicit_grouped_semantics():
+    grouped = content_pack_routes._select_visual_treatment(
+        "Three benefits shown as grouped elements", "info"
+    )
+    ordinary = content_pack_routes._select_visual_treatment(
+        "A single benefit shown as one focal object", "info"
+    )
+
+    assert grouped == "feature_cards"
+    assert ordinary != "feature_cards"
+
+
+def test_background_prompt_includes_weight_but_excludes_overlay_copy():
+    private_copy = "Exact private customer headline"
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "Style",
+        1,
+        "Three benefits shown as grouped elements",
+        "info",
+        visual_treatment="feature_cards",
+        semantic_text="grouped elements",
+        visual_weight="medium",
+    )
+
+    assert "Allowlisted visual weight: medium" in prompt
+    assert "Selected visual treatment: feature_cards" in prompt
+    assert private_copy not in prompt
+
+
 def test_content_pack_carousel_parser_preserves_unlabelled_text():
     assert content_pack_routes._parse_content_pack_carousel_slides("Miłego dnia!") == [
         {
@@ -1206,7 +1324,7 @@ CTA: Learn more Polish with Polish with Me"""
         "hero_left",
         "split_left",
         "split_right",
-        "split_right",
+        "split_left",
         "split_right",
         "closing",
     ]

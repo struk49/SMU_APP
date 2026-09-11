@@ -1384,3 +1384,52 @@ def test_viral_diagram_headline_keeps_mobile_readable_minimum(monkeypatch):
     )
 
     assert sizes and sizes[0] >= round(1024 * 0.052)
+
+
+@pytest.mark.parametrize("visual_weight", ["heavy", "medium", "light"])
+def test_visual_weights_use_same_preflight_and_renderer_path(visual_weight):
+    arguments = {
+        "title": "Professional visual rhythm",
+        "body": "One concise supporting thought.",
+        "layout_role": "info",
+        "layout_variant": "split_left",
+        "visual_treatment": "illustration",
+        "visual_weight": visual_weight,
+    }
+
+    result = social_text.preflight_viral_carousel_text(**arguments)
+    output = social_text.render_social_text(
+        source_bytes(), design_style="viral_carousel", **arguments
+    )
+
+    assert result["fits"] is True
+    assert output.startswith(b"\x89PNG")
+
+
+def test_preflight_rejects_unknown_visual_weight_safely():
+    result = social_text.preflight_viral_carousel_text(
+        title="Safe title",
+        layout_role="info",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+        visual_weight="maximum",
+    )
+
+    assert result["fits"] is False
+    assert result["failure_reason"] == "unsupported_visual_weight"
+
+
+def test_feature_cards_render_deterministically():
+    arguments = {
+        "title": "Three useful outcomes",
+        "layout_role": "info",
+        "layout_variant": "split_right",
+        "design_style": "viral_carousel",
+        "visual_treatment": "feature_cards",
+        "visual_weight": "medium",
+    }
+
+    first = social_text.render_social_text(source_bytes(), **arguments)
+    second = social_text.render_social_text(source_bytes(), **arguments)
+
+    assert first == second

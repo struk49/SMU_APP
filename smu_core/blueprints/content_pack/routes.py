@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 SLIDE_MARKER_RE = re.compile(r"^Slide\s+\d+\s*:\s*(.*)$", re.IGNORECASE)
 SLIDE_FIELD_RE = re.compile(
-    r"^(Title|Subtitle|Phrase|Translation|Body|Tip|CTA|Visual|Eyebrow|Emphasis)\s*:\s*(.*)$",
+    r"^(Title|Subtitle|Phrase|Translation|Body|Tip|CTA|Visual|Visual Weight|Eyebrow|Emphasis)\s*:\s*(.*)$",
     re.IGNORECASE,
 )
 BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
@@ -26,6 +26,7 @@ CONTENT_PACK_CAROUSEL_MIN_SLIDES = 2
 CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
 GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
 COPY_WORD_RE = re.compile(r"\b[\w']+(?:[-‐‑–][\w']+)*\b", re.UNICODE)
+VISUAL_WEIGHTS = {"heavy", "medium", "light"}
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
     "negative space, without trying to illustrate every detail of the source.",
@@ -57,7 +58,7 @@ def _select_layout_variant(
         return "editorial_statement"
     if visual_treatment in {"diagram", "process", "comparison"}:
         return "split_right" if slide_index % 2 else "split_left"
-    if visual_treatment == "illustration":
+    if visual_treatment in {"illustration", "feature_cards"}:
         return "split_right" if slide_index % 2 else "split_left"
     return ("editorial_statement", "visual_focus", "split_right")[slide_index % 3]
 
@@ -78,6 +79,14 @@ def _select_visual_treatment(visual, layout_role, semantic_text=None):
         return "illustration"
     if any(word in normalized for word in ("reddit", "discussion", "thread", "community", "conversation")):
         return "diagram"
+    if any(
+        phrase in normalized
+        for phrase in (
+            "three benefits", "three features", "four benefits", "four features",
+            "grouped elements", "feature cards",
+        )
+    ):
+        return "feature_cards"
     if any(word in normalized for word in ("branch", "flow", "connect", "platform", "channel", "node")):
         return "diagram"
     return "illustration"
@@ -116,6 +125,8 @@ def _parse_slide_block(lines):
                 active_field = "body"
             elif label == "visual":
                 active_field = "visual"
+            elif label == "visual weight":
+                active_field = "visual_weight"
             elif label == "eyebrow":
                 active_field = "eyebrow"
             elif label == "emphasis":
@@ -262,6 +273,24 @@ def _reject_carousel_copy(
     )
 
 
+def _visual_metaphor(slide):
+    normalized = " ".join(
+        value for value in (slide.get("visual"), slide.get("title")) if value
+    ).lower()
+    categories = (
+        ("node_network", ("node", "network", "branch", "connect", "discussion")),
+        ("document", ("document", "article", "paper", "editorial")),
+        ("device", ("phone", "device", "screen", "laptop")),
+        ("card_stack", ("card", "tile", "grid", "feature")),
+        ("human_figure", ("person", "people", "human", "figure")),
+        ("process_arrow", ("step", "sequence", "process", "arrow", "workflow")),
+    )
+    return next(
+        (name for name, words in categories if any(word in normalized for word in words)),
+        "distinct_object",
+    )
+
+
 def _carousel_presentations(slides):
     presentations = []
     for index, slide in enumerate(slides):
@@ -270,6 +299,20 @@ def _carousel_presentations(slides):
             value for value in (slide["title"], slide["body"]) if value
         )
         treatment = _select_visual_treatment(slide["visual"], role, semantic_text)
+        requested_weight = (slide.get("visual_weight") or "").strip().lower()
+        visual_weight = (
+            "heavy"
+            if role == "cover"
+            else "light"
+            if role == "cta"
+            else requested_weight
+            if requested_weight in VISUAL_WEIGHTS
+            else "heavy"
+            if treatment == "visual_focus"
+            else "light"
+            if treatment == "typography_only"
+            else "medium"
+        )
         presentations.append(
             {
                 "role": role,
@@ -278,8 +321,44 @@ def _carousel_presentations(slides):
                     role, index, treatment, slide["title"]
                 ),
                 "semantic_text": semantic_text,
+                "visual_weight": visual_weight,
+                "metaphor": _visual_metaphor(slide),
             }
         )
+
+    for index in range(1, len(presentations)):
+        previous = presentations[index - 1]
+        current = presentations[index]
+        semantic = current["semantic_text"].lower()
+        genuine_sequence = any(
+            word in semantic for word in ("step", "sequence", "process", "workflow")
+        )
+        if (
+            previous["treatment"] == current["treatment"] == "diagram"
+            and not genuine_sequence
+        ):
+            current["treatment"] = "illustration"
+        if (
+            previous["metaphor"] == current["metaphor"]
+            and current["metaphor"] != "distinct_object"
+            and not genuine_sequence
+            and current["treatment"] not in {"process", "comparison"}
+        ):
+            current["treatment"] = "visual_focus"
+        current["layout"] = _select_layout_variant(
+            current["role"], index, current["treatment"], slides[index]["title"]
+        )
+        if current["layout"] == previous["layout"]:
+            if current["layout"] == "split_left":
+                current["layout"] = "split_right"
+            elif current["layout"] == "split_right":
+                current["layout"] = "split_left"
+
+    if len(presentations) >= 4 and all(
+        item["visual_weight"] == "medium" for item in presentations[1:-1]
+    ):
+        relief_index = 1 + len(presentations[1:-1]) // 2
+        presentations[relief_index]["visual_weight"] = "light"
     return presentations
 
 
@@ -342,6 +421,7 @@ def _validate_viral_carousel_copy(slides, presentations=None):
             layout_role=role,
             layout_variant=layout,
             visual_treatment=treatment,
+            visual_weight=presentation["visual_weight"],
         )
         if not result["fits"]:
             support_failure = bool(body) and not result["support_fits"]
@@ -429,6 +509,7 @@ def _build_slide_background_prompt(
     layout_variant=None,
     visual_treatment=None,
     semantic_text=None,
+    visual_weight="medium",
 ):
     visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
     safe_visual_direction = _safe_visual_direction(visual, semantic_text)
@@ -483,6 +564,7 @@ Slide-specific visual concept:
 
 Slide role: {role}
 Selected visual treatment: {visual_treatment or "illustration"}
+Allowlisted visual weight: {visual_weight}
 Internal design layout: {design_layout}
 Text-overlay composition:
 {composition_direction}
@@ -674,6 +756,7 @@ def create_content_pack_carousel():
                 layout_variant,
                 visual_treatment,
                 semantic_text,
+                presentation["visual_weight"],
             )
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,
@@ -693,6 +776,7 @@ def create_content_pack_carousel():
                     ),
                 },
                 visual_treatment=visual_treatment,
+                visual_weight=presentation["visual_weight"],
             )
 
             post = Post(
