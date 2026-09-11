@@ -989,13 +989,13 @@ def test_typography_only_has_no_automatic_corner_circle(monkeypatch):
 
 def test_illustration_viral_slide_uses_supplied_artwork(monkeypatch):
     calls = []
-    original = social_text.ImageOps.fit
+    original = social_text.ImageOps.contain
 
     def capture(*args, **kwargs):
         calls.append(args[1])
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(social_text.ImageOps, "fit", capture)
+    monkeypatch.setattr(social_text.ImageOps, "contain", capture)
     social_text.render_social_text(
         source_bytes(),
         title="Artwork supports the idea",
@@ -1057,6 +1057,90 @@ def test_short_typography_only_headline_uses_stronger_scale(monkeypatch):
     )
 
     assert title_sizes[0] > title_sizes[1]
+
+
+@pytest.mark.parametrize(
+    "layout_variant",
+    [
+        "hero_left", "split_left", "split_right", "visual_focus",
+        "editorial_statement", "closing",
+    ],
+)
+def test_viral_composition_zones_protect_text_from_artwork(layout_variant):
+    zones = social_text.viral_composition_zones(
+        1024, 1024, layout_variant, "illustration"
+    )
+    text_left, text_top, text_right, text_bottom = zones["text_rect"]
+    art_left, art_top, art_right, art_bottom = zones["art_rect"]
+
+    assert zones["overlap_allowed"] is False
+    assert (
+        text_right <= art_left
+        or art_right <= text_left
+        or text_bottom <= art_top
+        or art_bottom <= text_top
+    )
+    support = zones["support_rect"]
+    assert text_left <= support[0] < support[2] <= text_right
+    assert text_top <= support[1] < support[3] <= text_bottom
+
+
+def test_artwork_is_clipped_outside_protected_text_rect():
+    source = Image.new("RGBA", (1600, 700), (255, 0, 180, 255))
+    for layout_variant in (
+        "hero_left", "split_left", "split_right", "visual_focus",
+        "editorial_statement", "closing",
+    ):
+        canvas = social_text._build_designed_carousel_canvas(
+            source, layout_variant, "illustration"
+        )
+        text_rect = social_text.viral_composition_zones(
+            *canvas.size, layout_variant, "illustration"
+        )["text_rect"]
+        colours = canvas.crop(text_rect).getcolors(maxcolors=10)
+        assert colours == [
+            ((text_rect[2] - text_rect[0]) * (text_rect[3] - text_rect[1]), (9, 18, 34, 255))
+        ]
+
+
+def test_crop_modes_and_focal_anchors_are_deterministic():
+    illustration = social_text.viral_composition_zones(
+        1024, 1024, "split_left", "illustration"
+    )
+    visual_focus = social_text.viral_composition_zones(
+        1024, 1024, "visual_focus", "visual_focus"
+    )
+    repeated = social_text.viral_composition_zones(
+        1024, 1024, "visual_focus", "visual_focus"
+    )
+
+    assert illustration["crop_mode"] == "contain"
+    assert visual_focus["crop_mode"] == "cover"
+    assert illustration["anchor"] == (0.72, 0.50)
+    assert visual_focus["anchor"] == (0.50, 0.46)
+    assert visual_focus == repeated
+
+
+def test_closing_artwork_zone_remains_secondary():
+    zones = social_text.viral_composition_zones(
+        1024, 1024, "closing", "illustration"
+    )
+    left, top, right, bottom = zones["art_rect"]
+
+    assert (right - left) * (bottom - top) < 0.30 * 1024 * 1024
+
+
+def test_invalid_viral_artwork_falls_back_to_safe_local_canvas():
+    output = social_text.render_social_text(
+        b"not an image",
+        title="Safe fallback",
+        layout_role="info",
+        layout_variant="split_left",
+        design_style="viral_carousel",
+        visual_treatment="illustration",
+    )
+
+    assert output.startswith(b"\x89PNG")
 
 
 def test_mixed_headline_runs_flow_sequentially_without_overlap():

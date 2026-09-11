@@ -412,32 +412,32 @@ def _build_slide_background_prompt(
     design_layout = layout_variant or _select_layout_variant(role, slide_index)
     composition_directions = {
         "hero_left": (
-            "Reserve a broad, dramatic low-detail region across the left 60% for oversized "
-            "headline typography; place the focal subject on the right."
+            "Use one isolated focal subject weighted to the right artwork zone. Keep the "
+            "protected left typography zone completely free of artwork and detail."
         ),
         "hero_center": (
             "Keep a large calm central field for oversized headline typography and frame "
             "the focal environment around its edges."
         ),
         "split_left": (
-            "Keep the left half calm and low-detail for prominent typography; weight the "
-            "subject or object toward the right half without drawing a divider."
+            "Contain one subject in the designated right artwork zone. Keep the protected "
+            "left typography zone empty, with a clean gutter and no divider."
         ),
         "split_right": (
-            "Keep the right half calm and low-detail for prominent typography; weight the "
-            "subject or object toward the left half without drawing a divider."
+            "Contain one subject in the designated left artwork zone. Keep the protected "
+            "right typography zone empty, with a clean gutter and no divider."
         ),
         "editorial_statement": (
-            "Reserve a generous calm upper and central field for an oversized editorial "
-            "statement; keep atmospheric artwork secondary and away from the type."
+            "Keep artwork as one small isolated supporting object in the bounded secondary "
+            "zone; reserve the dominant protected field for editorial typography."
         ),
         "visual_focus": (
-            "Let one strong focal subject carry the upper composition while preserving a "
-            "wide, calm lower-third region for large typography."
+            "Center one strong focal subject inside the bounded upper artwork zone. Keep "
+            "the separate lower typography zone clean and completely artwork-free."
         ),
         "closing": (
-            "Reserve a large calm central region for a confident concluding statement; keep "
-            "supporting artwork asymmetric and avoid button-like or interface shapes."
+            "Typography must dominate. If artwork is useful, isolate one minimal accent "
+            "object in the small upper-right zone and keep it away from the conclusion."
         ),
     }
     composition_direction = composition_directions[design_layout]

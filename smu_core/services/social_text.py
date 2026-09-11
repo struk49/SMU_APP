@@ -97,6 +97,58 @@ STYLE_TOKENS = {
     },
 }
 
+VIRAL_COMPOSITION_ZONES = {
+    "hero_left": {
+        "text": (0.08, 0.14, 0.62, 0.86),
+        "art": (0.66, 0.12, 0.94, 0.82),
+        "support": (0.08, 0.63, 0.62, 0.86),
+        "crop_mode": "cover",
+        "anchor": (0.78, 0.50),
+    },
+    "hero_center": {
+        "text": (0.12, 0.48, 0.88, 0.86),
+        "art": (0.30, 0.08, 0.70, 0.41),
+        "support": (0.12, 0.72, 0.88, 0.86),
+        "crop_mode": "cover",
+        "anchor": (0.50, 0.42),
+    },
+    "split_left": {
+        "text": (0.08, 0.16, 0.54, 0.86),
+        "art": (0.60, 0.14, 0.94, 0.86),
+        "support": (0.08, 0.63, 0.54, 0.86),
+        "crop_mode": "contain",
+        "anchor": (0.72, 0.50),
+    },
+    "split_right": {
+        "text": (0.46, 0.16, 0.92, 0.86),
+        "art": (0.06, 0.14, 0.40, 0.86),
+        "support": (0.46, 0.63, 0.92, 0.86),
+        "crop_mode": "contain",
+        "anchor": (0.28, 0.50),
+    },
+    "editorial_statement": {
+        "text": (0.08, 0.14, 0.68, 0.84),
+        "art": (0.74, 0.22, 0.94, 0.62),
+        "support": (0.08, 0.62, 0.68, 0.84),
+        "crop_mode": "contain",
+        "anchor": (0.82, 0.42),
+    },
+    "visual_focus": {
+        "text": (0.08, 0.57, 0.92, 0.88),
+        "art": (0.12, 0.07, 0.88, 0.50),
+        "support": (0.08, 0.78, 0.92, 0.88),
+        "crop_mode": "cover",
+        "anchor": (0.50, 0.46),
+    },
+    "closing": {
+        "text": (0.13, 0.30, 0.87, 0.82),
+        "art": (0.74, 0.08, 0.94, 0.25),
+        "support": (0.13, 0.67, 0.87, 0.82),
+        "crop_mode": "contain",
+        "anchor": (0.84, 0.16),
+    },
+}
+
 
 class SocialTextRenderError(ValueError):
     """A safe, categorical rendering failure that never contains user copy."""
@@ -389,6 +441,35 @@ def _fit_mixed_headline(
                         if candidate_width <= right - left:
                             line_end = candidate_end
                         else:
+                            if (
+                                emphasis_start <= line_start < emphasis_end
+                                and candidate_end <= emphasis_end
+                            ):
+                                failed = True
+                                break
+                            if (
+                                line_start < emphasis_start < candidate_end
+                                and candidate_end <= emphasis_end
+                            ):
+                                before_end = emphasis_start
+                                while (
+                                    before_end > line_start
+                                    and text[before_end - 1].isspace()
+                                ):
+                                    before_end -= 1
+                                before_emphasis = _mixed_line_runs(
+                                    text,
+                                    line_start,
+                                    before_end,
+                                    emphasis_start,
+                                    emphasis_end,
+                                    fonts,
+                                )
+                                if before_emphasis:
+                                    lines.append(before_emphasis)
+                                line_start = emphasis_start
+                                line_end = candidate_end
+                                continue
                             runs = _mixed_line_runs(
                                 text, line_start, line_end,
                                 emphasis_start, emphasis_end, fonts,
@@ -466,6 +547,35 @@ def _style_tokens(design_style):
     return STYLE_TOKENS.get(design_style, STYLE_TOKENS["default"])
 
 
+def viral_composition_zones(
+    width, height, layout_variant, visual_treatment=None
+):
+    """Return pixel-safe, non-overlapping text and artwork regions."""
+    definition = VIRAL_COMPOSITION_ZONES[layout_variant]
+
+    def pixels(rect):
+        return tuple(
+            round(value * dimension)
+            for value, dimension in zip(rect, (width, height, width, height))
+        )
+
+    return {
+        "text_rect": pixels(definition["text"]),
+        "art_rect": pixels(definition["art"]),
+        "support_rect": pixels(definition["support"]),
+        "safe_margin": round(min(width, height) * 0.08),
+        "overlap_allowed": False,
+        "crop_mode": (
+            "cover"
+            if visual_treatment == "visual_focus"
+            else "contain"
+            if visual_treatment in {"illustration", "diagram"}
+            else definition["crop_mode"]
+        ),
+        "anchor": definition["anchor"],
+    }
+
+
 def _analyze_text_region(image, box):
     left, top, right, bottom = (round(value) for value in box)
     sample = image.crop((left, top, right, bottom)).convert("L")
@@ -506,25 +616,32 @@ def _build_designed_carousel_canvas(
     accent_blue = (86, 142, 246, 255)
     panel = (18, 34, 58, 255)
 
-    zones = {
-        "hero_left": (round(width * 0.66), round(height * 0.12), round(width * 0.94), round(height * 0.82)),
-        "hero_center": (round(width * 0.68), round(height * 0.10), round(width * 0.94), round(height * 0.42)),
-        "split_left": (round(width * 0.60), round(height * 0.14), round(width * 0.94), round(height * 0.86)),
-        "split_right": (round(width * 0.06), round(height * 0.14), round(width * 0.40), round(height * 0.86)),
-        "editorial_statement": (round(width * 0.72), round(height * 0.18), round(width * 0.94), round(height * 0.68)),
-        "visual_focus": (round(width * 0.12), round(height * 0.07), round(width * 0.88), round(height * 0.52)),
-        "closing": (round(width * 0.68), round(height * 0.62), round(width * 0.94), round(height * 0.88)),
-    }
+    composition = viral_composition_zones(
+        width, height, layout_variant, visual_treatment
+    )
     radius = max(16, round(scale * 0.035))
 
-    def paste_artwork(zone, *, opacity=235):
+    def paste_artwork(zone, *, opacity=235, mode=None, anchor=None):
         zone_width = zone[2] - zone[0]
         zone_height = zone[3] - zone[1]
-        artwork = ImageOps.fit(
-            source_image.convert("RGBA"),
-            (zone_width, zone_height),
-            method=Image.Resampling.LANCZOS,
-        )
+        mode = mode or composition["crop_mode"]
+        anchor = anchor or composition["anchor"]
+        source = source_image.convert("RGBA")
+        if mode == "contain":
+            contained = ImageOps.contain(
+                source, (zone_width, zone_height), Image.Resampling.LANCZOS
+            )
+            artwork = Image.new("RGBA", (zone_width, zone_height), panel)
+            x = round((zone_width - contained.width) * anchor[0])
+            y = round((zone_height - contained.height) * anchor[1])
+            artwork.alpha_composite(contained, (x, y))
+        else:
+            artwork = ImageOps.fit(
+                source,
+                (zone_width, zone_height),
+                method=Image.Resampling.LANCZOS,
+                centering=anchor,
+            )
         artwork = Image.alpha_composite(
             artwork, Image.new("RGBA", artwork.size, (8, 20, 38, 54))
         )
@@ -534,7 +651,7 @@ def _build_designed_carousel_canvas(
         )
         canvas.paste(artwork, (zone[0], zone[1]), mask)
 
-    zone = zones[layout_variant]
+    zone = composition["art_rect"]
     if visual_treatment == "typography_only":
         pass
     elif visual_treatment == "comparison":
@@ -690,6 +807,11 @@ def _draw_role_composition(
         },
     }
     config = layout_tokens[design_layout]
+    if design_style == "viral_carousel" and design_layout != "compact_statement":
+        config = dict(config)
+        config["region"] = viral_composition_zones(
+            width, height, design_layout
+        )["text_rect"]
     region_left, region_top, region_right, region_bottom = config["region"]
     styled_region_right = region_left + (region_right - region_left) * tokens["region_width"]
     region_right = min(width - margin, round(styled_region_right))
@@ -727,11 +849,10 @@ def _draw_role_composition(
     kinds = ("title", "body", "cta")
     weights = ("black", "medium", "bold")
     minimums = (readable_title_size, readable_body_size, readable_body_size)
-    height_shares = (
-        (0.52, 0.31, 0.17)
-        if design_style == "viral_carousel"
-        else (0.45, 0.36, 0.19)
-    )
+    if design_style == "viral_carousel":
+        height_shares = (0.78, 0.31, 0.17) if not body and not cta else (0.52, 0.31, 0.17)
+    else:
+        height_shares = (0.45, 0.36, 0.19)
     blocks = [eyebrow_block] if eyebrow_block else []
     cursor = cursor if eyebrow_block else region_top
     for kind, value, font_scale, max_lines, preferred, min_size, height_share, weight in zip(
@@ -940,7 +1061,10 @@ def render_social_text(
     except SocialTextRenderError:
         raise
     except (UnidentifiedImageError, OSError, ValueError) as exc:
-        raise SocialTextRenderError("invalid_image") from exc
+        if design_style == "viral_carousel" and layout_role is not None:
+            image = Image.new("RGBA", (1024, 1024), (9, 18, 34, 255))
+        else:
+            raise SocialTextRenderError("invalid_image") from exc
 
     width, height = image.size
     margin = max(16, round(min(width, height) * 0.08))
@@ -979,6 +1103,10 @@ def render_social_text(
         except SocialTextRenderError as exc:
             if exc.reason != "text_does_not_fit":
                 raise
+            if design_style == "viral_carousel":
+                image = _build_designed_carousel_canvas(
+                    image, effective_variant, "typography_only"
+                )
             composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
             _draw_role_composition(
                 ImageDraw.Draw(composition_layer),

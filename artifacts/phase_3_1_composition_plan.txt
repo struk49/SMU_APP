@@ -1,0 +1,59 @@
+Slide 1
+Treatment: illustration
+Layout: hero_left
+Text zone: (82, 143, 635, 881)
+Artwork zone: (676, 123, 963, 840)
+Crop mode: contain
+Anchor: (0.78, 0.5)
+Overlap allowed: no
+Editorial purpose: cover zones
+
+Slide 2
+Treatment: illustration
+Layout: split_left
+Text zone: (82, 164, 553, 881)
+Artwork zone: (614, 143, 963, 881)
+Crop mode: contain
+Anchor: (0.72, 0.5)
+Overlap allowed: no
+Editorial purpose: split-left zones
+
+Slide 3
+Treatment: illustration
+Layout: split_right
+Text zone: (471, 164, 942, 881)
+Artwork zone: (61, 143, 410, 881)
+Crop mode: contain
+Anchor: (0.28, 0.5)
+Overlap allowed: no
+Editorial purpose: split-right zones
+
+Slide 4
+Treatment: visual_focus
+Layout: visual_focus
+Text zone: (82, 584, 942, 901)
+Artwork zone: (123, 72, 901, 512)
+Crop mode: cover
+Anchor: (0.5, 0.46)
+Overlap allowed: no
+Editorial purpose: stacked zones
+
+Slide 5
+Treatment: diagram
+Layout: editorial_statement
+Text zone: (82, 143, 696, 860)
+Artwork zone: (758, 225, 963, 635)
+Crop mode: contain
+Anchor: (0.82, 0.42)
+Overlap allowed: no
+Editorial purpose: bounded diagram
+
+Slide 6
+Treatment: typography_only
+Layout: closing
+Text zone: (133, 307, 891, 840)
+Artwork zone: (758, 82, 963, 256)
+Crop mode: contain
+Anchor: (0.84, 0.16)
+Overlap allowed: no
+Editorial purpose: typography-first close

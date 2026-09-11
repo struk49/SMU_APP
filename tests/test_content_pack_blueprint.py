@@ -1139,17 +1139,20 @@ def test_background_prompts_reserve_role_specific_negative_space():
 
     assert "Slide role: cover" in cover
     assert "Internal design layout: hero_left" in cover
-    assert "left 60%" in cover
-    assert "focal subject on the right" in cover
+    assert "weighted to the right artwork zone" in cover
+    assert "left typography zone completely free" in cover
     assert "Slide role: phrase" in phrase
     assert "Internal design layout: split_left" in phrase
-    assert "left half calm and low-detail" in phrase
+    assert "designated right artwork zone" in phrase
+    assert "left typography zone empty" in phrase
     assert "Slide role: info" in info
     assert "Internal design layout: split_right" in info
-    assert "right half calm and low-detail" in info
+    assert "designated left artwork zone" in info
+    assert "right typography zone empty" in info
     assert "Slide role: cta" in cta
     assert "Internal design layout: closing" in cta
-    assert "large calm central region" in cta
+    assert "Typography must dominate" in cta
+    assert "small upper-right zone" in cta
     assert all(
         "faces, facial features, and primary objects completely outside" in prompt
         for prompt in (cover, phrase, info, cta)
