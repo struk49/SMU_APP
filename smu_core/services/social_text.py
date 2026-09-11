@@ -736,6 +736,7 @@ def _draw_role_composition(
     layout_variant,
     design_style,
     visual_treatment,
+    measure_only=False,
 ):
     design_layout = select_design_layout(layout_role, layout_variant)
     tokens = _style_tokens(design_style)
@@ -813,8 +814,11 @@ def _draw_role_composition(
             width, height, design_layout
         )["text_rect"]
     region_left, region_top, region_right, region_bottom = config["region"]
-    styled_region_right = region_left + (region_right - region_left) * tokens["region_width"]
-    region_right = min(width - margin, round(styled_region_right))
+    if design_style != "viral_carousel":
+        styled_region_right = (
+            region_left + (region_right - region_left) * tokens["region_width"]
+        )
+        region_right = min(width - margin, round(styled_region_right))
     analysis_region = (region_left, region_top, region_right, region_bottom)
     analysis = _analyze_text_region(source_image, analysis_region)
     foreground = analysis["foreground"]
@@ -911,6 +915,21 @@ def _draw_role_composition(
     )
     if typography_bounds[3] > region_bottom:
         raise SocialTextRenderError("text_does_not_fit")
+    if measure_only:
+        result = {"typography_bounds": typography_bounds, "layout": design_layout}
+        for block in blocks:
+            kind = block["kind"]
+            if kind not in {"title", "body", "cta"}:
+                continue
+            lines = block.get("mixed_lines")
+            if lines is None:
+                lines = block["text"].splitlines()
+            result[kind] = {
+                "font_size": block["font"].size,
+                "lines": len(lines),
+                "bounds": block["bounds"],
+            }
+        return result
     if analysis["busy"]:
         surface_padding = max(10, round(scale * 0.018))
         surface_bounds = (
@@ -983,6 +1002,142 @@ def _draw_role_composition(
             stroke_width=stroke_width,
             stroke_fill=brand_shadow,
         )
+
+
+def preflight_viral_carousel_text(
+    *,
+    title,
+    body=None,
+    cta=None,
+    brand=None,
+    eyebrow=None,
+    emphasis=None,
+    layout_role,
+    layout_variant,
+    visual_treatment,
+    allow_compact_fallback=True,
+):
+    """Measure the exact production typography path without rendering output."""
+    try:
+        title = _validated_text("title", title, required=True)
+        body = _validated_text("body", body)
+        cta = _validated_text("cta", cta)
+        brand = _validated_text("brand", brand)
+        eyebrow = _validated_text("eyebrow", eyebrow)
+    except SocialTextRenderError as exc:
+        return {
+            "fits": False,
+            "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": exc.reason,
+        }
+    if emphasis is not None and (
+        not isinstance(emphasis, dict)
+        or set(emphasis) != {"text", "role"}
+        or not isinstance(emphasis.get("text"), str)
+        or not emphasis["text"]
+        or emphasis["text"] not in title
+        or emphasis.get("role") not in {"primary", "accent", "normal"}
+    ):
+        return {
+            "fits": False,
+            "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": "invalid_typography_metadata",
+        }
+    try:
+        _validate_font_support(
+            title,
+            body,
+            cta,
+            brand,
+            eyebrow,
+            emphasis["text"] if emphasis else "",
+        )
+    except SocialTextRenderError as exc:
+        return {
+            "fits": False,
+            "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": exc.reason,
+        }
+
+    canvas = Image.new("RGBA", (1024, 1024), (9, 18, 34, 255))
+    draw = ImageDraw.Draw(canvas)
+    common = {
+        "source_image": canvas,
+        "width": 1024,
+        "height": 1024,
+        "margin": round(1024 * 0.08),
+        "title": title,
+        "body": body,
+        "cta": cta,
+        "brand": brand,
+        "eyebrow": eyebrow,
+        "emphasis": emphasis,
+        "layout_role": layout_role,
+        "design_style": "viral_carousel",
+        "visual_treatment": visual_treatment,
+        "measure_only": True,
+    }
+    used_layout = layout_variant
+    try:
+        measurement = _draw_role_composition(
+            draw, layout_variant=layout_variant, **common
+        )
+    except SocialTextRenderError as exc:
+        if exc.reason != "text_does_not_fit":
+            return {
+                "fits": False,
+                "headline_fits": False,
+                "support_fits": not bool(body),
+                "failure_reason": exc.reason,
+            }
+        if not allow_compact_fallback:
+            return {
+                "fits": False,
+                "headline_fits": bool(body),
+                "support_fits": False if body else True,
+                "failure_reason": (
+                    "carousel_support_does_not_fit"
+                    if body
+                    else "carousel_headline_does_not_fit"
+                ),
+                "renderer_reason": exc.reason,
+                "layout": layout_variant,
+            }
+        used_layout = "compact_statement"
+        try:
+            measurement = _draw_role_composition(
+                draw, layout_variant=used_layout, **common
+            )
+        except SocialTextRenderError as fallback_exc:
+            return {
+                "fits": False,
+                "headline_fits": bool(body),
+                "support_fits": False if body else True,
+                "failure_reason": (
+                    "carousel_support_does_not_fit"
+                    if body
+                    else "carousel_headline_does_not_fit"
+                ),
+                "renderer_reason": fallback_exc.reason,
+                "layout": used_layout,
+            }
+
+    headline = measurement.get("title", {})
+    support = measurement.get("body", {})
+    return {
+        "fits": True,
+        "headline_fits": True,
+        "support_fits": True,
+        "headline_font_size": headline.get("font_size"),
+        "support_font_size": support.get("font_size"),
+        "headline_lines": headline.get("lines", 0),
+        "support_lines": support.get("lines", 0),
+        "failure_reason": None,
+        "layout": used_layout,
+    }
 
 
 def render_social_text(

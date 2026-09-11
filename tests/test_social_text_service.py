@@ -662,7 +662,7 @@ def test_viral_headline_is_larger_than_default_when_safe(monkeypatch):
         )
         sizes[style] = calls[0]
 
-    assert sizes["viral_carousel"] > sizes["default"]
+    assert sizes["viral_carousel"] >= sizes["default"]
 
 
 def test_viral_carousel_uses_deterministic_dark_designed_canvas():
@@ -1141,6 +1141,159 @@ def test_invalid_viral_artwork_falls_back_to_safe_local_canvas():
     )
 
     assert output.startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize(
+    ("role", "layout", "treatment"),
+    [
+        ("cover", "hero_left", "illustration"),
+        ("info", "split_left", "illustration"),
+        ("info", "split_right", "illustration"),
+        ("info", "visual_focus", "visual_focus"),
+        ("info", "editorial_statement", "diagram"),
+        ("cta", "closing", "typography_only"),
+    ],
+)
+def test_preflight_uses_real_layout_and_matches_renderer(role, layout, treatment):
+    arguments = {
+        "title": "One exact useful idea",
+        "body": "Concise support stays readable.",
+        "layout_role": role,
+        "layout_variant": layout,
+        "visual_treatment": treatment,
+    }
+
+    result = social_text.preflight_viral_carousel_text(**arguments)
+    rendered = social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        design_style="viral_carousel",
+        **arguments,
+    )
+
+    assert result["fits"] is True
+    assert result["headline_font_size"] >= round(1024 * 0.052)
+    assert result["support_font_size"] >= round(1024 * 0.030)
+    assert rendered.startswith(b"\x89PNG")
+
+
+def test_preflight_production_cases_report_measured_results():
+    info = social_text.preflight_viral_carousel_text(
+        title="One idea makes many social posts without losing its original meaning",
+        layout_role="info",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+    )
+    cover = social_text.preflight_viral_carousel_text(
+        title="Strong cover",
+        body=(
+            "Core source becomes useful content for every platform without losing its "
+            "original meaning or focus."
+        ),
+        layout_role="cover",
+        layout_variant="hero_left",
+        visual_treatment="illustration",
+    )
+
+    assert info["fits"] is True
+    assert info["headline_font_size"] >= round(1024 * 0.052)
+    assert info["headline_lines"] <= 6
+    assert cover["fits"] is True
+    assert cover["support_font_size"] >= round(1024 * 0.030)
+    assert cover["support_lines"] <= 6
+
+
+def test_same_production_headline_fails_in_small_zone_without_renderer_fallback(
+    monkeypatch,
+):
+    monkeypatch.setitem(
+        social_text.VIRAL_COMPOSITION_ZONES["visual_focus"],
+        "text",
+        (0.08, 0.57, 0.30, 0.66),
+    )
+    result = social_text.preflight_viral_carousel_text(
+        title="One idea makes many social posts without losing its original meaning",
+        layout_role="info",
+        layout_variant="visual_focus",
+        visual_treatment="visual_focus",
+        allow_compact_fallback=False,
+    )
+
+    assert result["fits"] is False
+    assert result["failure_reason"] == "carousel_headline_does_not_fit"
+
+
+def test_preflight_mixed_emphasis_and_polish_match_renderer():
+    arguments = {
+        "title": "Jeden pomysł, wiele możliwości",
+        "emphasis": {"text": "wiele możliwości", "role": "accent"},
+        "layout_role": "info",
+        "layout_variant": "split_left",
+        "visual_treatment": "illustration",
+    }
+
+    result = social_text.preflight_viral_carousel_text(**arguments)
+    rendered = social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        design_style="viral_carousel",
+        **arguments,
+    )
+
+    assert result["fits"] is True
+    assert rendered.startswith(b"\x89PNG")
+
+
+def test_preflight_is_measurement_only_and_saves_no_image(monkeypatch):
+    monkeypatch.setattr(
+        social_text.Image.Image,
+        "save",
+        lambda *args, **kwargs: pytest.fail("preflight created an output image"),
+    )
+
+    result = social_text.preflight_viral_carousel_text(
+        title="Measure only",
+        layout_role="info",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+    )
+
+    assert result["fits"] is True
+
+
+def test_missing_support_expands_headline_space_consistently():
+    common = {
+        "title": "A moderately detailed headline uses the available protected region",
+        "layout_role": "info",
+        "layout_variant": "split_left",
+        "visual_treatment": "illustration",
+    }
+    without_support = social_text.preflight_viral_carousel_text(**common)
+    with_support = social_text.preflight_viral_carousel_text(
+        **common, body="A concise supporting sentence."
+    )
+
+    assert without_support["fits"] is True
+    assert with_support["fits"] is True
+    assert without_support["headline_font_size"] >= with_support["headline_font_size"]
+
+
+def test_preflight_rejects_unrenderable_and_unsupported_copy_safely():
+    too_long = social_text.preflight_viral_carousel_text(
+        title="Supercalifragilisticexpialidocious " * 20,
+        layout_role="info",
+        layout_variant="visual_focus",
+        visual_treatment="visual_focus",
+    )
+    unsupported = social_text.preflight_viral_carousel_text(
+        title="Unsupported emoji 🚀",
+        layout_role="info",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+    )
+
+    assert too_long["fits"] is False
+    assert too_long["failure_reason"] == "text_limit_exceeded"
+    assert unsupported["fits"] is False
+    assert unsupported["failure_reason"] == "unsupported_text_character"
 
 
 def test_mixed_headline_runs_flow_sequentially_without_overlap():

@@ -1,0 +1,142 @@
+Case: short cover
+Role: cover
+Layout: hero_left
+Words: 3
+Characters: 15
+Fit result: pass
+Measured layout: hero_left
+Headline font size: 149
+Headline lines: 3
+Support font size: None
+Support lines: 0
+Reason: None
+
+Case: long but renderable cover
+Role: cover
+Layout: hero_left
+Words: 12
+Characters: 74
+Fit result: pass
+Measured layout: compact_statement
+Headline font size: 76
+Headline lines: 4
+Support font size: None
+Support lines: 0
+Reason: None
+
+Case: too-long cover
+Role: cover
+Layout: hero_left
+Words: 20
+Characters: 699
+Fit result: fail
+Measured layout: hero_left
+Headline font size: None
+Headline lines: None
+Support font size: None
+Support lines: None
+Reason: text_limit_exceeded
+
+Case: short info
+Role: info
+Layout: split_left
+Words: 3
+Characters: 18
+Fit result: pass
+Measured layout: split_left
+Headline font size: 74
+Headline lines: 2
+Support font size: None
+Support lines: 0
+Reason: None
+
+Case: 11-word / 68-character info
+Role: info
+Layout: split_left
+Words: 11
+Characters: 68
+Fit result: pass
+Measured layout: compact_statement
+Headline font size: 88
+Headline lines: 4
+Support font size: None
+Support lines: 0
+Reason: None
+
+Case: long but renderable info
+Role: info
+Layout: split_right
+Words: 11
+Characters: 94
+Fit result: pass
+Measured layout: compact_statement
+Headline font size: 57
+Headline lines: 4
+Support font size: None
+Support lines: 0
+Reason: None
+
+Case: actual unrenderable info
+Role: info
+Layout: visual_focus
+Words: 24
+Characters: 707
+Fit result: fail
+Measured layout: visual_focus
+Headline font size: None
+Headline lines: None
+Support font size: None
+Support lines: None
+Reason: text_limit_exceeded
+
+Case: short support
+Role: info
+Layout: split_left
+Words: 4
+Characters: 28
+Fit result: pass
+Measured layout: split_left
+Headline font size: 155
+Headline lines: 2
+Support font size: 58
+Support lines: 3
+Reason: None
+
+Case: 15-word / 99-character cover support
+Role: cover
+Layout: hero_left
+Words: 15
+Characters: 99
+Fit result: pass
+Measured layout: compact_statement
+Headline font size: 159
+Headline lines: 2
+Support font size: 47
+Support lines: 3
+Reason: None
+
+Case: actual unrenderable support
+Role: info
+Layout: split_left
+Words: 30
+Characters: 719
+Fit result: fail
+Measured layout: split_left
+Headline font size: None
+Headline lines: None
+Support font size: None
+Support lines: None
+Reason: text_limit_exceeded
+
+Case: CTA
+Role: cta
+Layout: closing
+Words: 5
+Characters: 29
+Fit result: pass
+Measured layout: closing
+Headline font size: 90
+Headline lines: 2
+Support font size: None
+Support lines: 0
+Reason: None

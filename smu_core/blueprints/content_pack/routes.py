@@ -10,6 +10,7 @@ from smu_core.models import Post
 from smu_core.services.access import subscription_required
 from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
 from smu_core.services.content import ContentPackGenerationError
+from smu_core.services.social_text import preflight_viral_carousel_text
 
 
 content_pack_bp = Blueprint("content_pack", __name__)
@@ -23,20 +24,6 @@ SLIDE_FIELD_RE = re.compile(
 BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
 CONTENT_PACK_CAROUSEL_MIN_SLIDES = 2
 CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
-VIRAL_CAROUSEL_MAX_COVER_WORDS = 8
-VIRAL_CAROUSEL_MAX_INTERNAL_WORDS = 10
-VIRAL_CAROUSEL_MAX_CTA_WORDS = 9
-VIRAL_CAROUSEL_MAX_COVER_CHARACTERS = 64
-VIRAL_CAROUSEL_MAX_INTERNAL_CHARACTERS = 80
-VIRAL_CAROUSEL_LONG_INTERNAL_WORD_THRESHOLD = 8
-VIRAL_CAROUSEL_LONG_INTERNAL_CHARACTER_THRESHOLD = 64
-VIRAL_CAROUSEL_MAX_CTA_CHARACTERS = 72
-VIRAL_CAROUSEL_MAX_COVER_SUPPORT_WORDS = 10
-VIRAL_CAROUSEL_MAX_COVER_SUPPORT_CHARACTERS = 72
-VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_WORDS = 16
-VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_CHARACTERS = 100
-VIRAL_CAROUSEL_MAX_CTA_SUPPORT_WORDS = 8
-VIRAL_CAROUSEL_MAX_CTA_SUPPORT_CHARACTERS = 64
 GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
 COPY_WORD_RE = re.compile(r"\b[\w']+(?:[-‐‑–][\w']+)*\b", re.UNICODE)
 SLIDE_VISUAL_CONCEPTS = (
@@ -226,25 +213,40 @@ def _copy_word_count(value):
 class CarouselQualityError(ValueError):
     """Safe categorical rejection containing metrics but never slide copy."""
 
-    def __init__(self, reason, *, slide_index, role, word_count, character_count):
+    def __init__(
+        self, reason, *, slide_index, role, word_count, character_count,
+        treatment=None, layout=None, measured_lines=None, font_size=None,
+    ):
         self.reason = reason
         self.slide_index = slide_index
         self.role = role
         self.word_count = word_count
         self.character_count = character_count
+        self.treatment = treatment
+        self.layout = layout
+        self.measured_lines = measured_lines
+        self.font_size = font_size
         super().__init__(reason)
 
 
-def _reject_carousel_copy(reason, *, slide_index, role, value):
+def _reject_carousel_copy(
+    reason, *, slide_index, role, value, treatment=None, layout=None,
+    measured_lines=None, font_size=None,
+):
     word_count = _copy_word_count(value)
     character_count = len((value or "").strip())
     logger.warning(
         "carousel_copy_quality_rejected slide_index=%s role=%s word_count=%s "
-        "character_count=%s reason=%s",
+        "character_count=%s treatment=%s layout=%s measured_lines=%s "
+        "font_size=%s reason=%s",
         slide_index,
         role,
         word_count,
         character_count,
+        treatment,
+        layout,
+        measured_lines,
+        font_size,
         reason,
     )
     raise CarouselQualityError(
@@ -253,82 +255,67 @@ def _reject_carousel_copy(reason, *, slide_index, role, value):
         role=role,
         word_count=word_count,
         character_count=character_count,
+        treatment=treatment,
+        layout=layout,
+        measured_lines=measured_lines,
+        font_size=font_size,
     )
 
 
-def _validate_viral_carousel_copy(slides):
+def _carousel_presentations(slides):
+    presentations = []
+    for index, slide in enumerate(slides):
+        role = "cover" if index == 0 else slide["layout_role"]
+        semantic_text = " ".join(
+            value for value in (slide["title"], slide["body"]) if value
+        )
+        treatment = _select_visual_treatment(slide["visual"], role, semantic_text)
+        presentations.append(
+            {
+                "role": role,
+                "treatment": treatment,
+                "layout": _select_layout_variant(
+                    role, index, treatment, slide["title"]
+                ),
+                "semantic_text": semantic_text,
+            }
+        )
+    return presentations
+
+
+def _validate_viral_carousel_copy(slides, presentations=None):
     """Reject structurally poor artwork copy without rewriting approved wording."""
+    presentations = presentations or _carousel_presentations(slides)
     seen_headlines = set()
     previous_message = None
     for index, slide in enumerate(slides):
         slide_index = index + 1
         title = slide["title"] or ""
         body = slide["body"] or ""
-        role = "cover" if index == 0 else slide["layout_role"]
+        presentation = presentations[index]
+        role = presentation["role"]
+        treatment = presentation["treatment"]
+        layout = presentation["layout"]
         normalized_title = _normalized_copy(title)
         normalized_body = _normalized_copy(body)
-        title_words = _copy_word_count(title)
-        title_characters = len(title.strip())
-        if role == "cover":
-            headline_too_dense = (
-                title_words > VIRAL_CAROUSEL_MAX_COVER_WORDS
-                or title_characters > VIRAL_CAROUSEL_MAX_COVER_CHARACTERS
-            )
-        elif role == "cta":
-            headline_too_dense = (
-                title_words > VIRAL_CAROUSEL_MAX_CTA_WORDS
-                or title_characters > VIRAL_CAROUSEL_MAX_CTA_CHARACTERS
-            )
-        else:
-            headline_too_dense = (
-                title_words > VIRAL_CAROUSEL_MAX_INTERNAL_WORDS
-                or title_characters > VIRAL_CAROUSEL_MAX_INTERNAL_CHARACTERS
-                or (
-                    title_words > VIRAL_CAROUSEL_LONG_INTERNAL_WORD_THRESHOLD
-                    and title_characters
-                    > VIRAL_CAROUSEL_LONG_INTERNAL_CHARACTER_THRESHOLD
-                )
-            )
         sentence_count = len(re.findall(r"[.!?]+(?:\s|$)", title))
-        if headline_too_dense or (
-            sentence_count > 1
-            and (
-                title_words > VIRAL_CAROUSEL_LONG_INTERNAL_WORD_THRESHOLD
-                or title_characters
-                > VIRAL_CAROUSEL_LONG_INTERNAL_CHARACTER_THRESHOLD
-            )
-        ):
+        if sentence_count > 1:
             _reject_carousel_copy(
-                "carousel_headline_too_dense",
+                "carousel_copy_structure_invalid",
                 slide_index=slide_index,
                 role=role,
                 value=title,
-            )
-        if role == "cover":
-            support_word_limit = VIRAL_CAROUSEL_MAX_COVER_SUPPORT_WORDS
-            support_character_limit = VIRAL_CAROUSEL_MAX_COVER_SUPPORT_CHARACTERS
-        elif role == "cta":
-            support_word_limit = VIRAL_CAROUSEL_MAX_CTA_SUPPORT_WORDS
-            support_character_limit = VIRAL_CAROUSEL_MAX_CTA_SUPPORT_CHARACTERS
-        else:
-            support_word_limit = VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_WORDS
-            support_character_limit = VIRAL_CAROUSEL_MAX_INTERNAL_SUPPORT_CHARACTERS
-        if (
-            _copy_word_count(body) > support_word_limit
-            or len(body.strip()) > support_character_limit
-        ):
-            _reject_carousel_copy(
-                "carousel_support_too_dense",
-                slide_index=slide_index,
-                role=role,
-                value=body,
+                treatment=treatment,
+                layout=layout,
             )
         if len(re.findall(r"[.!?]+(?:\s|$)", body)) > 1:
             _reject_carousel_copy(
-                "carousel_support_too_dense",
+                "carousel_copy_structure_invalid",
                 slide_index=slide_index,
                 role=role,
                 value=body,
+                treatment=treatment,
+                layout=layout,
             )
         if normalized_body and normalized_body == normalized_title:
             raise ValueError("carousel_support_repeats_headline")
@@ -339,6 +326,43 @@ def _validate_viral_carousel_copy(slides):
         if previous_message and message == previous_message:
             raise ValueError("carousel_repeats_slide")
         previous_message = message
+
+        emphasis = (
+            {"text": slide["emphasis"], "role": "accent"}
+            if slide.get("emphasis") and slide["emphasis"] in title
+            else None
+        )
+        result = preflight_viral_carousel_text(
+            title=title,
+            body=body,
+            cta=slide["cta"],
+            brand=slide["brand"],
+            eyebrow=slide.get("eyebrow"),
+            emphasis=emphasis,
+            layout_role=role,
+            layout_variant=layout,
+            visual_treatment=treatment,
+        )
+        if not result["fits"]:
+            support_failure = bool(body) and not result["support_fits"]
+            _reject_carousel_copy(
+                (
+                    "carousel_support_does_not_fit"
+                    if support_failure
+                    else "carousel_headline_does_not_fit"
+                ),
+                slide_index=slide_index,
+                role=role,
+                value=body if support_failure else title,
+                treatment=treatment,
+                layout=layout,
+                measured_lines=result.get(
+                    "support_lines" if support_failure else "headline_lines"
+                ),
+                font_size=result.get(
+                    "support_font_size" if support_failure else "headline_font_size"
+                ),
+            )
 
     if _normalized_copy(slides[-1]["title"]) in GENERIC_CLOSING_HEADLINES:
         raise ValueError("carousel_generic_closing")
@@ -616,8 +640,9 @@ def create_content_pack_carousel():
             )
             return redirect(url_for("content_pack"))
 
+        presentations = _carousel_presentations(slides)
         if image_style == "viral_carousel":
-            _validate_viral_carousel_copy(slides)
+            _validate_viral_carousel_copy(slides, presentations)
 
         required_images = len(slides)
         user = current_user._get_current_object()
@@ -636,16 +661,11 @@ def create_content_pack_carousel():
         placeholder_url = get_placeholder_image_url()
 
         for index, slide in enumerate(slides):
-            layout_role = "cover" if index == 0 else slide["layout_role"]
-            semantic_text = " ".join(
-                value for value in (slide["title"], slide["body"]) if value
-            )
-            visual_treatment = _select_visual_treatment(
-                slide["visual"], layout_role, semantic_text
-            )
-            layout_variant = _select_layout_variant(
-                layout_role, index, visual_treatment, slide["title"]
-            )
+            presentation = presentations[index]
+            layout_role = presentation["role"]
+            semantic_text = presentation["semantic_text"]
+            visual_treatment = presentation["treatment"]
+            layout_variant = presentation["layout"]
             background_prompt = _build_slide_background_prompt(
                 styled_image_prompt,
                 index,

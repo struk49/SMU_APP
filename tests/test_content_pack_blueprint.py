@@ -616,14 +616,6 @@ Slide 4: Adapt with purpose"""
     ("carousel", "reason"),
     [
         (
-            "Slide 1: This cover contains far too many words to communicate one clear idea quickly\nSlide 2: Distinct point",
-            "carousel_headline_too_dense",
-        ),
-        (
-            "Slide 1: Strong cover\nSlide 2:\nTitle: Clear point\nBody: This support contains far too many words and reads like detailed caption prose that belongs outside the artwork entirely",
-            "carousel_support_too_dense",
-        ),
-        (
             "Slide 1: Strong cover\nSlide 2: Repeated point\nSlide 3: Repeated point",
             "carousel_repeats_slide",
         ),
@@ -633,7 +625,7 @@ Slide 4: Adapt with purpose"""
         ),
     ],
 )
-def test_viral_carousel_quality_rejects_dense_repetitive_or_generic_copy(
+def test_viral_carousel_quality_rejects_repetitive_or_generic_copy(
     carousel, reason
 ):
     slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
@@ -664,24 +656,43 @@ Slide 2: We can make it fit on each new platform now"""
     assert content_pack_routes._validate_viral_carousel_copy(slides) is None
 
 
-@pytest.mark.parametrize(
-    "headline",
-    [
-        "Extraordinarily complicated transformations require disproportionately sophisticated contextual interpretation now",
-        "Supercalifragilisticexpialidocious pseudopseudohypoparathyroidism electroencephalographically counterdemonstrations",
-        "This explains one detailed claim. It also explains another unrelated claim for everyone.",
-    ],
-)
-def test_density_gate_rejects_character_heavy_or_paragraph_like_internal_headline(
-    headline
-):
+def test_renderer_safe_production_11_word_68_character_info_headline_passes():
+    headline = "One idea makes many social posts without losing its original meaning"
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1: Strong cover\nSlide 2: {headline}"
+    )
+
+    assert content_pack_routes._copy_word_count(headline) == 11
+    assert len(headline) == 68
+    assert content_pack_routes._validate_viral_carousel_copy(slides) is None
+
+
+def test_production_15_word_99_character_cover_support_uses_real_preflight():
+    support = (
+        "Core source becomes useful content for every platform without losing its "
+        "original meaning or focus."
+    )
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1:\nTitle: Strong cover\nBody: {support}\nSlide 2: Distinct close"
+    )
+
+    assert content_pack_routes._copy_word_count(support) == 15
+    assert len(support) == 99
+    assert content_pack_routes._validate_viral_carousel_copy(slides) is None
+
+
+def test_preflight_rejects_genuinely_unrenderable_internal_headline():
+    headline = (
+        "Supercalifragilisticexpialidocious pseudopseudohypoparathyroidism "
+        "electroencephalographically counterdemonstrations"
+    )
     slides = content_pack_routes._parse_content_pack_carousel_slides(
         f"Slide 1: Strong cover\nSlide 2: {headline}"
     )
 
     with pytest.raises(
         content_pack_routes.CarouselQualityError,
-        match="carousel_headline_too_dense",
+        match="carousel_headline_does_not_fit",
     ):
         content_pack_routes._validate_viral_carousel_copy(slides)
 
@@ -719,42 +730,15 @@ def test_support_density_gate_accepts_production_shaped_13_word_82_character_cop
     assert content_pack_routes._validate_viral_carousel_copy(slides) is None
 
 
-@pytest.mark.parametrize(
-    ("role_line", "support"),
-    [
-        (
-            "Title: Clear point",
-            "One two three four five six seven eight nine ten eleven twelve "
-            "thirteen fourteen fifteen sixteen seventeen",
-        ),
-        (
-            "Title: Clear point",
-            "Extraordinarilylongword extraordinarilylongword extraordinarilylongword "
-            "extraordinarilylongword extraordinarilylongword extraordinarilylongword",
-        ),
-        ("Title: Clear point", "One useful thought. Another separate thought."),
-        (
-            "Title: Strong cover",
-            "One two three four five six seven eight nine ten eleven",
-        ),
-        (
-            "Title: Take the next step\nCTA: Start today",
-            "One two three four five six seven eight nine",
-        ),
-    ],
-)
-def test_support_density_gate_rejects_genuinely_dense_role_aware_copy(
-    role_line, support
-):
-    slide_number = 1 if role_line == "Title: Strong cover" else 2
-    prefix = "" if slide_number == 1 else "Slide 1: Strong cover\n"
+def test_support_structure_rejects_multiple_sentences():
+    support = "One useful thought. Another separate thought."
     slides = content_pack_routes._parse_content_pack_carousel_slides(
-        f"{prefix}Slide {slide_number}:\n{role_line}\nBody: {support}"
+        f"Slide 1: Strong cover\nSlide 2:\nTitle: Clear point\nBody: {support}"
     )
 
     with pytest.raises(
         content_pack_routes.CarouselQualityError,
-        match="carousel_support_too_dense",
+        match="carousel_copy_structure_invalid",
     ):
         content_pack_routes._validate_viral_carousel_copy(slides)
 
@@ -786,13 +770,10 @@ Body: Start with one source today."""
 
 
 def test_support_density_rejection_logs_safe_metrics_without_copy(caplog):
-    private_support = (
-        "This private customer support contains several unrelated explanatory ideas "
-        "and detailed caption material that belongs outside the artwork entirely"
-    )
+    private_support = "confidentialword " * 45
     slides = content_pack_routes._parse_content_pack_carousel_slides(
         "Slide 1: Strong cover\nSlide 2:\nTitle: Clear point\n"
-        f"Body: {private_support}"
+        f"Body: {private_support.strip()}"
     )
     caplog.set_level(
         logging.WARNING, logger="smu_core.blueprints.content_pack.routes"
@@ -806,13 +787,13 @@ def test_support_density_rejection_logs_safe_metrics_without_copy(caplog):
     assert raised.value.word_count == content_pack_routes._copy_word_count(
         private_support
     )
-    assert raised.value.character_count == len(private_support)
+    assert raised.value.character_count == len(private_support.strip())
     assert "carousel_copy_quality_rejected" in caplog.text
     assert "slide_index=2" in caplog.text
     assert "role=info" in caplog.text
     assert f"word_count={raised.value.word_count}" in caplog.text
     assert "character_count=" in caplog.text
-    assert private_support not in caplog.text
+    assert private_support.strip() not in caplog.text
 
 
 def test_density_rejection_is_user_safe_and_reserves_no_image_credits(
@@ -841,8 +822,7 @@ def test_density_rejection_is_user_safe_and_reserves_no_image_credits(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
         "Slide 1: Strong cover\n"
         "Slide 2:\nTitle: Clear point\n"
-        "Body: This support contains far too many different explanatory ideas and "
-        "detailed caption material that belongs outside one carousel artwork slide",
+        f"Body: {'oversizedprivateword ' * 40}",
     )
 
     response = client.post(
@@ -854,7 +834,7 @@ def test_density_rejection_is_user_safe_and_reserves_no_image_credits(
 
     assert response.status_code == 200
     assert "one slide was too text-heavy" in response.get_data(as_text=True)
-    assert "carousel_support_too_dense" not in response.get_data(as_text=True)
+    assert "carousel_support_does_not_fit" not in response.get_data(as_text=True)
     assert reserve_calls == []
     assert module.Post.query.count() == 0
     assert refreshed.ai_images_used == 0
