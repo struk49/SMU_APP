@@ -1,0 +1,43 @@
+PHASE 3.2 WHOLE-CAROUSEL VISUAL PLAN
+
+Slide 1: cover
+  treatment=illustration; layout=hero_left; visual_weight=heavy
+  headline_scale=display; artwork_scale=large
+  emphasis=complete campaign.; visual_metaphor=hero object
+  focal_side=right
+  distinct_because=dominant hero anchor
+
+Slide 2: phrase
+  treatment=typography_only; layout=editorial_statement; visual_weight=light
+  headline_scale=major statement; artwork_scale=none
+  emphasis=momentum.; visual_metaphor=typographic pause
+  focal_side=none
+  distinct_because=typographic rhythm break
+
+Slide 3: info
+  treatment=illustration; layout=split_right; visual_weight=medium
+  headline_scale=medium-large; artwork_scale=medium
+  emphasis=none; visual_metaphor=transformed format
+  focal_side=left
+  distinct_because=reverses the editorial split
+
+Slide 4: info
+  treatment=visual_focus; layout=visual_focus; visual_weight=heavy
+  headline_scale=large; artwork_scale=large
+  emphasis=impossible to miss; visual_metaphor=focal ring
+  focal_side=centre
+  distinct_because=art-led visual payoff
+
+Slide 5: info
+  treatment=feature_cards; layout=split_left; visual_weight=medium
+  headline_scale=medium-large; artwork_scale=medium
+  emphasis=none; visual_metaphor=three outcome cards
+  focal_side=right
+  distinct_because=genuine grouped-card structure
+
+Slide 6: cta
+  treatment=typography_only; layout=closing; visual_weight=light
+  headline_scale=large restrained; artwork_scale=none
+  emphasis=more value.; visual_metaphor=type payoff
+  focal_side=none
+  distinct_because=minimal decisive endpoint

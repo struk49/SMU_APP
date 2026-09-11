@@ -1,0 +1,11 @@
+PHASE 3.2 QUALITY RUBRIC
+
+Treatment variety: PASS (4 distinct)
+Layout variety: PASS (6 distinct)
+Heavy/medium/light rhythm: PASS (heavy, light, medium, heavy, medium, light)
+Cover anchor: PASS (heavy)
+Closing distinction: PASS (light typography-only)
+Adjacent repeated treatment: PASS (none)
+Repeated node-network metaphor: PASS (none)
+Feature-card semantic grouping: PASS (three grouped outcomes)
+Exact overlay copy in artwork prompt: PASS (local specimen uses no prompt)

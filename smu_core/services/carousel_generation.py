@@ -25,7 +25,9 @@ OVERLAY_VISUAL_TREATMENTS = {
     "process",
     "comparison",
     "visual_focus",
+    "feature_cards",
 }
+OVERLAY_VISUAL_WEIGHTS = {"heavy", "medium", "light"}
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
 OVERLAY_LAYOUT_VARIANTS = {
     "hero_left",
@@ -52,6 +54,7 @@ SAFE_GENERATION_FAILURE_REASONS = {
     "unsupported_layout_variant",
     "unsupported_text_character",
     "unsupported_visual_treatment",
+    "unsupported_visual_weight",
 }
 DESIGN_STYLE_MARKERS = {
     "Style: realistic social media image": "realistic",
@@ -129,6 +132,7 @@ def build_content_pack_overlay_prompt(
     layout_variant=None,
     typography=None,
     visual_treatment=None,
+    visual_weight=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -150,6 +154,13 @@ def build_content_pack_overlay_prompt(
             and (
                 not isinstance(visual_treatment, str)
                 or visual_treatment not in OVERLAY_VISUAL_TREATMENTS
+            )
+        )
+        or (
+            visual_weight is not None
+            and (
+                not isinstance(visual_weight, str)
+                or visual_weight not in OVERLAY_VISUAL_WEIGHTS
             )
         )
         or (
@@ -195,6 +206,8 @@ def build_content_pack_overlay_prompt(
         }
     if visual_treatment is not None:
         payload["visual_treatment"] = visual_treatment
+    if visual_weight is not None:
+        payload["visual_weight"] = visual_weight
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -231,6 +244,7 @@ def parse_overlay_prompt(prompt):
         "layout_variant",
         "typography",
         "visual_treatment",
+        "visual_weight",
     }
     if (
         not isinstance(payload, dict)
@@ -272,6 +286,13 @@ def parse_overlay_prompt(prompt):
             and (
                 not isinstance(payload["visual_treatment"], str)
                 or payload["visual_treatment"] not in OVERLAY_VISUAL_TREATMENTS
+            )
+        )
+        or (
+            "visual_weight" in payload
+            and (
+                not isinstance(payload["visual_weight"], str)
+                or payload["visual_weight"] not in OVERLAY_VISUAL_WEIGHTS
             )
         )
     ):
@@ -404,6 +425,8 @@ def generate_pending_carousel_images(
                     overlay.update(overlay_payload["typography"])
                 if "visual_treatment" in overlay_payload:
                     overlay["visual_treatment"] = overlay_payload["visual_treatment"]
+                if "visual_weight" in overlay_payload:
+                    overlay["visual_weight"] = overlay_payload["visual_weight"]
                 image_url = image_generator(
                     overlay_payload["background_prompt"],
                     overlay=overlay,

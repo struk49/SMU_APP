@@ -809,6 +809,14 @@ Hook selection:
   "See the impact", or unsupported claims that something is a "game changer".
 
 Carousel strategy:
+- Plan the carousel as one visual sequence before finalizing individual slides. Keep
+  that planning private, then express only concise editorial metadata in each slide:
+  role through the existing fields, a specific Visual, optional Emphasis, and
+  `Visual Weight: heavy|medium|light`. Never output reasoning or pixel instructions.
+- Use only heavy, medium, or light visual weight. Cover is normally heavy; balanced
+  explanatory slides are medium; typography-led rhythm breaks and closings are often
+  light. Avoid a flat all-heavy or all-light sequence and give at least one internal
+  slide breathing room when the source supports four or more slides.
 - Use 2 to 6 `Slide N:` structural blocks and only as many as the source can support
   without filler. Prefer 4-6 for a normally substantive source, but never pad weak
   material. The `Slide N:` markers are parser metadata, not customer-visible copy.
@@ -901,6 +909,13 @@ Carousel strategy:
   message network for X, and community/feed cards for Facebook.
 - Prefer one meaningful Emphasis substring on most slides when it improves the hierarchy;
   keep it exact, selective, source-grounded, and omit it where no phrase deserves accent.
+- Treat the cover and closing as visual anchors: the cover is the strongest hero beat;
+  the closing is a distinct, spacious payoff rather than another ordinary info card.
+- Do not repeat the same node network, branch, document, phone, card stack, speech
+  metaphor, person, device, or arrow on adjacent slides unless it is a genuine ordered
+  process. Vary focal side and composition while preserving the shared campaign medium.
+- Use a feature-card Visual only when the source genuinely contains two to four related
+  features, benefits, formats, or examples; otherwise choose another semantic treatment.
 
 CTA selection:
 - Match any CTA to the category and goal. Educational content may invite saving,

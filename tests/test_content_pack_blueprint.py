@@ -848,17 +848,133 @@ def test_support_density_gate_accepts_production_shaped_13_word_82_character_cop
     assert content_pack_routes._validate_viral_carousel_copy(slides) is None
 
 
-def test_support_structure_rejects_multiple_sentences():
-    support = "One useful thought. Another separate thought."
+def test_multiple_support_sentences_reach_renderer_preflight(monkeypatch):
+    support = "Clarity comes first. Then strong action follows."
     slides = content_pack_routes._parse_content_pack_carousel_slides(
         f"Slide 1: Strong cover\nSlide 2:\nTitle: Clear point\nBody: {support}"
     )
+    calls = []
+    original = content_pack_routes.preflight_viral_carousel_text
 
-    with pytest.raises(
-        content_pack_routes.CarouselQualityError,
-        match="carousel_copy_structure_invalid",
-    ):
-        content_pack_routes._validate_viral_carousel_copy(slides)
+    def capture(**kwargs):
+        calls.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(content_pack_routes, "preflight_viral_carousel_text", capture)
+
+    assert content_pack_routes._copy_word_count(support) == 7
+    assert len(support) == 48
+    assert content_pack_routes._validate_viral_carousel_copy(slides) is None
+    assert calls[1]["body"] == support
+
+
+def test_production_shaped_multiple_sentence_headline_reaches_preflight(monkeypatch):
+    headline = "Clarity comes first. Then strong action follows."
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1: Strong cover\nSlide 2: {headline}"
+    )
+    calls = []
+    original = content_pack_routes.preflight_viral_carousel_text
+
+    def capture(**kwargs):
+        calls.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(content_pack_routes, "preflight_viral_carousel_text", capture)
+
+    assert content_pack_routes._copy_word_count(headline) == 7
+    assert len(headline) == 48
+    assert content_pack_routes._validate_viral_carousel_copy(slides) is None
+    assert calls[1]["title"] == headline
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "structure_reason"),
+    [
+        ("role", "unknown", "unsupported_role"),
+        ("treatment", "unknown", "unsupported_treatment"),
+        ("layout", "unknown", "unsupported_layout"),
+    ],
+)
+def test_malformed_presentation_fails_with_safe_structure_subreason(
+    field, value, structure_reason, caplog
+):
+    private_title = "private customer headline"
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1: {private_title}\nSlide 2: Safe close"
+    )
+    presentations = content_pack_routes._carousel_presentations(slides)
+    presentations[0][field] = value
+    caplog.set_level(
+        logging.WARNING, logger="smu_core.blueprints.content_pack.routes"
+    )
+
+    with pytest.raises(content_pack_routes.CarouselQualityError) as raised:
+        content_pack_routes._validate_viral_carousel_copy(slides, presentations)
+
+    assert raised.value.structure_reason == structure_reason
+    assert f"structure_reason={structure_reason}" in caplog.text
+    assert private_title not in caplog.text
+
+
+def test_missing_valid_and_unmatched_optional_emphasis_are_safe(monkeypatch):
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Strong cover
+Slide 2:
+Title: A valid emphasis example
+Emphasis: valid emphasis
+Slide 3:
+Title: An unmatched emphasis is optional
+Emphasis: text not in headline"""
+    )
+    calls = []
+    original = content_pack_routes.preflight_viral_carousel_text
+
+    def capture(**kwargs):
+        calls.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(content_pack_routes, "preflight_viral_carousel_text", capture)
+
+    assert content_pack_routes._validate_viral_carousel_copy(slides) is None
+    assert calls[0]["emphasis"] is None
+    assert calls[1]["emphasis"] == {"text": "valid emphasis", "role": "accent"}
+    assert calls[2]["emphasis"] is None
+
+
+def test_genuine_structure_failure_creates_no_rows_or_credit_reservation(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="structure-gate@example.com")
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda current_user, count, commit=False: reserve_calls.append(count),
+    )
+    original = content_pack_routes._carousel_presentations
+
+    def invalid_presentations(slides):
+        presentations = original(slides)
+        presentations[0]["role"] = "unknown"
+        return presentations
+
+    monkeypatch.setattr(
+        content_pack_routes, "_carousel_presentations", invalid_presentations
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": CONTENT_PACK_RESULT, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
 
 
 def test_complete_six_slide_carousel_passes_all_copy_quality_gates():

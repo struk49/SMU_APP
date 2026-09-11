@@ -27,6 +27,15 @@ CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
 GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
 COPY_WORD_RE = re.compile(r"\b[\w']+(?:[-‐‑–][\w']+)*\b", re.UNICODE)
 VISUAL_WEIGHTS = {"heavy", "medium", "light"}
+STRUCTURE_ROLES = {"cover", "phrase", "info", "cta"}
+STRUCTURE_TREATMENTS = {
+    "typography_only", "illustration", "diagram", "process", "comparison",
+    "visual_focus", "feature_cards",
+}
+STRUCTURE_LAYOUTS = {
+    "hero_left", "hero_center", "split_left", "split_right",
+    "editorial_statement", "visual_focus", "closing",
+}
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
     "negative space, without trying to illustrate every detail of the source.",
@@ -227,6 +236,7 @@ class CarouselQualityError(ValueError):
     def __init__(
         self, reason, *, slide_index, role, word_count, character_count,
         treatment=None, layout=None, measured_lines=None, font_size=None,
+        structure_reason=None,
     ):
         self.reason = reason
         self.slide_index = slide_index
@@ -237,19 +247,20 @@ class CarouselQualityError(ValueError):
         self.layout = layout
         self.measured_lines = measured_lines
         self.font_size = font_size
+        self.structure_reason = structure_reason
         super().__init__(reason)
 
 
 def _reject_carousel_copy(
     reason, *, slide_index, role, value, treatment=None, layout=None,
-    measured_lines=None, font_size=None,
+    measured_lines=None, font_size=None, structure_reason=None,
 ):
     word_count = _copy_word_count(value)
     character_count = len((value or "").strip())
     logger.warning(
         "carousel_copy_quality_rejected slide_index=%s role=%s word_count=%s "
         "character_count=%s treatment=%s layout=%s measured_lines=%s "
-        "font_size=%s reason=%s",
+        "font_size=%s reason=%s structure_reason=%s",
         slide_index,
         role,
         word_count,
@@ -259,6 +270,7 @@ def _reject_carousel_copy(
         measured_lines,
         font_size,
         reason,
+        structure_reason,
     )
     raise CarouselQualityError(
         reason,
@@ -270,6 +282,7 @@ def _reject_carousel_copy(
         layout=layout,
         measured_lines=measured_lines,
         font_size=font_size,
+        structure_reason=structure_reason,
     )
 
 
@@ -375,27 +388,38 @@ def _validate_viral_carousel_copy(slides, presentations=None):
         role = presentation["role"]
         treatment = presentation["treatment"]
         layout = presentation["layout"]
+        structure_reason = None
+        if not isinstance(title, str) or not title.strip():
+            structure_reason = "invalid_required_title"
+        elif any(
+            value is not None and not isinstance(value, str)
+            for value in (
+                slide.get("body"), slide.get("cta"), slide.get("brand"),
+                slide.get("visual"), slide.get("eyebrow"), slide.get("emphasis"),
+                slide.get("visual_weight"),
+            )
+        ):
+            structure_reason = "invalid_optional_field_type"
+        elif role not in STRUCTURE_ROLES:
+            structure_reason = "unsupported_role"
+        elif treatment not in STRUCTURE_TREATMENTS:
+            structure_reason = "unsupported_treatment"
+        elif layout not in STRUCTURE_LAYOUTS:
+            structure_reason = "unsupported_layout"
+        elif presentation.get("visual_weight") not in VISUAL_WEIGHTS:
+            structure_reason = "unsupported_visual_weight"
+        if structure_reason:
+            _reject_carousel_copy(
+                "carousel_copy_structure_invalid",
+                structure_reason=structure_reason,
+                slide_index=slide_index,
+                role=role,
+                value=title if isinstance(title, str) else "",
+                treatment=treatment,
+                layout=layout,
+            )
         normalized_title = _normalized_copy(title)
         normalized_body = _normalized_copy(body)
-        sentence_count = len(re.findall(r"[.!?]+(?:\s|$)", title))
-        if sentence_count > 1:
-            _reject_carousel_copy(
-                "carousel_copy_structure_invalid",
-                slide_index=slide_index,
-                role=role,
-                value=title,
-                treatment=treatment,
-                layout=layout,
-            )
-        if len(re.findall(r"[.!?]+(?:\s|$)", body)) > 1:
-            _reject_carousel_copy(
-                "carousel_copy_structure_invalid",
-                slide_index=slide_index,
-                role=role,
-                value=body,
-                treatment=treatment,
-                layout=layout,
-            )
         if normalized_body and normalized_body == normalized_title:
             raise ValueError("carousel_support_repeats_headline")
         if normalized_title in seen_headlines:

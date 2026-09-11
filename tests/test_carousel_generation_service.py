@@ -419,6 +419,39 @@ def test_v1_payload_accepts_safe_typography_and_worker_forwards_it(app, module):
     assert calls[0]["overlay"]["visual_treatment"] == "typography_only"
 
 
+def test_v1_payload_accepts_and_worker_forwards_visual_weight(app, module):
+    user = create_user(module, email="visual-weight@example.com")
+    post = make_pending(module, user, group_id="visual-weight")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Exact title",
+        layout_role="info",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+        visual_weight="heavy",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert carousel_generation.parse_overlay_prompt(post.prompt)["visual_weight"] == "heavy"
+    assert calls[0]["overlay"]["visual_weight"] == "heavy"
+
+
+@pytest.mark.parametrize("visual_weight", ["maximum", "", 1, False, [], {}])
+def test_v1_payload_rejects_invalid_visual_weight(visual_weight):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", visual_weight=visual_weight
+        )
+
+
 @pytest.mark.parametrize(
     "typography",
     [
