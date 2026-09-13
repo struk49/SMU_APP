@@ -1,0 +1,473 @@
+===== SLIDE 1 =====
+Create a text-free visual background for one slide in a cohesive Instagram carousel.
+
+Mandatory carousel style lock:
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+Normalized campaign visual world:
+- art style: viral Instagram business carousel with premium SaaS editorial illustration
+- visual theme: one coherent conceptual campaign
+- palette intent: deep navy with controlled yellow, mint, and blue accents
+- lighting/depth: layered editorial depth with crisp focal separation
+- texture: clean premium finish with restrained tactile detail
+- shape language: bold simple silhouettes with consistent rounded geometry
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+Slide-specific visual concept:
+A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+Additional sanitized scene direction: one source-specific transformation scene with visibly distinct output forms, avoiding nodes, branches, arrows, and network geometry.
+
+Slide role: cover
+Selected visual treatment: visual_focus
+Allowlisted visual weight: heavy
+Normalized metaphor family: transformation
+Sequence purpose: opening campaign hero
+Artwork occupancy target inside the protected artwork region: dominant
+Internal design layout: hero_center
+Text-overlay composition:
+Keep a large calm central field for oversized headline typography and frame the focal environment around its edges.
+
+Design:
+- maintain one consistent art style, colour palette, lighting, and premium brand mood
+- square 1:1 format
+- high contrast
+- compose the artwork and reserved typography space as one intentional social-carousel design
+- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
+- leave suitable uncluttered visual space for a later text overlay
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+- do not place an important subject beneath or behind the intended typography region
+- make the selected treatment structurally visible: diagrams use meaningful connected
+  geometry, illustrations use one semantic scene, and visual-focus slides use one
+  dominant object or bounded content metaphor
+- heavy artwork uses a bold dominant focal subject, fills its designated visual region,
+  reads clearly at thumbnail size, and avoids unnecessary empty margins
+- medium artwork uses a substantial supporting editorial visual with moderate detail
+- light artwork stays restrained and uses intentional negative space
+- create a complete semantic artwork asset, not a generic icon, empty frame, clip-art
+  symbol, UI screenshot, or tiny isolated object
+- use one clear focal subject plus only the supporting elements needed to explain the
+  metaphor; maintain strong silhouette, coherent depth, and deliberate hierarchy
+- never use official platform logos, trademark-shaped icons, or readable platform names
+
+Critical text-free requirements:
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- text-free requirements override any conflicting typography or signage in the style direction
+
+===== SLIDE 2 =====
+Create a text-free visual background for one slide in a cohesive Instagram carousel.
+
+Mandatory carousel style lock:
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+Normalized campaign visual world:
+- art style: viral Instagram business carousel with premium SaaS editorial illustration
+- visual theme: one coherent conceptual campaign
+- palette intent: deep navy with controlled yellow, mint, and blue accents
+- lighting/depth: layered editorial depth with crisp focal separation
+- texture: clean premium finish with restrained tactile detail
+- shape language: bold simple silhouettes with consistent rounded geometry
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+Slide-specific visual concept:
+A simple scene or object grouping that supports the first distinct value point, with generous negative space and no speech bubbles.
+
+
+Slide role: info
+Selected visual treatment: typography_only
+Allowlisted visual weight: light
+Normalized metaphor family: distinct_object
+Sequence purpose: editorial visual pause
+Artwork occupancy target inside the protected artwork region: restrained
+Internal design layout: visual_focus
+Text-overlay composition:
+Center one strong focal subject inside the bounded upper artwork zone. Keep the separate lower typography zone clean and completely artwork-free.
+
+Design:
+- maintain one consistent art style, colour palette, lighting, and premium brand mood
+- square 1:1 format
+- high contrast
+- compose the artwork and reserved typography space as one intentional social-carousel design
+- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
+- leave suitable uncluttered visual space for a later text overlay
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+- do not place an important subject beneath or behind the intended typography region
+- make the selected treatment structurally visible: diagrams use meaningful connected
+  geometry, illustrations use one semantic scene, and visual-focus slides use one
+  dominant object or bounded content metaphor
+- heavy artwork uses a bold dominant focal subject, fills its designated visual region,
+  reads clearly at thumbnail size, and avoids unnecessary empty margins
+- medium artwork uses a substantial supporting editorial visual with moderate detail
+- light artwork stays restrained and uses intentional negative space
+- create a complete semantic artwork asset, not a generic icon, empty frame, clip-art
+  symbol, UI screenshot, or tiny isolated object
+- use one clear focal subject plus only the supporting elements needed to explain the
+  metaphor; maintain strong silhouette, coherent depth, and deliberate hierarchy
+- never use official platform logos, trademark-shaped icons, or readable platform names
+
+Critical text-free requirements:
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- text-free requirements override any conflicting typography or signage in the style direction
+
+===== SLIDE 3 =====
+Create a text-free visual background for one slide in a cohesive Instagram carousel.
+
+Mandatory carousel style lock:
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+Normalized campaign visual world:
+- art style: viral Instagram business carousel with premium SaaS editorial illustration
+- visual theme: one coherent conceptual campaign
+- palette intent: deep navy with controlled yellow, mint, and blue accents
+- lighting/depth: layered editorial depth with crisp focal separation
+- texture: clean premium finish with restrained tactile detail
+- shape language: bold simple silhouettes with consistent rounded geometry
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+Slide-specific visual concept:
+A different but cohesive scene supporting the next distinct idea, using an uncluttered composition and one clear focal subject.
+Additional sanitized scene direction: raw source materials being examined, sorted, and shaped into a clear idea.
+
+Slide role: info
+Selected visual treatment: illustration
+Allowlisted visual weight: medium
+Normalized metaphor family: distinct_object
+Sequence purpose: supporting campaign progression
+Artwork occupancy target inside the protected artwork region: substantial
+Internal design layout: split_left
+Text-overlay composition:
+Contain one subject in the designated right artwork zone. Keep the protected left typography zone empty, with a clean gutter and no divider.
+
+Design:
+- maintain one consistent art style, colour palette, lighting, and premium brand mood
+- square 1:1 format
+- high contrast
+- compose the artwork and reserved typography space as one intentional social-carousel design
+- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
+- leave suitable uncluttered visual space for a later text overlay
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+- do not place an important subject beneath or behind the intended typography region
+- make the selected treatment structurally visible: diagrams use meaningful connected
+  geometry, illustrations use one semantic scene, and visual-focus slides use one
+  dominant object or bounded content metaphor
+- heavy artwork uses a bold dominant focal subject, fills its designated visual region,
+  reads clearly at thumbnail size, and avoids unnecessary empty margins
+- medium artwork uses a substantial supporting editorial visual with moderate detail
+- light artwork stays restrained and uses intentional negative space
+- create a complete semantic artwork asset, not a generic icon, empty frame, clip-art
+  symbol, UI screenshot, or tiny isolated object
+- use one clear focal subject plus only the supporting elements needed to explain the
+  metaphor; maintain strong silhouette, coherent depth, and deliberate hierarchy
+- never use official platform logos, trademark-shaped icons, or readable platform names
+
+Critical text-free requirements:
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- text-free requirements override any conflicting typography or signage in the style direction
+
+===== SLIDE 4 =====
+Create a text-free visual background for one slide in a cohesive Instagram carousel.
+
+Mandatory carousel style lock:
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+Normalized campaign visual world:
+- art style: viral Instagram business carousel with premium SaaS editorial illustration
+- visual theme: one coherent conceptual campaign
+- palette intent: deep navy with controlled yellow, mint, and blue accents
+- lighting/depth: layered editorial depth with crisp focal separation
+- texture: clean premium finish with restrained tactile detail
+- shape language: bold simple silhouettes with consistent rounded geometry
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+Slide-specific visual concept:
+A restrained detail, object, or human moment that supports the slide's idea without becoming a literal diagram or labelled infographic.
+Additional sanitized scene direction: contrasting content environments connected by one coherent visual system.
+
+Slide role: info
+Selected visual treatment: illustration
+Allowlisted visual weight: medium
+Normalized metaphor family: document
+Sequence purpose: supporting campaign progression
+Artwork occupancy target inside the protected artwork region: substantial
+Internal design layout: split_right
+Text-overlay composition:
+Contain one subject in the designated left artwork zone. Keep the protected right typography zone empty, with a clean gutter and no divider.
+
+Design:
+- maintain one consistent art style, colour palette, lighting, and premium brand mood
+- square 1:1 format
+- high contrast
+- compose the artwork and reserved typography space as one intentional social-carousel design
+- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
+- leave suitable uncluttered visual space for a later text overlay
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+- do not place an important subject beneath or behind the intended typography region
+- make the selected treatment structurally visible: diagrams use meaningful connected
+  geometry, illustrations use one semantic scene, and visual-focus slides use one
+  dominant object or bounded content metaphor
+- heavy artwork uses a bold dominant focal subject, fills its designated visual region,
+  reads clearly at thumbnail size, and avoids unnecessary empty margins
+- medium artwork uses a substantial supporting editorial visual with moderate detail
+- light artwork stays restrained and uses intentional negative space
+- create a complete semantic artwork asset, not a generic icon, empty frame, clip-art
+  symbol, UI screenshot, or tiny isolated object
+- use one clear focal subject plus only the supporting elements needed to explain the
+  metaphor; maintain strong silhouette, coherent depth, and deliberate hierarchy
+- never use official platform logos, trademark-shaped icons, or readable platform names
+
+Critical text-free requirements:
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- text-free requirements override any conflicting typography or signage in the style direction
+
+===== SLIDE 5 =====
+Create a text-free visual background for one slide in a cohesive Instagram carousel.
+
+Mandatory carousel style lock:
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+Normalized campaign visual world:
+- art style: viral Instagram business carousel with premium SaaS editorial illustration
+- visual theme: one coherent conceptual campaign
+- palette intent: deep navy with controlled yellow, mint, and blue accents
+- lighting/depth: layered editorial depth with crisp focal separation
+- texture: clean premium finish with restrained tactile detail
+- shape language: bold simple silhouettes with consistent rounded geometry
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+Slide-specific visual concept:
+A calm takeaway composition with minimal supporting elements, clear visual hierarchy, and room for concise overlay copy.
+Additional sanitized scene direction: a friendly conversational interaction in purposeful environmental context.
+
+Slide role: info
+Selected visual treatment: diagram
+Allowlisted visual weight: heavy
+Normalized metaphor family: node_network
+Sequence purpose: internal visual peak
+Artwork occupancy target inside the protected artwork region: dominant
+Internal design layout: editorial_statement
+Text-overlay composition:
+Keep artwork as one small isolated supporting object in the bounded secondary zone; reserve the dominant protected field for editorial typography.
+
+Design:
+- maintain one consistent art style, colour palette, lighting, and premium brand mood
+- square 1:1 format
+- high contrast
+- compose the artwork and reserved typography space as one intentional social-carousel design
+- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
+- leave suitable uncluttered visual space for a later text overlay
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+- do not place an important subject beneath or behind the intended typography region
+- make the selected treatment structurally visible: diagrams use meaningful connected
+  geometry, illustrations use one semantic scene, and visual-focus slides use one
+  dominant object or bounded content metaphor
+- heavy artwork uses a bold dominant focal subject, fills its designated visual region,
+  reads clearly at thumbnail size, and avoids unnecessary empty margins
+- medium artwork uses a substantial supporting editorial visual with moderate detail
+- light artwork stays restrained and uses intentional negative space
+- create a complete semantic artwork asset, not a generic icon, empty frame, clip-art
+  symbol, UI screenshot, or tiny isolated object
+- use one clear focal subject plus only the supporting elements needed to explain the
+  metaphor; maintain strong silhouette, coherent depth, and deliberate hierarchy
+- never use official platform logos, trademark-shaped icons, or readable platform names
+
+Critical text-free requirements:
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- text-free requirements override any conflicting typography or signage in the style direction
+
+===== SLIDE 6 =====
+Create a text-free visual background for one slide in a cohesive Instagram carousel.
+
+Mandatory carousel style lock:
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+Normalized campaign visual world:
+- art style: viral Instagram business carousel with premium SaaS editorial illustration
+- visual theme: one coherent conceptual campaign
+- palette intent: deep navy with controlled yellow, mint, and blue accents
+- lighting/depth: layered editorial depth with crisp focal separation
+- texture: clean premium finish with restrained tactile detail
+- shape language: bold simple silhouettes with consistent rounded geometry
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+Slide-specific visual concept:
+A simple closing composition with one relevant focal element and substantial clean space for a conclusion or call to action.
+Additional sanitized scene direction: a clean arrangement of relevant everyday objects in a specific setting.
+
+Slide role: cta
+Selected visual treatment: typography_only
+Allowlisted visual weight: light
+Normalized metaphor family: distinct_object
+Sequence purpose: restrained final payoff
+Artwork occupancy target inside the protected artwork region: restrained
+Internal design layout: closing
+Text-overlay composition:
+Typography must dominate. If artwork is useful, isolate one minimal accent object in the small upper-right zone and keep it away from the conclusion.
+
+Design:
+- maintain one consistent art style, colour palette, lighting, and premium brand mood
+- square 1:1 format
+- high contrast
+- compose the artwork and reserved typography space as one intentional social-carousel design
+- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
+- leave suitable uncluttered visual space for a later text overlay
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+- do not place an important subject beneath or behind the intended typography region
+- make the selected treatment structurally visible: diagrams use meaningful connected
+  geometry, illustrations use one semantic scene, and visual-focus slides use one
+  dominant object or bounded content metaphor
+- heavy artwork uses a bold dominant focal subject, fills its designated visual region,
+  reads clearly at thumbnail size, and avoids unnecessary empty margins
+- medium artwork uses a substantial supporting editorial visual with moderate detail
+- light artwork stays restrained and uses intentional negative space
+- create a complete semantic artwork asset, not a generic icon, empty frame, clip-art
+  symbol, UI screenshot, or tiny isolated object
+- use one clear focal subject plus only the supporting elements needed to explain the
+  metaphor; maintain strong silhouette, coherent depth, and deliberate hierarchy
+- never use official platform logos, trademark-shaped icons, or readable platform names
+
+Critical text-free requirements:
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- text-free requirements override any conflicting typography or signage in the style direction

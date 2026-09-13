@@ -444,6 +444,77 @@ def test_v1_payload_accepts_and_worker_forwards_visual_weight(app, module):
     assert calls[0]["overlay"]["visual_weight"] == "heavy"
 
 
+def test_scene_prompt_and_metaphor_survive_row_serialization_and_worker_parse(
+    app, module
+):
+    user = create_user(module, email="fidelity-trace@example.com")
+    post = make_pending(module, user, group_id="fidelity-trace")
+    scene_prompt = (
+        "1. CAMPAIGN STYLE LOCK\n2. SCENE BRIEF\n"
+        "- main subject: one source form reshaping into distinct outputs\n"
+        "- action: reshaping\n- viewpoint: angled three-quarter\n"
+    )
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        scene_prompt, "Exact private overlay",
+        layout_role="info", layout_variant="visual_focus",
+        visual_treatment="diagram", visual_weight="heavy",
+        metaphor_family="transformation",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append((prompt, kwargs))
+        or "https://cdn.test/generated.jpg",
+    )
+    parsed = carousel_generation.parse_overlay_prompt(post.prompt)
+
+    assert result["succeeded_count"] == 1
+    assert parsed["background_prompt"] == scene_prompt
+    assert parsed["metaphor_family"] == "transformation"
+    assert parsed["visual_weight"] == "heavy"
+    assert calls[0][0] == scene_prompt
+    assert "Exact private overlay" not in calls[0][0]
+
+
+@pytest.mark.parametrize("metaphor", ["unknown", "", 1, False, [], {}])
+def test_v1_payload_rejects_invalid_metaphor_family(metaphor):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", metaphor_family=metaphor
+        )
+
+
+def test_v1_payload_accepts_and_worker_forwards_furniture(app, module):
+    user = create_user(module, email="furniture@example.com")
+    post = make_pending(module, user, group_id="furniture")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background", "Exact title",
+        layout_role="info", layout_variant="split_left",
+        visual_treatment="illustration", furniture_variant="corner_marker",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert calls[0]["overlay"]["furniture_variant"] == "corner_marker"
+
+
+@pytest.mark.parametrize("variant", ["random", "", 1, False, [], {}])
+def test_v1_payload_rejects_invalid_furniture(variant):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", furniture_variant=variant
+        )
+
+
 @pytest.mark.parametrize("visual_weight", ["maximum", "", 1, False, [], {}])
 def test_v1_payload_rejects_invalid_visual_weight(visual_weight):
     with pytest.raises(carousel_generation.OverlayPayloadError):

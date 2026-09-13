@@ -1,0 +1,11 @@
+PHASE 3.4 CAMPAIGN ART DIRECTION
+
+art_style: viral Instagram business carousel with premium SaaS editorial illustration
+visual_theme: one coherent conceptual campaign
+palette_intent: deep navy with controlled yellow, mint, and blue accents
+lighting_or_depth: layered editorial depth with crisp focal separation
+texture_intent: clean premium finish with restrained tactile detail
+shape_language: bold simple silhouettes with consistent rounded geometry
+composition_energy: confident asymmetry with one immediate focal hierarchy
+campaign_motif: transformation
+image_detail_level: editorial detail legible at mobile thumbnail size

@@ -1,0 +1,15 @@
+PHASE 3.3 PRODUCTION FIDELITY RUBRIC
+
+Cover dominance: PASS
+Visual-weight contrast: PASS
+Treatment variety: PASS
+Layout variety: PASS
+Artwork occupancy: PASS
+Metaphor repetition: PASS
+Typography hierarchy: PASS
+Emphasis visibility: PASS
+Furniture repetition: PASS
+Closing distinction: PASS
+Protected-zone safety: PASS
+Copy fidelity: PASS
+Production blocking behavior: NONE (review aid only)

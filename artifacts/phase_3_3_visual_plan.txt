@@ -1,0 +1,46 @@
+PHASE 3.3 PRODUCTION VISUAL PLAN
+
+Slide 1: role=cover
+  treatment=visual_focus; layout=hero_center; visual_weight=heavy
+  typography=display hero
+  headline_scale=display
+  emphasis=tailored content.; artwork_occupancy=heavy
+  metaphor=transformation; furniture=dual_rail
+  artwork_generation_required=True
+  distinct_because=weight, composition, metaphor, and furniture are coordinated
+
+Slide 2: role=info
+  treatment=illustration; layout=split_right; visual_weight=light
+  typography=editorial hierarchy
+  headline_scale=restrained
+  emphasis=strongest ideas.; artwork_occupancy=light
+  metaphor=distinct_object; furniture=corner_marker
+  artwork_generation_required=True
+  distinct_because=weight, composition, metaphor, and furniture are coordinated
+
+Slide 3: role=info
+  treatment=illustration; layout=split_left; visual_weight=medium
+  typography=editorial hierarchy
+  headline_scale=medium-large
+  emphasis=audience preference.; artwork_occupancy=medium
+  metaphor=document; furniture=framed_edge
+  artwork_generation_required=True
+  distinct_because=weight, composition, metaphor, and furniture are coordinated
+
+Slide 4: role=info
+  treatment=diagram; layout=editorial_statement; visual_weight=heavy
+  typography=editorial hierarchy
+  headline_scale=display
+  emphasis=Quality over quantity; artwork_occupancy=heavy
+  metaphor=node_network; furniture=corner_marker
+  artwork_generation_required=True
+  distinct_because=weight, composition, metaphor, and furniture are coordinated
+
+Slide 5: role=cta
+  treatment=typography_only; layout=closing; visual_weight=light
+  typography=closing payoff
+  headline_scale=restrained
+  emphasis=with purpose.; artwork_occupancy=light
+  metaphor=distinct_object; furniture=single_rail
+  artwork_generation_required=False
+  distinct_because=weight, composition, metaphor, and furniture are coordinated

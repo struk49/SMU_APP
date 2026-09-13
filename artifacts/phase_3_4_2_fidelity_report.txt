@@ -1,0 +1,93 @@
+PHASE 3.4.2 REAL PROVIDER FIDELITY REPORT
+
+Columns in fidelity chain: RAW PROVIDER | COMPOSITED ARTWORK | FINAL SLIDE
+
+SLIDE 1
+role: cover
+treatment: visual_focus
+visual_weight: heavy
+metaphor_family: transformation
+scene_subject_category: transformation
+viewpoint: asymmetric side view
+crop_mode: cover
+focal_anchor: (0.5, 0.42)
+ART_RECT: (184, 61, 840, 461)
+TEXT_RECT: (123, 492, 901, 881)
+raw_dimensions: (1024, 1024)
+decoded_dimensions: (1024, 1024)
+composited_dimensions: (1024, 1024)
+final_dimensions: (1024, 1024)
+artwork_occupancy_ratio: 1.000
+fitted_artwork_dimensions: (656, 400)
+production_prompt_checks: campaign_style_lock=PASS, scene_subject=PASS, scene_action=PASS, viewpoint=PASS, depth=PASS, crop=PASS, focal_scale=PASS, occupancy=PASS, text_safe_space=PASS, overlay_copy_absent=PASS
+classification: J — faithful after evidence-based geometry correction
+recommended_fix: none
+
+SLIDE 2
+classification: J — typography-only; no provider call
+
+SLIDE 3
+role: info
+treatment: illustration
+visual_weight: medium
+metaphor_family: distinct_object
+scene_subject_category: distinct_object
+viewpoint: wide conceptual editorial scene
+crop_mode: contain
+focal_anchor: (0.72, 0.5)
+ART_RECT: (620, 293, 957, 731)
+TEXT_RECT: (82, 164, 553, 881)
+raw_dimensions: (1024, 1024)
+decoded_dimensions: (1024, 1024)
+composited_dimensions: (1024, 1024)
+final_dimensions: (1024, 1024)
+artwork_occupancy_ratio: 0.769
+fitted_artwork_dimensions: (337, 337)
+production_prompt_checks: campaign_style_lock=PASS, scene_subject=PASS, scene_action=PASS, viewpoint=PASS, depth=PASS, crop=PASS, focal_scale=PASS, occupancy=PASS, text_safe_space=PASS, overlay_copy_absent=PASS
+classification: J — faithful after evidence-based geometry correction
+recommended_fix: none
+
+SLIDE 4
+role: info
+treatment: illustration
+visual_weight: medium
+metaphor_family: document
+scene_subject_category: document
+viewpoint: wide conceptual editorial scene
+crop_mode: contain
+focal_anchor: (0.28, 0.5)
+ART_RECT: (67, 293, 404, 731)
+TEXT_RECT: (471, 164, 942, 881)
+raw_dimensions: (1024, 1024)
+decoded_dimensions: (1024, 1024)
+composited_dimensions: (1024, 1024)
+final_dimensions: (1024, 1024)
+artwork_occupancy_ratio: 0.769
+fitted_artwork_dimensions: (337, 337)
+production_prompt_checks: campaign_style_lock=PASS, scene_subject=PASS, scene_action=PASS, viewpoint=PASS, depth=PASS, crop=PASS, focal_scale=PASS, occupancy=PASS, text_safe_space=PASS, overlay_copy_absent=PASS
+classification: J — faithful after evidence-based geometry correction
+recommended_fix: none
+
+SLIDE 5
+role: info
+treatment: diagram
+visual_weight: heavy
+metaphor_family: node_network
+scene_subject_category: node_network
+viewpoint: asymmetric side view
+crop_mode: contain
+focal_anchor: (0.5, 0.46)
+ART_RECT: (123, 72, 901, 512)
+TEXT_RECT: (82, 584, 942, 901)
+raw_dimensions: (1024, 1024)
+decoded_dimensions: (1024, 1024)
+composited_dimensions: (1024, 1024)
+final_dimensions: (1024, 1024)
+artwork_occupancy_ratio: 0.566
+fitted_artwork_dimensions: (440, 440)
+production_prompt_checks: campaign_style_lock=PASS, scene_subject=PASS, scene_action=PASS, viewpoint=PASS, depth=PASS, crop=PASS, focal_scale=PASS, occupancy=PASS, text_safe_space=PASS, overlay_copy_absent=PASS
+classification: J — faithful after evidence-based geometry correction
+recommended_fix: none
+
+SLIDE 6
+classification: J — typography-only; no provider call

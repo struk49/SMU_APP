@@ -28,6 +28,13 @@ OVERLAY_VISUAL_TREATMENTS = {
     "feature_cards",
 }
 OVERLAY_VISUAL_WEIGHTS = {"heavy", "medium", "light"}
+OVERLAY_FURNITURE_VARIANTS = {
+    "dual_rail", "single_rail", "corner_marker", "framed_edge", "none",
+}
+OVERLAY_METAPHOR_FAMILIES = {
+    "node_network", "document", "device", "card_stack", "human_figure",
+    "process_arrow", "distinct_object", "transformation", "focal_object",
+}
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
 OVERLAY_LAYOUT_VARIANTS = {
     "hero_left",
@@ -55,6 +62,7 @@ SAFE_GENERATION_FAILURE_REASONS = {
     "unsupported_text_character",
     "unsupported_visual_treatment",
     "unsupported_visual_weight",
+    "unsupported_furniture_variant",
 }
 DESIGN_STYLE_MARKERS = {
     "Style: realistic social media image": "realistic",
@@ -133,6 +141,8 @@ def build_content_pack_overlay_prompt(
     typography=None,
     visual_treatment=None,
     visual_weight=None,
+    furniture_variant=None,
+    metaphor_family=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -161,6 +171,20 @@ def build_content_pack_overlay_prompt(
             and (
                 not isinstance(visual_weight, str)
                 or visual_weight not in OVERLAY_VISUAL_WEIGHTS
+            )
+        )
+        or (
+            furniture_variant is not None
+            and (
+                not isinstance(furniture_variant, str)
+                or furniture_variant not in OVERLAY_FURNITURE_VARIANTS
+            )
+        )
+        or (
+            metaphor_family is not None
+            and (
+                not isinstance(metaphor_family, str)
+                or metaphor_family not in OVERLAY_METAPHOR_FAMILIES
             )
         )
         or (
@@ -208,6 +232,10 @@ def build_content_pack_overlay_prompt(
         payload["visual_treatment"] = visual_treatment
     if visual_weight is not None:
         payload["visual_weight"] = visual_weight
+    if furniture_variant is not None:
+        payload["furniture_variant"] = furniture_variant
+    if metaphor_family is not None:
+        payload["metaphor_family"] = metaphor_family
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -245,6 +273,8 @@ def parse_overlay_prompt(prompt):
         "typography",
         "visual_treatment",
         "visual_weight",
+        "furniture_variant",
+        "metaphor_family",
     }
     if (
         not isinstance(payload, dict)
@@ -293,6 +323,20 @@ def parse_overlay_prompt(prompt):
             and (
                 not isinstance(payload["visual_weight"], str)
                 or payload["visual_weight"] not in OVERLAY_VISUAL_WEIGHTS
+            )
+        )
+        or (
+            "furniture_variant" in payload
+            and (
+                not isinstance(payload["furniture_variant"], str)
+                or payload["furniture_variant"] not in OVERLAY_FURNITURE_VARIANTS
+            )
+        )
+        or (
+            "metaphor_family" in payload
+            and (
+                not isinstance(payload["metaphor_family"], str)
+                or payload["metaphor_family"] not in OVERLAY_METAPHOR_FAMILIES
             )
         )
     ):
@@ -427,6 +471,8 @@ def generate_pending_carousel_images(
                     overlay["visual_treatment"] = overlay_payload["visual_treatment"]
                 if "visual_weight" in overlay_payload:
                     overlay["visual_weight"] = overlay_payload["visual_weight"]
+                if "furniture_variant" in overlay_payload:
+                    overlay["furniture_variant"] = overlay_payload["furniture_variant"]
                 image_url = image_generator(
                     overlay_payload["background_prompt"],
                     overlay=overlay,

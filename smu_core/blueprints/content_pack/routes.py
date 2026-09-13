@@ -27,6 +27,15 @@ CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
 GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
 COPY_WORD_RE = re.compile(r"\b[\w']+(?:[-‐‑–][\w']+)*\b", re.UNICODE)
 VISUAL_WEIGHTS = {"heavy", "medium", "light"}
+CAMPAIGN_ART_STYLES = {
+    "realistic": "high-quality photography with cinematic editorial art direction",
+    "viral_carousel": "viral Instagram business carousel with premium SaaS editorial illustration",
+    "luxury": "luxury brand aesthetic with refined modern magazine artwork",
+    "minimal": "minimalist modern design with sophisticated flat editorial illustration",
+    "corporate": "professional corporate social media design with polished editorial illustration",
+    "pixar": "3D animated film look with conceptual dimensional illustration",
+}
+TYPOGRAPHY_ONLY_BACKGROUND = "LOCAL_TYPOGRAPHY_CANVAS_NO_ARTWORK_PROMPT"
 STRUCTURE_ROLES = {"cover", "phrase", "info", "cta"}
 STRUCTURE_TREATMENTS = {
     "typography_only", "illustration", "diagram", "process", "comparison",
@@ -304,6 +313,151 @@ def _visual_metaphor(slide):
     )
 
 
+def _campaign_art_direction(image_style, slides):
+    """Normalize one safe visual world for every artwork slide in the set."""
+    corpus = " ".join(
+        value
+        for slide in slides
+        for value in (slide.get("visual"), slide.get("title"))
+        if isinstance(value, str)
+    ).lower()
+    motif = (
+        "transformation"
+        if any(word in corpus for word in ("transform", "adapt", "format", "platform"))
+        else "insight_reveal"
+        if any(word in corpus for word in ("understand", "insight", "source", "research"))
+        else "human_connection"
+        if any(word in corpus for word in ("people", "audience", "community"))
+        else "focal_object_system"
+    )
+    return {
+        "art_style": CAMPAIGN_ART_STYLES.get(
+            image_style, "premium editorial illustration"
+        ),
+        "visual_theme": "one coherent conceptual campaign",
+        "palette_intent": "deep navy with controlled yellow, mint, and blue accents",
+        "lighting_or_depth": (
+            "confident dimensional depth and controlled studio lighting"
+            if image_style in {"realistic", "pixar"}
+            else "layered editorial depth with crisp focal separation"
+        ),
+        "texture_intent": (
+            "soft matte dimensional surfaces with restrained tactile detail"
+            if image_style in {"realistic", "pixar"}
+            else "layered paper and editorial cutout surfaces with controlled grain"
+        ),
+        "shape_language": "bold simple silhouettes with consistent rounded geometry",
+        "composition_energy": "confident asymmetry with one immediate focal hierarchy",
+        "campaign_motif": motif,
+        "image_detail_level": "editorial detail legible at mobile thumbnail size",
+    }
+
+
+def _scene_brief(
+    visual, semantic_text, treatment, visual_weight, layout, metaphor_family
+):
+    """Build a bounded, copy-safe scene specification for provider prompting."""
+    normalized = " ".join(
+        value for value in (visual, semantic_text) if isinstance(value, str)
+    ).lower()
+    category = (
+        "transformation" if any(word in normalized for word in
+            ("transform", "adapt", "format", "platform", "before", "after"))
+        else "insight" if any(word in normalized for word in
+            ("insight", "source", "research", "evidence", "understand"))
+        else "conversation" if any(word in normalized for word in
+            ("people", "audience", "community", "conversation", "discussion"))
+        else "process" if any(word in normalized for word in
+            ("step", "sequence", "stage", "process", "workflow"))
+        else "content_system" if any(word in normalized for word in
+            ("content", "campaign", "publish", "channel"))
+        else "everyday_context"
+    )
+    subjects = {
+        "transformation": "one oversized raw source form becoming several visibly distinct finished forms",
+        "insight": "layered source fragments surrounding one clearly elevated focal discovery",
+        "conversation": "distinct editorial figures gathered around one shared focal object",
+        "process": "one continuous subject shown evolving through clearly related stages",
+        "content_system": "one substantial source object anchoring a coordinated set of distinct outputs",
+        "everyday_context": "one oversized source-relevant object in a purposeful editorial setting",
+    }
+    actions = {
+        "transformation": "the source separates, reshapes, and resolves into differentiated outcomes",
+        "insight": "the surrounding fragments are filtered back while the central discovery is revealed and elevated",
+        "conversation": "the figures visibly converge, react, and contribute toward the shared focus",
+        "process": "the same subject unfolds and changes from one stage into the next",
+        "content_system": "the anchored source assembles the supporting outputs into one coherent system",
+        "everyday_context": "the focal object is being opened, examined, or put into active use",
+    }
+    if treatment == "diagram":
+        subject = "specific source-relevant entities arranged around one dominant entity"
+        action = "directional relationships show exactly how the entities connect or influence one another"
+    elif treatment == "process":
+        subject = "one consistent source-relevant subject repeated only to show its sequential evolution"
+        action = "the subject visibly transforms through ordered, causally connected stages"
+    elif treatment == "comparison":
+        subject = "two clearly different states of the same source-relevant subject"
+        action = "the states diverge in one coherent split composition so the contrast is immediate"
+    elif treatment == "feature_cards":
+        subject = "one grouped family of source-relevant objects unified by a dominant theme object"
+        action = "the supporting objects assemble around the theme without forming a dashboard or labelled cards"
+    else:
+        subject, action = subjects[category], actions[category]
+
+    heavy = visual_weight == "heavy"
+    medium = visual_weight == "medium"
+    viewpoint = (
+        "angled three-quarter editorial view" if heavy and layout in {"split_left", "hero_left"}
+        else "asymmetric side view" if heavy
+        else "slight top-down editorial view" if medium and treatment in {"process", "feature_cards"}
+        else "wide conceptual editorial scene" if medium
+        else "centred poster-like view"
+    )
+    return {
+        "scene_subject": subject,
+        "scene_action": action,
+        "foreground_elements": (
+            "one partially cropped supporting element entering the artwork zone to establish scale"
+            if heavy else "none required" if not medium else
+            "at most one supporting element overlapping the artwork-zone edge"
+        ),
+        "midground_elements": "the primary subject and its clearest semantic action",
+        "background_environment": (
+            "a simplified contextual environment with layered planes, never a blank framed box"
+            if heavy or medium else "a quiet campaign-colour field with minimal context"
+        ),
+        "spatial_relationship": (
+            "one dominant subject, with one to three smaller supports visibly acting on or responding to it"
+            if heavy else "one clear subject with one subordinate context layer" if medium else
+            "one simple subject with no competing elements"
+        ),
+        "camera_or_viewpoint": viewpoint,
+        "depth_strategy": (
+            "foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows"
+            if heavy else "one overlapping context plane with clear depth separation" if medium else
+            "mostly flat separation with restrained shadow depth"
+        ),
+        "cropping_strategy": (
+            "oversize and deliberately crop the focal subject at one or two artwork-zone edges"
+            if heavy else "use a confident close crop while keeping the whole action legible" if medium else
+            "keep the simple subject fully legible with comfortable artwork-zone space"
+        ),
+        "material_or_surface_language": "use the campaign material language exactly; do not switch medium",
+        "focal_scale": (
+            "dominant and large, confidently filling the artwork zone" if heavy else
+            "substantial and balanced within the artwork zone" if medium else
+            "restrained but intentional within the artwork zone"
+        ),
+        "supporting_element_limit": "one to three" if heavy else "zero to two" if medium else "zero or one",
+        "negative_space_intent": (
+            "protect only the separate text-safe zone; create no large dead margins inside the artwork zone"
+            if heavy else "protect the text-safe zone while keeping balanced artwork occupancy" if medium else
+            "use intentional breathing room inside the artwork zone without shrinking into an icon"
+        ),
+        "metaphor_family": metaphor_family or "focal_object",
+    }
+
+
 def _carousel_presentations(slides):
     presentations = []
     for index, slide in enumerate(slides):
@@ -312,6 +466,12 @@ def _carousel_presentations(slides):
             value for value in (slide["title"], slide["body"]) if value
         )
         treatment = _select_visual_treatment(slide["visual"], role, semantic_text)
+        metaphor = _visual_metaphor(slide)
+        if role == "cover" and treatment == "diagram":
+            treatment = "visual_focus"
+            metaphor = "transformation"
+        if treatment == "diagram" and metaphor == "distinct_object":
+            metaphor = "node_network"
         requested_weight = (slide.get("visual_weight") or "").strip().lower()
         visual_weight = (
             "heavy"
@@ -326,16 +486,26 @@ def _carousel_presentations(slides):
             if treatment == "typography_only"
             else "medium"
         )
+        layout = _select_layout_variant(
+            role, index, treatment, slide["title"]
+        )
+        if visual_weight == "heavy" and layout == "editorial_statement":
+            layout = "visual_focus"
         presentations.append(
             {
                 "role": role,
                 "treatment": treatment,
-                "layout": _select_layout_variant(
-                    role, index, treatment, slide["title"]
-                ),
+                "layout": layout,
                 "semantic_text": semantic_text,
                 "visual_weight": visual_weight,
-                "metaphor": _visual_metaphor(slide),
+                "metaphor": metaphor,
+                "artwork_required": treatment != "typography_only",
+                "furniture": (
+                    "dual_rail" if role == "cover" else
+                    "single_rail" if role == "cta" else
+                    "none" if treatment == "visual_focus" else
+                    "corner_marker" if index % 2 else "framed_edge"
+                ),
             }
         )
 
@@ -358,9 +528,25 @@ def _carousel_presentations(slides):
             and current["treatment"] not in {"process", "comparison"}
         ):
             current["treatment"] = "visual_focus"
+            current["metaphor"] = "focal_object"
+        elif (
+            current["metaphor"] == "node_network"
+            and any(
+                item["metaphor"] == "node_network"
+                for item in presentations[:index]
+            )
+            and not genuine_sequence
+        ):
+            current["treatment"] = "visual_focus"
+            current["metaphor"] = "focal_object"
         current["layout"] = _select_layout_variant(
             current["role"], index, current["treatment"], slides[index]["title"]
         )
+        if (
+            current["visual_weight"] == "heavy"
+            and current["layout"] == "editorial_statement"
+        ):
+            current["layout"] = "visual_focus"
         if current["layout"] == previous["layout"]:
             if current["layout"] == "split_left":
                 current["layout"] = "split_right"
@@ -534,9 +720,23 @@ def _build_slide_background_prompt(
     visual_treatment=None,
     semantic_text=None,
     visual_weight="medium",
+    metaphor_family=None,
+    campaign_direction=None,
 ):
+    if visual_treatment == "typography_only":
+        return None
     visual_concept = SLIDE_VISUAL_CONCEPTS[slide_index]
     safe_visual_direction = _safe_visual_direction(visual, semantic_text)
+    if metaphor_family == "focal_object":
+        safe_visual_direction = (
+            "one source-specific focal object with a strong silhouette, avoiding "
+            "nodes, branches, arrows, networks, and repeated diagram geometry"
+        )
+    elif metaphor_family == "transformation":
+        safe_visual_direction = (
+            "one source-specific transformation scene with visibly distinct output "
+            "forms, avoiding nodes, branches, arrows, and network geometry"
+        )
     role = layout_role or ("cover" if slide_index == 0 else "info")
     design_layout = layout_variant or _select_layout_variant(role, slide_index)
     composition_directions = {
@@ -557,8 +757,8 @@ def _build_slide_background_prompt(
             "right typography zone empty, with a clean gutter and no divider."
         ),
         "editorial_statement": (
-            "Keep artwork as one small isolated supporting object in the bounded secondary "
-            "zone; reserve the dominant protected field for editorial typography."
+            "Contain the scene in the bounded secondary artwork zone and reserve the "
+            "dominant protected field for editorial typography."
         ),
         "visual_focus": (
             "Center one strong focal subject inside the bounded upper artwork zone. Keep "
@@ -570,44 +770,89 @@ def _build_slide_background_prompt(
         ),
     }
     composition_direction = composition_directions[design_layout]
+    campaign_direction = campaign_direction or _campaign_art_direction("", [])
+    scene = _scene_brief(
+        visual, semantic_text, visual_treatment or "illustration", visual_weight,
+        design_layout, metaphor_family,
+    )
+    occupancy = {"heavy": "dominant", "medium": "substantial", "light": "restrained"}[
+        visual_weight
+    ]
+    sequence_role = (
+        "opening campaign hero" if role == "cover" else
+        "restrained final payoff" if role == "cta" else
+        "internal visual peak" if visual_weight == "heavy" else
+        "editorial visual pause" if visual_weight == "light" else
+        "supporting campaign progression"
+    )
+    weight_direction = {
+        "heavy": "Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.",
+        "medium": "Use balanced, substantial occupancy with moderate scene depth and one context layer.",
+        "light": "Use a simple restrained scene with intentional breathing room and no unnecessary complexity.",
+    }[visual_weight]
+    treatment_direction = {
+        "visual_focus": "Make one dominant subject and its action unmistakable; use large scale, a strong crop, and minimal competition.",
+        "illustration": "Stage a contextual editorial scene with a subject, action, environment, and visible depth.",
+        "diagram": "Show source-relevant entities, their directional relationship, and one focal hierarchy; use diagram logic only because the relationship requires it.",
+        "process": "Show the same subject evolving through visibly related sequential stages, not disconnected symbols.",
+        "comparison": "Show two distinct states in one coherent split conceptual scene; do not duplicate the same image.",
+        "feature_cards": "Support the grouped theme with objects, not fake UI, dashboards, cards containing text, or labelled panels.",
+    }.get(visual_treatment or "illustration")
+    heavy_ban = "" if visual_weight != "heavy" else """
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition"""
     return f"""
-Create a text-free visual background for one slide in a cohesive Instagram carousel.
+Create one text-free artwork scene for a cohesive Instagram carousel.
 
-Shared art direction for the whole carousel:
-{styled_image_prompt}
-
-Mandatory carousel style lock:
-- the shared art direction above controls the rendering medium for every slide
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
 - keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
 - the slide-specific concept changes only the scene, subjects, props, framing, and composition
 - do not let the slide-specific concept introduce a different visual medium or art style
 
-Slide-specific visual concept:
-{visual_concept}
-{f"Additional sanitized scene direction: {safe_visual_direction}." if safe_visual_direction else ""}
+- art style: {campaign_direction["art_style"]}
+- visual theme: {campaign_direction["visual_theme"]}
+- palette intent: {campaign_direction["palette_intent"]}
+- lighting/depth: {campaign_direction["lighting_or_depth"]}
+- texture: {campaign_direction["texture_intent"]}
+- shape language: {campaign_direction["shape_language"]}
+- composition energy: {campaign_direction["composition_energy"]}
+- shared campaign motif: {campaign_direction["campaign_motif"]}
+- detail level: {campaign_direction["image_detail_level"]}
 
-Slide role: {role}
-Selected visual treatment: {visual_treatment or "illustration"}
-Allowlisted visual weight: {visual_weight}
-Internal design layout: {design_layout}
-Text-overlay composition:
-{composition_direction}
+2. SCENE BRIEF
+- main subject: {scene["scene_subject"]}
+- action: {scene["scene_action"]}
+- foreground: {scene["foreground_elements"]}
+- midground: {scene["midground_elements"]}
+- background: {scene["background_environment"]}
+- spatial relationship: {scene["spatial_relationship"]}
+- viewpoint: {scene["camera_or_viewpoint"]}
+- depth: {scene["depth_strategy"]}
+- crop: {scene["cropping_strategy"]}
+- focal scale: {scene["focal_scale"]}
+- supporting elements: {scene["supporting_element_limit"]}
+- material continuity: {scene["material_or_surface_language"]}
+- scene intent: {safe_visual_direction or visual_concept}
+- sequence-specific framing: {visual_concept}
 
-Design:
-- maintain one consistent art style, colour palette, lighting, and premium brand mood
+3. COMPOSITION / GEOMETRY
+- slide role: {role}; sequence purpose: {sequence_role}
+- treatment: {visual_treatment or "illustration"}; visual weight: {visual_weight}
+- layout: {design_layout}; artwork-zone occupancy: {occupancy}
+- {weight_direction}
+- {treatment_direction}
+- {composition_direction}
+- text-safe space versus artwork space: {scene["negative_space_intent"]}
 - square 1:1 format
-- high contrast
-- compose the artwork and reserved typography space as one intentional social-carousel design
-- avoid decorative dashes, fake buttons, fake interfaces, automatic badges, and slide numbers
-- leave suitable uncluttered visual space for a later text overlay
 - keep faces, facial features, and primary objects completely outside the text-safe zone
-- do not place an important subject beneath or behind the intended typography region
-- make the selected treatment structurally visible: diagrams use meaningful connected
-  geometry, illustrations use one semantic scene, and visual-focus slides use one
-  dominant object or bounded content metaphor
-- never use official platform logos, trademark-shaped icons, or readable platform names
 
-Critical text-free requirements:
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+5. NEGATIVE REQUIREMENTS
 - no readable text
 - no words
 - no letters
@@ -618,12 +863,19 @@ Critical text-free requirements:
 - no captions
 - no labels
 - no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
 - no text on screens
 - no text on paper
 - no written signs
 - no generated app-store badges
 - no readable app wordmarks
-- text-free requirements override any conflicting typography or signage in the style direction
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards{heavy_ban}
+- text-free requirements override conflicting typography or signage
 """
 
 
@@ -747,6 +999,7 @@ def create_content_pack_carousel():
             return redirect(url_for("content_pack"))
 
         presentations = _carousel_presentations(slides)
+        campaign_direction = _campaign_art_direction(image_style, slides)
         if image_style == "viral_carousel":
             _validate_viral_carousel_copy(slides, presentations)
 
@@ -781,7 +1034,11 @@ def create_content_pack_carousel():
                 visual_treatment,
                 semantic_text,
                 presentation["visual_weight"],
+                presentation["metaphor"],
+                campaign_direction,
             )
+            if background_prompt is None:
+                background_prompt = TYPOGRAPHY_ONLY_BACKGROUND
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,
                 slide["title"],
@@ -801,6 +1058,8 @@ def create_content_pack_carousel():
                 },
                 visual_treatment=visual_treatment,
                 visual_weight=presentation["visual_weight"],
+                furniture_variant=presentation["furniture"],
+                metaphor_family=presentation["metaphor"],
             )
 
             post = Post(

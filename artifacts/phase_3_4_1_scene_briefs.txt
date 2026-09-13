@@ -1,0 +1,95 @@
+===== SLIDE 1 =====
+scene_subject: one oversized raw source form becoming several visibly distinct finished forms
+scene_action: the source separates, reshapes, and resolves into differentiated outcomes
+foreground_elements: one partially cropped supporting element entering the artwork zone to establish scale
+midground_elements: the primary subject and its clearest semantic action
+background_environment: a simplified contextual environment with layered planes, never a blank framed box
+spatial_relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+camera_or_viewpoint: asymmetric side view
+depth_strategy: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+cropping_strategy: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+material_or_surface_language: use the campaign material language exactly; do not switch medium
+focal_scale: dominant and large, confidently filling the artwork zone
+supporting_element_limit: one to three
+negative_space_intent: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+metaphor_family: transformation
+
+===== SLIDE 2 =====
+scene_subject: one oversized source-relevant object in a purposeful editorial setting
+scene_action: the focal object is being opened, examined, or put into active use
+foreground_elements: none required
+midground_elements: the primary subject and its clearest semantic action
+background_environment: a quiet campaign-colour field with minimal context
+spatial_relationship: one simple subject with no competing elements
+camera_or_viewpoint: centred poster-like view
+depth_strategy: mostly flat separation with restrained shadow depth
+cropping_strategy: keep the simple subject fully legible with comfortable artwork-zone space
+material_or_surface_language: use the campaign material language exactly; do not switch medium
+focal_scale: restrained but intentional within the artwork zone
+supporting_element_limit: zero or one
+negative_space_intent: use intentional breathing room inside the artwork zone without shrinking into an icon
+metaphor_family: distinct_object
+
+===== SLIDE 3 =====
+scene_subject: layered source fragments surrounding one clearly elevated focal discovery
+scene_action: the surrounding fragments are filtered back while the central discovery is revealed and elevated
+foreground_elements: at most one supporting element overlapping the artwork-zone edge
+midground_elements: the primary subject and its clearest semantic action
+background_environment: a simplified contextual environment with layered planes, never a blank framed box
+spatial_relationship: one clear subject with one subordinate context layer
+camera_or_viewpoint: wide conceptual editorial scene
+depth_strategy: one overlapping context plane with clear depth separation
+cropping_strategy: use a confident close crop while keeping the whole action legible
+material_or_surface_language: use the campaign material language exactly; do not switch medium
+focal_scale: substantial and balanced within the artwork zone
+supporting_element_limit: zero to two
+negative_space_intent: protect the text-safe zone while keeping balanced artwork occupancy
+metaphor_family: distinct_object
+
+===== SLIDE 4 =====
+scene_subject: one oversized raw source form becoming several visibly distinct finished forms
+scene_action: the source separates, reshapes, and resolves into differentiated outcomes
+foreground_elements: at most one supporting element overlapping the artwork-zone edge
+midground_elements: the primary subject and its clearest semantic action
+background_environment: a simplified contextual environment with layered planes, never a blank framed box
+spatial_relationship: one clear subject with one subordinate context layer
+camera_or_viewpoint: wide conceptual editorial scene
+depth_strategy: one overlapping context plane with clear depth separation
+cropping_strategy: use a confident close crop while keeping the whole action legible
+material_or_surface_language: use the campaign material language exactly; do not switch medium
+focal_scale: substantial and balanced within the artwork zone
+supporting_element_limit: zero to two
+negative_space_intent: protect the text-safe zone while keeping balanced artwork occupancy
+metaphor_family: document
+
+===== SLIDE 5 =====
+scene_subject: specific source-relevant entities arranged around one dominant entity
+scene_action: directional relationships show exactly how the entities connect or influence one another
+foreground_elements: one partially cropped supporting element entering the artwork zone to establish scale
+midground_elements: the primary subject and its clearest semantic action
+background_environment: a simplified contextual environment with layered planes, never a blank framed box
+spatial_relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+camera_or_viewpoint: asymmetric side view
+depth_strategy: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+cropping_strategy: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+material_or_surface_language: use the campaign material language exactly; do not switch medium
+focal_scale: dominant and large, confidently filling the artwork zone
+supporting_element_limit: one to three
+negative_space_intent: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+metaphor_family: node_network
+
+===== SLIDE 6 =====
+scene_subject: one oversized source-relevant object in a purposeful editorial setting
+scene_action: the focal object is being opened, examined, or put into active use
+foreground_elements: none required
+midground_elements: the primary subject and its clearest semantic action
+background_environment: a quiet campaign-colour field with minimal context
+spatial_relationship: one simple subject with no competing elements
+camera_or_viewpoint: centred poster-like view
+depth_strategy: mostly flat separation with restrained shadow depth
+cropping_strategy: keep the simple subject fully legible with comfortable artwork-zone space
+material_or_surface_language: use the campaign material language exactly; do not switch medium
+focal_scale: restrained but intentional within the artwork zone
+supporting_element_limit: zero or one
+negative_space_intent: use intentional breathing room inside the artwork zone without shrinking into an icon
+metaphor_family: distinct_object

@@ -588,6 +588,24 @@ Visual: Small closing accent"""
     )
 
 
+def test_heavy_internal_diagram_avoids_small_editorial_artwork_zone():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Strong opening
+Visual: One bold focal object
+Slide 2:
+Title: One important relationship connects every useful content destination
+Visual Weight: heavy
+Visual: A semantic network connecting source and audience"""
+    )
+
+    presentation = content_pack_routes._carousel_presentations(slides)[1]
+
+    assert presentation["treatment"] == "diagram"
+    assert presentation["visual_weight"] == "heavy"
+    assert presentation["layout"] == "visual_focus"
+
+
 def test_carousel_plan_breaks_adjacent_diagram_and_metaphor_repetition():
     slides = content_pack_routes._parse_content_pack_carousel_slides(
         """Slide 1:
@@ -603,8 +621,9 @@ Visual: One distinct object"""
 
     presentations = content_pack_routes._carousel_presentations(slides)
 
-    assert presentations[0]["treatment"] == "diagram"
-    assert presentations[1]["treatment"] == "visual_focus"
+    assert presentations[0]["treatment"] == "visual_focus"
+    assert presentations[0]["metaphor"] == "transformation"
+    assert presentations[1]["treatment"] == "diagram"
     assert presentations[1]["layout"] != presentations[0]["layout"]
 
 
@@ -631,7 +650,7 @@ Title: One bold opening
 Visual: A single hero object
 Slide 2:
 Title: A short statement
-Visual: Pure typography
+Visual: Typography-only statement
 Slide 3:
 Title: Three useful outcomes
 Visual: Three benefits shown as grouped elements
@@ -674,9 +693,225 @@ def test_background_prompt_includes_weight_but_excludes_overlay_copy():
         visual_weight="medium",
     )
 
-    assert "Allowlisted visual weight: medium" in prompt
-    assert "Selected visual treatment: feature_cards" in prompt
+    assert "visual weight: medium" in prompt
+    assert "treatment: feature_cards" in prompt
     assert private_copy not in prompt
+
+
+def test_campaign_art_direction_is_normalized_and_source_appropriate():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Transform one source
+Visual: One concept becomes several formats
+Slide 2:
+CTA: Finish with purpose"""
+    )
+    direction = content_pack_routes._campaign_art_direction(
+        "viral_carousel", slides
+    )
+
+    assert set(direction) == {
+        "art_style", "visual_theme", "palette_intent", "lighting_or_depth",
+        "texture_intent", "shape_language", "composition_energy",
+        "campaign_motif", "image_detail_level",
+    }
+    assert direction["campaign_motif"] == "transformation"
+    assert "premium SaaS editorial illustration" in direction["art_style"]
+
+
+def test_provider_prompt_contains_rich_campaign_brief_without_overlay_copy():
+    private_copy = "Private exact customer headline"
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1:\nTitle: {private_copy}\nVisual: One bold transformation"
+    )
+    presentation = content_pack_routes._carousel_presentations(slides)[0]
+    direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "ignored raw customer image prompt", 0, slides[0]["visual"],
+        presentation["role"], presentation["layout"], presentation["treatment"],
+        presentation["semantic_text"], presentation["visual_weight"],
+        presentation["metaphor"], direction,
+    )
+
+    assert private_copy not in prompt
+    assert "ignored raw customer image prompt" not in prompt
+    assert "1. CAMPAIGN STYLE LOCK" in prompt
+    assert "2. SCENE BRIEF" in prompt
+    assert "artwork-zone occupancy" in prompt
+    assert "sequence purpose: opening campaign hero" in prompt
+    assert "no readable text" in prompt
+    assert "no readable logos" in prompt
+    assert "no watermarks" in prompt
+    assert "no UI screenshots" in prompt
+
+
+def test_scene_brief_is_concrete_bounded_and_weight_specific():
+    heavy = content_pack_routes._scene_brief(
+        "Raw source material transforms into platform formats", "private overlay copy",
+        "visual_focus", "heavy", "hero_left", "transformation",
+    )
+    medium = content_pack_routes._scene_brief(
+        "Research reveals one insight", "private overlay copy", "illustration",
+        "medium", "split_right", "document",
+    )
+    light = content_pack_routes._scene_brief(
+        "One everyday object", "private overlay copy", "illustration", "light",
+        "split_left", "distinct_object",
+    )
+
+    assert set(heavy) == {
+        "scene_subject", "scene_action", "foreground_elements",
+        "midground_elements", "background_environment", "spatial_relationship",
+        "camera_or_viewpoint", "depth_strategy", "cropping_strategy",
+        "material_or_surface_language", "focal_scale",
+        "supporting_element_limit", "negative_space_intent", "metaphor_family",
+    }
+    assert "raw source form" in heavy["scene_subject"]
+    assert "reshapes" in heavy["scene_action"]
+    assert "cropped" in heavy["foreground_elements"]
+    assert "deliberately crop" in heavy["cropping_strategy"]
+    assert "no large dead margins" in heavy["negative_space_intent"]
+    assert "balanced" in medium["focal_scale"]
+    assert "restrained" in light["focal_scale"]
+    assert "private overlay copy" not in repr((heavy, medium, light))
+
+
+@pytest.mark.parametrize(
+    ("treatment", "required"),
+    [
+        ("diagram", "directional relationship"),
+        ("process", "sequential stages"),
+        ("comparison", "two distinct states"),
+        ("feature_cards", "not fake UI"),
+    ],
+)
+def test_treatment_specific_scene_language_is_semantic(treatment, required):
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "ignored", 2, "Source-relevant relationship", "info", "split_right",
+        treatment, "private exact overlay copy", "medium", "distinct_object",
+    )
+
+    assert required in prompt
+    assert "private exact overlay copy" not in prompt
+    if treatment == "feature_cards":
+        assert "cards containing text" in prompt
+
+
+def test_heavy_prompt_has_confident_occupancy_without_small_object_contradiction():
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "ignored", 0, "One source transforms", "cover", "hero_left",
+        "visual_focus", "private overlay copy", "heavy", "transformation",
+    )
+
+    assert "dominant and large, confidently filling" in prompt
+    assert "no large dead margins inside the artwork zone" in prompt
+    assert "no tiny central icon" in prompt
+    assert "small isolated supporting object" not in prompt
+    assert "1. CAMPAIGN STYLE LOCK" in prompt
+    assert prompt.index("1. CAMPAIGN STYLE LOCK") < prompt.index("2. SCENE BRIEF")
+    assert prompt.index("2. SCENE BRIEF") < prompt.index("3. COMPOSITION / GEOMETRY")
+    assert prompt.index("3. COMPOSITION / GEOMETRY") < prompt.index("4. QUALITY BAR")
+    assert prompt.index("4. QUALITY BAR") < prompt.index("5. NEGATIVE REQUIREMENTS")
+
+
+def test_typography_only_builds_no_provider_artwork_prompt():
+    assert content_pack_routes._build_slide_background_prompt(
+        "ignored", 1, visual_treatment="typography_only"
+    ) is None
+
+
+def test_repeated_node_metaphor_is_removed_from_actual_artwork_prompt():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Connected ideas
+Visual: A branching node network
+Slide 2:
+Title: Another perspective
+Visual: A branching node network"""
+    )
+    presentations = content_pack_routes._carousel_presentations(slides)
+    cover = presentations[0]
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "Locked campaign style", 0, slides[0]["visual"], cover["role"],
+        cover["layout"], cover["treatment"], cover["semantic_text"],
+        cover["visual_weight"], cover["metaphor"],
+    )
+
+    assert cover["metaphor"] == "transformation"
+    assert "avoiding nodes, branches, arrows, and network geometry" in prompt
+
+
+def test_non_adjacent_node_metaphor_is_remapped_before_artwork_generation():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Strong opening
+Visual: One bold focal object
+Slide 2:
+Title: Connected ideas
+Visual: A branching node network
+Slide 3:
+Title: Editorial insight
+Visual: One document under analysis
+Slide 4:
+Title: Better connections
+Visual: Another branching node network"""
+    )
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert presentations[1]["metaphor"] == "node_network"
+    assert presentations[3]["metaphor"] == "focal_object"
+    assert presentations[3]["treatment"] == "visual_focus"
+
+
+def test_diagram_fallback_is_counted_as_node_family_for_repetition_control():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Build for every platform
+Visual: Distinct platform-ready formats
+Slide 2:
+Title: Inspect the source
+Visual: One editorial document
+Slide 3:
+Title: Connect with the audience
+Visual: Better connections everywhere"""
+    )
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert presentations[0]["metaphor"] == "transformation"
+    assert presentations[0]["treatment"] == "visual_focus"
+    assert presentations[2]["metaphor"] == "node_network"
+
+
+def test_cover_does_not_collapse_to_generic_diagram_fallback():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Build for every platform
+Visual: One source branches into distinct platform-ready formats
+Slide 2:
+CTA: Finish with purpose"""
+    )
+
+    cover = content_pack_routes._carousel_presentations(slides)[0]
+
+    assert cover["visual_weight"] == "heavy"
+    assert cover["treatment"] == "visual_focus"
+    assert cover["layout"] == "hero_center"
+    assert cover["metaphor"] == "transformation"
+
+
+def test_presentation_plan_varies_campaign_furniture_and_restrains_closing():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "\n".join(f"Slide {index}: Distinct idea {index}" for index in range(1, 6))
+    )
+    slides[-1]["layout_role"] = "cta"
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert presentations[0]["furniture"] == "dual_rail"
+    assert presentations[-1]["furniture"] == "single_rail"
+    assert len({item["furniture"] for item in presentations}) >= 3
 
 
 def test_content_pack_carousel_parser_preserves_unlabelled_text():
@@ -1351,20 +1586,20 @@ def test_background_prompts_reserve_role_specific_negative_space():
         "Style", 5, layout_role="cta"
     )
 
-    assert "Slide role: cover" in cover
-    assert "Internal design layout: hero_left" in cover
+    assert "slide role: cover" in cover
+    assert "layout: hero_left" in cover
     assert "weighted to the right artwork zone" in cover
     assert "left typography zone completely free" in cover
-    assert "Slide role: phrase" in phrase
-    assert "Internal design layout: split_left" in phrase
+    assert "slide role: phrase" in phrase
+    assert "layout: split_left" in phrase
     assert "designated right artwork zone" in phrase
     assert "left typography zone empty" in phrase
-    assert "Slide role: info" in info
-    assert "Internal design layout: split_right" in info
+    assert "slide role: info" in info
+    assert "layout: split_right" in info
     assert "designated left artwork zone" in info
     assert "right typography zone empty" in info
-    assert "Slide role: cta" in cta
-    assert "Internal design layout: closing" in cta
+    assert "slide role: cta" in cta
+    assert "layout: closing" in cta
     assert "Typography must dominate" in cta
     assert "small upper-right zone" in cta
     assert all(
@@ -1444,13 +1679,21 @@ CTA: Learn more Polish with Polish with Me"""
         "split_right",
         "closing",
     ]
+    artwork_payloads = [
+        payload for payload in payloads
+        if payload["visual_treatment"] != "typography_only"
+    ]
     assert all(
         payload["layout_variant"] in payload["background_prompt"]
-        for payload in payloads
+        for payload in artwork_payloads
     )
-    assert len(set(backgrounds)) == 6
-    assert all("CONSISTENT BRAND STYLE" in prompt for prompt in backgrounds)
-    assert all("Slide-specific visual concept:" in prompt for prompt in backgrounds)
+    assert all(
+        payload["background_prompt"] == content_pack_routes.TYPOGRAPHY_ONLY_BACKGROUND
+        for payload in payloads if payload["visual_treatment"] == "typography_only"
+    )
+    assert len(set(payload["background_prompt"] for payload in artwork_payloads)) == len(artwork_payloads)
+    assert all("art style: minimalist modern design" in payload["background_prompt"] for payload in artwork_payloads)
+    assert all("2. SCENE BRIEF" in payload["background_prompt"] for payload in artwork_payloads)
     required_text_free_phrases = (
         "no readable text",
         "no words",
@@ -1468,7 +1711,7 @@ CTA: Learn more Polish with Polish with Me"""
     )
     assert all(
         phrase in prompt
-        for prompt in backgrounds
+        for prompt in (payload["background_prompt"] for payload in artwork_payloads)
         for phrase in required_text_free_phrases
     )
     for payload in payloads:
@@ -1511,9 +1754,13 @@ def test_content_pack_carousel_keeps_selected_style_across_all_six_slides(
 
     assert response.status_code == 302
     assert len(backgrounds) == 6
-    assert len(set(backgrounds)) == 6
-    assert all(expected_treatment in prompt for prompt in backgrounds)
-    assert all("Mandatory carousel style lock:" in prompt for prompt in backgrounds)
+    artwork_backgrounds = [
+        payload["background_prompt"] for payload in payloads
+        if payload["visual_treatment"] != "typography_only"
+    ]
+    assert len(set(artwork_backgrounds)) == len(artwork_backgrounds)
+    assert all(expected_treatment in prompt for prompt in artwork_backgrounds)
+    assert all("1. CAMPAIGN STYLE LOCK" in prompt for prompt in artwork_backgrounds)
     assert all(
         "Private overlay copy" not in prompt for prompt in backgrounds
     )
@@ -1545,9 +1792,14 @@ def test_content_pack_carousel_default_and_unknown_style_use_existing_fallback(
 
     assert response.status_code == 302
     assert len(backgrounds) == 6
-    assert all("Bright image direction" in prompt for prompt in backgrounds)
-    assert all("\nStyle:" not in prompt for prompt in backgrounds)
-    assert all("Mandatory carousel style lock:" in prompt for prompt in backgrounds)
+    artwork_backgrounds = [
+        payload["background_prompt"]
+        for post in posts
+        if (payload := carousel_generation.parse_overlay_prompt(post.prompt))["visual_treatment"] != "typography_only"
+    ]
+    assert all("art style: premium editorial illustration" in prompt for prompt in artwork_backgrounds)
+    assert all("\nStyle:" not in prompt for prompt in artwork_backgrounds)
+    assert all("1. CAMPAIGN STYLE LOCK" in prompt for prompt in artwork_backgrounds)
 
 
 def test_content_pack_carousel_preserves_exact_polish_slide_copy(

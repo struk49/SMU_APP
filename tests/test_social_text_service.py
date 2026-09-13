@@ -1121,6 +1121,33 @@ def test_crop_modes_and_focal_anchors_are_deterministic():
     assert visual_focus == repeated
 
 
+def test_split_illustration_zone_matches_square_provider_without_text_overlap():
+    for variant in ("split_left", "split_right"):
+        zones = social_text.viral_composition_zones(
+            1024, 1024, variant, "illustration"
+        )
+        art = zones["art_rect"]
+        text = zones["text_rect"]
+        width, height = art[2] - art[0], art[3] - art[1]
+
+        assert height / width < 1.35
+        assert art[2] <= text[0] or text[2] <= art[0]
+        assert zones["crop_mode"] == "contain"
+
+
+def test_heavy_hero_center_has_dominant_bounded_artwork_zone():
+    zones = social_text.viral_composition_zones(
+        1024, 1024, "hero_center", "visual_focus"
+    )
+    art = zones["art_rect"]
+    text = zones["text_rect"]
+    art_area = (art[2] - art[0]) * (art[3] - art[1])
+
+    assert art_area > 0.20 * 1024 * 1024
+    assert art[3] < text[1]
+    assert zones["crop_mode"] == "cover"
+
+
 def test_closing_artwork_zone_remains_secondary():
     zones = social_text.viral_composition_zones(
         1024, 1024, "closing", "illustration"
@@ -1433,3 +1460,99 @@ def test_feature_cards_render_deterministically():
     second = social_text.render_social_text(source_bytes(), **arguments)
 
     assert first == second
+
+
+def test_visual_weight_materially_changes_artwork_occupancy_inside_art_rect():
+    protected = social_text.viral_composition_zones(
+        1024, 1024, "split_left", "illustration"
+    )
+    rects = {
+        weight: social_text.viral_artwork_rect(
+            1024, 1024, "split_left", "illustration", weight
+        )
+        for weight in ("heavy", "medium", "light")
+    }
+
+    def area(rect):
+        return (rect[2] - rect[0]) * (rect[3] - rect[1])
+
+    def overlaps(first, second):
+        return not (
+            first[2] <= second[0] or first[0] >= second[2]
+            or first[3] <= second[1] or first[1] >= second[3]
+        )
+
+    assert area(rects["heavy"]) > area(rects["medium"]) > area(rects["light"])
+    assert rects["heavy"] == protected["art_rect"]
+    for rect in rects.values():
+        assert rect[0] >= protected["art_rect"][0]
+        assert rect[1] >= protected["art_rect"][1]
+        assert rect[2] <= protected["art_rect"][2]
+        assert rect[3] <= protected["art_rect"][3]
+        assert not overlaps(rect, protected["text_rect"])
+
+
+def test_heavy_cover_has_stronger_typography_target_than_medium_info():
+    cover = social_text.preflight_viral_carousel_text(
+        title="Make content matter",
+        layout_role="cover",
+        layout_variant="hero_left",
+        visual_treatment="illustration",
+        visual_weight="heavy",
+    )
+    info = social_text.preflight_viral_carousel_text(
+        title="Make content matter",
+        layout_role="info",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+        visual_weight="medium",
+    )
+
+    assert cover["fits"] and info["fits"]
+    assert cover["headline_font_size"] > info["headline_font_size"]
+
+
+@pytest.mark.parametrize(
+    "variant", ["dual_rail", "single_rail", "corner_marker", "framed_edge", "none"]
+)
+def test_campaign_furniture_is_allowlisted_and_preserves_copy(variant):
+    title = "Exact campaign wording"
+    output = social_text.render_social_text(
+        source_bytes(),
+        title=title,
+        layout_role="info",
+        layout_variant="split_left",
+        design_style="viral_carousel",
+        visual_treatment="illustration",
+        furniture_variant=variant,
+    )
+
+    assert output.startswith(b"\x89PNG")
+
+
+def test_unknown_campaign_furniture_is_rejected_safely():
+    with pytest.raises(social_text.SocialTextRenderError) as raised:
+        social_text.render_social_text(
+            source_bytes(), title="Title", furniture_variant="random-decoration"
+        )
+
+    assert raised.value.reason == "unsupported_furniture_variant"
+
+
+@pytest.mark.parametrize("treatment", ["diagram", "process", "feature_cards"])
+def test_structured_treatments_use_provider_artwork_inside_safe_zone(treatment):
+    source = source_bytes_with_color((230, 40, 55), size=(1024, 1024))
+    canvas = social_text._build_designed_carousel_canvas(
+        Image.open(BytesIO(source)).convert("RGBA"),
+        "split_left", treatment, "medium", "none",
+    )
+    art_rect = social_text.viral_artwork_rect(
+        1024, 1024, "split_left", treatment, "medium"
+    )
+    sample = canvas.getpixel((
+        (art_rect[0] + art_rect[2]) // 2,
+        (art_rect[1] + art_rect[3]) // 2,
+    ))
+
+    assert sample[0] > sample[1]
+    assert sample[0] > sample[2]

@@ -62,6 +62,9 @@ VISUAL_TREATMENTS = {
     "feature_cards",
 }
 VISUAL_WEIGHTS = {"heavy", "medium", "light"}
+FURNITURE_VARIANTS = {
+    "dual_rail", "single_rail", "corner_marker", "framed_edge", "none",
+}
 ROLE_DESIGN_LAYOUTS = {
     "cover": "hero_left",
     "phrase": "split_left",
@@ -108,9 +111,10 @@ VIRAL_DESIGN_TOKENS = {
     "panel_radius": 0.035,
     "stroke_thickness": 0.0025,
     "illustration_frame_radius": 0.035,
-    "artwork_padding": {"heavy": 0.0, "medium": 0.018, "light": 0.050},
+    "artwork_padding": {"heavy": 0.0, "medium": 0.006, "light": 0.075},
+    "artwork_occupancy": {"heavy": 0.92, "medium": 0.72, "light": 0.46},
     "content_gutter": 0.04,
-    "visual_weight_scale": {"heavy": 1.10, "medium": 1.0, "light": 0.96},
+    "visual_weight_scale": {"heavy": 1.24, "medium": 1.0, "light": 0.90},
 }
 
 VIRAL_COMPOSITION_ZONES = {
@@ -123,21 +127,21 @@ VIRAL_COMPOSITION_ZONES = {
     },
     "hero_center": {
         "text": (0.12, 0.48, 0.88, 0.86),
-        "art": (0.30, 0.08, 0.70, 0.41),
+        "art": (0.18, 0.06, 0.82, 0.45),
         "support": (0.12, 0.72, 0.88, 0.86),
         "crop_mode": "cover",
         "anchor": (0.50, 0.42),
     },
     "split_left": {
         "text": (0.08, 0.16, 0.54, 0.86),
-        "art": (0.60, 0.14, 0.94, 0.86),
+        "art": (0.60, 0.28, 0.94, 0.72),
         "support": (0.08, 0.63, 0.54, 0.86),
         "crop_mode": "contain",
         "anchor": (0.72, 0.50),
     },
     "split_right": {
         "text": (0.46, 0.16, 0.92, 0.86),
-        "art": (0.06, 0.14, 0.40, 0.86),
+        "art": (0.06, 0.28, 0.40, 0.72),
         "support": (0.46, 0.63, 0.92, 0.86),
         "crop_mode": "contain",
         "anchor": (0.28, 0.50),
@@ -592,6 +596,25 @@ def viral_composition_zones(
     }
 
 
+def viral_artwork_rect(
+    width, height, layout_variant, visual_treatment="illustration",
+    visual_weight="medium",
+):
+    """Return the weight-adjusted artwork rectangle inside the protected zone."""
+    if visual_weight not in VISUAL_WEIGHTS:
+        raise SocialTextRenderError("unsupported_visual_weight")
+    zone = viral_composition_zones(
+        width, height, layout_variant, visual_treatment
+    )["art_rect"]
+    padding = round(
+        min(width, height) * VIRAL_DESIGN_TOKENS["artwork_padding"][visual_weight]
+    )
+    return (
+        zone[0] + padding, zone[1] + padding,
+        zone[2] - padding, zone[3] - padding,
+    )
+
+
 def _analyze_text_region(image, box):
     left, top, right, bottom = (round(value) for value in box)
     sample = image.crop((left, top, right, bottom)).convert("L")
@@ -621,7 +644,7 @@ def _analyze_text_region(image, box):
 
 def _build_designed_carousel_canvas(
     source_image, layout_variant, visual_treatment="illustration",
-    visual_weight="medium",
+    visual_weight="medium", furniture_variant="dual_rail",
 ):
     """Make artwork secondary to a deterministic, branded social-card canvas."""
     width, height = source_image.size
@@ -668,57 +691,35 @@ def _build_designed_carousel_canvas(
         )
         canvas.paste(artwork, (zone[0], zone[1]), mask)
 
-    zone = composition["art_rect"]
-    artwork_padding = round(
-        scale * VIRAL_DESIGN_TOKENS["artwork_padding"][visual_weight]
-    )
-    zone = (
-        zone[0] + artwork_padding,
-        zone[1] + artwork_padding,
-        zone[2] - artwork_padding,
-        zone[3] - artwork_padding,
+    zone = viral_artwork_rect(
+        width, height, layout_variant, visual_treatment, visual_weight
     )
     if visual_treatment == "typography_only":
         pass
     elif visual_treatment == "comparison":
+        paste_artwork(zone, opacity=235)
         midpoint = (zone[0] + zone[2]) // 2
-        gap = round(scale * 0.018)
-        left_zone = (zone[0], zone[1], midpoint - gap, zone[3])
-        right_zone = (midpoint + gap, zone[1], zone[2], zone[3])
-        paste_artwork(left_zone, opacity=220)
-        paste_artwork(right_zone, opacity=180)
         draw.line(
             (midpoint, zone[1], midpoint, zone[3]),
-            fill=accent_yellow,
-            width=max(3, round(scale * 0.006)),
+            fill=accent_yellow, width=max(2, round(scale * 0.004)),
         )
     elif visual_treatment == "process":
-        y = (zone[1] + zone[3]) // 2
+        paste_artwork(zone, opacity=235)
+        y = zone[3] - round(scale * 0.035)
         points = [zone[0] + round((zone[2] - zone[0]) * fraction) for fraction in (0.12, 0.50, 0.88)]
-        draw.line((points[0], y, points[-1], y), fill=accent_blue, width=max(4, round(scale * 0.008)))
-        node_radius = max(14, round(scale * 0.026))
+        draw.line((points[0], y, points[-1], y), fill=accent_blue, width=max(2, round(scale * 0.004)))
+        node_radius = max(7, round(scale * 0.010))
         for index, x in enumerate(points):
             draw.ellipse(
                 (x - node_radius, y - node_radius, x + node_radius, y + node_radius),
                 fill=(accent_yellow, accent_green, accent_blue)[index],
             )
     elif visual_treatment == "diagram":
-        centre = ((zone[0] + zone[2]) // 2, (zone[1] + zone[3]) // 2)
-        destinations = (
-            (zone[2] - round(scale * 0.03), zone[1] + round(scale * 0.08)),
-            (zone[2] - round(scale * 0.03), centre[1]),
-            (zone[2] - round(scale * 0.03), zone[3] - round(scale * 0.08)),
+        paste_artwork(zone, opacity=235)
+        draw.rounded_rectangle(
+            zone, radius=radius, outline=accent_blue,
+            width=max(2, round(scale * 0.004)),
         )
-        for destination in destinations:
-            draw.line((*centre, *destination), fill=accent_blue, width=max(3, round(scale * 0.005)))
-        node_radius = max(12, round(scale * 0.022))
-        for point in (centre, *destinations):
-            draw.ellipse(
-                (point[0] - node_radius, point[1] - node_radius, point[0] + node_radius, point[1] + node_radius),
-                fill=accent_green if point == centre else panel,
-                outline=accent_yellow,
-                width=max(2, round(scale * 0.004)),
-            )
     elif visual_treatment == "visual_focus":
         paste_artwork(zone)
         draw.rounded_rectangle(
@@ -728,6 +729,7 @@ def _build_designed_carousel_canvas(
             width=max(3, round(scale * 0.006)),
         )
     elif visual_treatment == "feature_cards":
+        paste_artwork(zone, opacity=150)
         gap = max(10, round(scale * 0.014))
         card_height = (zone[3] - zone[1] - 2 * gap) // 3
         for index in range(3):
@@ -735,25 +737,58 @@ def _build_designed_carousel_canvas(
             draw.rounded_rectangle(
                 (zone[0], top, zone[2], top + card_height),
                 radius=max(10, round(scale * 0.018)),
-                fill=panel,
+                fill=None,
                 outline=(accent_yellow, accent_green, accent_blue)[index],
                 width=max(2, round(scale * 0.004)),
             )
+            icon_x = zone[0] + round((zone[2] - zone[0]) * 0.16)
+            icon_y = top + card_height // 2
+            icon_size = max(8, round(scale * 0.014))
+            if index == 0:
+                draw.ellipse(
+                    (icon_x - icon_size, icon_y - icon_size,
+                     icon_x + icon_size, icon_y + icon_size),
+                    fill=accent_yellow,
+                )
+            elif index == 1:
+                draw.rounded_rectangle(
+                    (icon_x - icon_size, icon_y - icon_size,
+                     icon_x + icon_size, icon_y + icon_size),
+                    radius=max(3, icon_size // 3), fill=accent_green,
+                )
+            else:
+                draw.polygon(
+                    ((icon_x, icon_y - icon_size),
+                     (icon_x + icon_size, icon_y + icon_size),
+                     (icon_x - icon_size, icon_y + icon_size)),
+                    fill=accent_blue,
+                )
     else:
         paste_artwork(zone)
 
     rail_height = max(8, round(scale * 0.012))
     rail_y = height - round(scale * 0.055)
-    draw.rounded_rectangle(
-        (round(width * 0.08), rail_y, round(width * 0.32), rail_y + rail_height),
-        radius=rail_height // 2,
-        fill=accent_yellow,
-    )
-    draw.rounded_rectangle(
-        (round(width * 0.335), rail_y, round(width * 0.47), rail_y + rail_height),
-        radius=rail_height // 2,
-        fill=accent_green,
-    )
+    if furniture_variant in {"dual_rail", "single_rail"}:
+        draw.rounded_rectangle(
+            (round(width * 0.08), rail_y, round(width * 0.32), rail_y + rail_height),
+            radius=rail_height // 2, fill=accent_yellow,
+        )
+    if furniture_variant == "dual_rail":
+        draw.rounded_rectangle(
+            (round(width * 0.335), rail_y, round(width * 0.47), rail_y + rail_height),
+            radius=rail_height // 2, fill=accent_green,
+        )
+    elif furniture_variant == "corner_marker":
+        marker = round(scale * 0.055)
+        x, y = round(width * 0.92), round(height * 0.92)
+        draw.line((x - marker, y, x, y), fill=accent_green, width=rail_height)
+        draw.line((x, y - marker, x, y), fill=accent_green, width=rail_height)
+    elif furniture_variant == "framed_edge":
+        inset = round(scale * 0.035)
+        draw.line(
+            (inset, inset, inset, height - inset),
+            fill=accent_blue, width=max(3, round(scale * 0.005)),
+        )
     return canvas
 
 
@@ -1204,6 +1239,7 @@ def render_social_text(
     emphasis=None,
     visual_treatment=None,
     visual_weight="medium",
+    furniture_variant="dual_rail",
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
     if layout != "carousel":
@@ -1225,6 +1261,8 @@ def render_social_text(
         raise SocialTextRenderError("unsupported_visual_treatment")
     if visual_weight not in VISUAL_WEIGHTS:
         raise SocialTextRenderError("unsupported_visual_weight")
+    if furniture_variant not in FURNITURE_VARIANTS:
+        raise SocialTextRenderError("unsupported_furniture_variant")
     if not isinstance(image_bytes, bytes) or not image_bytes:
         raise SocialTextRenderError("invalid_image")
     if len(image_bytes) > MAX_INPUT_BYTES:
@@ -1288,6 +1326,7 @@ def render_social_text(
                 effective_variant,
                 visual_treatment or "illustration",
                 visual_weight,
+                furniture_variant,
             )
         composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
         try:
@@ -1314,7 +1353,8 @@ def render_social_text(
                 raise
             if design_style == "viral_carousel":
                 image = _build_designed_carousel_canvas(
-                    image, effective_variant, "typography_only", visual_weight
+                    image, effective_variant, "typography_only", visual_weight,
+                    furniture_variant,
                 )
             composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
             _draw_role_composition(
