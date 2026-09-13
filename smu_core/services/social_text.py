@@ -62,6 +62,15 @@ VISUAL_TREATMENTS = {
     "feature_cards",
 }
 VISUAL_WEIGHTS = {"heavy", "medium", "light"}
+TYPOGRAPHY_PRESENTATIONS = {"editorial", "display", "quiet", "overlay_fallback"}
+EDITORIAL_COMPOSITIONS = {
+    "hero_bleed", "editorial_overlap", "asymmetric_split",
+    "negative_space", "poster", "vertical_editorial", "quiet",
+}
+OPTICAL_LOCKS = {
+    "edge_lock", "baseline_lock", "focal_lock", "centre_lock",
+    "tension_lock", "none",
+}
 FURNITURE_VARIANTS = {
     "dual_rail", "single_rail", "corner_marker", "framed_edge", "none",
 }
@@ -115,6 +124,15 @@ VIRAL_DESIGN_TOKENS = {
     "artwork_occupancy": {"heavy": 0.92, "medium": 0.72, "light": 0.46},
     "content_gutter": 0.04,
     "visual_weight_scale": {"heavy": 1.24, "medium": 1.0, "light": 0.90},
+    "editorial_composition": {
+        "hero_bleed": {"bleed": 0.02, "gap": 0.02, "headline_scale": 1.04},
+        "editorial_overlap": {"bleed": 0.01, "gap": 0.025, "headline_scale": 1.00},
+        "asymmetric_split": {"bleed": 0.0, "gap": 0.04, "headline_scale": 1.00},
+        "negative_space": {"bleed": 0.0, "gap": 0.06, "headline_scale": 0.96},
+        "poster": {"bleed": 0.015, "gap": 0.02, "headline_scale": 1.18},
+        "vertical_editorial": {"bleed": 0.01, "gap": 0.03, "headline_scale": 1.04},
+        "quiet": {"bleed": 0.0, "gap": 0.08, "headline_scale": 0.90},
+    },
 }
 
 VIRAL_COMPOSITION_ZONES = {
@@ -260,6 +278,46 @@ def _wrap_text(draw, text, font, max_width):
     return lines
 
 
+def _balanced_wrap_text(draw, text, font, max_width, max_lines):
+    """Choose measured line breaks with low raggedness and no avoidable orphan."""
+    paragraphs = text.split("\n")
+    if len(paragraphs) != 1:
+        return _wrap_text(draw, text, font, max_width)
+    words = text.split()
+    if not words:
+        return [""]
+    widths = {
+        (start, end): _line_width(draw, " ".join(words[start:end]), font)
+        for start in range(len(words)) for end in range(start + 1, len(words) + 1)
+    }
+    best = None
+    for line_count in range(1, min(max_lines, len(words)) + 1):
+        states = {(0, 0): (0.0, [])}
+        for line_index in range(line_count):
+            next_states = {}
+            for (used_lines, start), (cost, lines) in states.items():
+                if used_lines != line_index:
+                    continue
+                remaining_lines = line_count - line_index - 1
+                for end in range(start + 1, len(words) + 1):
+                    if len(words) - end < remaining_lines:
+                        break
+                    width = widths[(start, end)]
+                    if width > max_width:
+                        break
+                    raggedness = ((max_width - width) / max_width) ** 2
+                    orphan_penalty = 1.5 if end == len(words) and end - start == 1 and len(words) > 2 else 0
+                    key = (line_index + 1, end)
+                    candidate = (cost + raggedness + orphan_penalty, lines + [" ".join(words[start:end])])
+                    if key not in next_states or candidate[0] < next_states[key][0]:
+                        next_states[key] = candidate
+            states = next_states
+        candidate = states.get((line_count, len(words)))
+        if candidate and (best is None or candidate[0] < best[0]):
+            best = candidate
+    return best[1] if best else None
+
+
 def _fit_block(
     draw,
     text,
@@ -271,6 +329,7 @@ def _fit_block(
     min_size=MIN_FONT_SIZE,
     preferred_max_lines=None,
     weight="regular",
+    balanced=False,
 ):
     min_size = max(min_size, MIN_FONT_SIZE)
     start_size = max(start_size, min_size)
@@ -280,7 +339,10 @@ def _fit_block(
     for line_target in line_targets:
         for size in range(start_size, min_size - 1, -1):
             font = _load_font(size, weight)
-            lines = _wrap_text(draw, text, font, max_width)
+            lines = (
+                _balanced_wrap_text(draw, text, font, max_width, line_target)
+                if balanced else _wrap_text(draw, text, font, max_width)
+            )
             spacing = max(4, size // 5)
             if lines is not None and len(lines) <= line_target:
                 rendered = "\n".join(lines)
@@ -353,6 +415,7 @@ def _prepare_composition_block(
     stroke_width,
     preferred_max_lines=None,
     weight="regular",
+    balanced=False,
 ):
     if not text:
         return None
@@ -367,6 +430,7 @@ def _prepare_composition_block(
         min_size=min_size,
         preferred_max_lines=preferred_max_lines,
         weight=weight,
+        balanced=balanced,
     )
     measured = draw.multiline_textbbox(
         (0, 0), rendered, font=font, spacing=spacing, stroke_width=stroke_width
@@ -559,8 +623,189 @@ def _draw_mixed_headline(draw, block, emphasis, *, foreground, stroke_width, str
             x += draw.textlength(value, font=font)
 
 
+def _fit_balanced_mixed_headline(
+    draw, text, emphasis, box, *, max_lines, start_size, min_size, align,
+    stroke_width, preferred_max_lines=None,
+):
+    """Fit balanced lines while preserving exact emphasis character ranges."""
+    left, top, right, bottom = box
+    emphasis_start = text.index(emphasis["text"])
+    emphasis_end = emphasis_start + len(emphasis["text"])
+    line_targets = [max_lines]
+    if preferred_max_lines and preferred_max_lines < max_lines:
+        line_targets.insert(0, preferred_max_lines)
+    for line_target in line_targets:
+        for size in range(max(start_size, min_size), min_size - 1, -1):
+            base_font = _load_font(size, "black")
+            emphasis_weight = {
+                "primary": "black", "accent": "black", "normal": "bold"
+            }[emphasis["role"]]
+            fonts = (base_font, _load_font(size, emphasis_weight))
+            lines = _balanced_wrap_text(
+                draw, text, base_font, right - left, line_target
+            )
+            if not lines or len(lines) > line_target:
+                continue
+            ranges, cursor = [], 0
+            for line in lines:
+                start = text.find(line, cursor)
+                if start < 0:
+                    ranges = []
+                    break
+                ranges.append((start, start + len(line)))
+                cursor = start + len(line)
+            if not ranges:
+                continue
+            boundaries = {end for _, end in ranges[:-1]}
+            if any(emphasis_start < boundary < emphasis_end for boundary in boundaries):
+                continue
+            mixed_lines = [
+                _mixed_line_runs(text, start, end, emphasis_start, emphasis_end, fonts)
+                for start, end in ranges
+            ]
+            widths = [
+                sum(draw.textlength(value, font=font) for value, font, _ in runs)
+                for runs in mixed_lines
+            ]
+            spacing = max(4, size // 5)
+            metrics = [font.getbbox("Ag") for font in fonts]
+            line_height = max(metric[3] - metric[1] for metric in metrics)
+            total_height = len(lines) * line_height + max(0, len(lines) - 1) * spacing
+            if max(widths, default=0) > right - left or total_height > bottom - top:
+                continue
+            max_width = max(widths, default=0)
+            x = (
+                left + ((right - left) - max_width) / 2 if align == "center"
+                else right - max_width if align == "right" else left
+            )
+            return {
+                "position": (x, top), "text": text, "font": base_font,
+                "spacing": spacing, "align": align,
+                "bounds": (x, top, x + max_width, top + total_height),
+                "mixed_lines": mixed_lines, "line_widths": widths,
+                "line_height": line_height,
+            }
+    raise SocialTextRenderError("text_does_not_fit")
+
+
 def select_design_layout(layout_role, layout_variant=None):
     return layout_variant or ROLE_DESIGN_LAYOUTS[layout_role]
+
+
+def select_typography_presentation(
+    layout_role, visual_treatment, visual_weight
+):
+    if layout_role == "cta" or (
+        visual_treatment == "typography_only" and visual_weight == "light"
+    ):
+        return "quiet"
+    if layout_role in {"cover", "phrase"} or visual_weight == "heavy":
+        return "display"
+    return "editorial"
+
+
+def select_editorial_composition(
+    layout_role, visual_treatment, visual_weight, layout_variant,
+    typography_presentation, title="",
+):
+    """Select one bounded production composition without another model call."""
+    word_count = len(re.findall(r"\b[\w']+\b", title or "", re.UNICODE))
+    if layout_role == "cta" or typography_presentation == "quiet":
+        return "quiet"
+    if visual_treatment == "typography_only":
+        return "poster" if visual_weight == "heavy" and word_count <= 7 else "negative_space"
+    if layout_role == "cover" and visual_weight == "heavy":
+        return "hero_bleed"
+    if layout_role == "cover":
+        return "negative_space"
+    if (
+        typography_presentation == "display"
+        and visual_weight == "heavy"
+        and word_count <= 7
+    ):
+        return "poster"
+    if layout_variant in {"split_left", "split_right"}:
+        return "asymmetric_split"
+    if visual_treatment == "visual_focus" or visual_weight == "heavy":
+        return "hero_bleed"
+    if visual_weight == "light":
+        return "negative_space"
+    return "editorial_overlap"
+
+
+def select_optical_lock(editorial_composition, layout_variant, visual_weight):
+    """Map bounded composition metadata to one deterministic optical lock."""
+    if editorial_composition == "quiet":
+        return "none"
+    if editorial_composition == "poster":
+        return "tension_lock"
+    if editorial_composition == "vertical_editorial":
+        return "baseline_lock"
+    if editorial_composition == "asymmetric_split":
+        return "centre_lock"
+    if editorial_composition == "negative_space":
+        return "focal_lock"
+    if editorial_composition == "hero_bleed" and layout_variant == "hero_center":
+        return "edge_lock"
+    return "focal_lock" if visual_weight == "heavy" else "edge_lock"
+
+
+def _editorial_composition_definition(layout_variant, editorial_composition):
+    """Return collision envelopes; visible artwork may meet, never enter, text."""
+    base = VIRAL_COMPOSITION_ZONES[layout_variant]
+    if editorial_composition == "quiet":
+        return base
+    if editorial_composition == "vertical_editorial":
+        return {
+            **base,
+            "text": (0.08, 0.10, 0.72, 0.38),
+            "art": (0.20, 0.42, 1.00, 0.98),
+            "support": (0.08, 0.10, 0.72, 0.38),
+            "crop_mode": "cover",
+            "anchor": (0.58, 0.58),
+        }
+    right_art = layout_variant not in {"split_right"}
+    if layout_variant == "hero_center" and editorial_composition == "hero_bleed":
+        definitions = {
+            "hero_bleed": ((0.08, 0.14, 0.58, 0.86), (0.60, 0.00, 1.00, 0.96)),
+        }
+        base = VIRAL_COMPOSITION_ZONES["hero_left"]
+    elif layout_variant in {"hero_center", "visual_focus"}:
+        definitions = {
+            "hero_bleed": ((0.10, 0.57, 0.90, 0.88), (0.06, 0.00, 0.94, 0.55)),
+            "poster": ((0.08, 0.58, 0.92, 0.90), (0.03, 0.00, 0.97, 0.56)),
+            "editorial_overlap": ((0.10, 0.55, 0.90, 0.88), (0.10, 0.04, 0.90, 0.52)),
+            "negative_space": ((0.10, 0.55, 0.90, 0.88), (0.18, 0.08, 0.82, 0.49)),
+            "asymmetric_split": ((0.10, 0.55, 0.90, 0.88), (0.12, 0.04, 0.88, 0.52)),
+        }
+    elif right_art:
+        definitions = {
+            "hero_bleed": ((0.08, 0.15, 0.58, 0.86), (0.60, 0.02, 1.00, 0.94)),
+            "poster": ((0.08, 0.14, 0.56, 0.88), (0.58, 0.08, 0.99, 0.92)),
+            "editorial_overlap": ((0.08, 0.15, 0.55, 0.86), (0.575, 0.10, 0.96, 0.88)),
+            "asymmetric_split": ((0.08, 0.15, 0.56, 0.86), (0.60, 0.12, 0.96, 0.86)),
+            "negative_space": ((0.08, 0.14, 0.62, 0.86), (0.64, 0.20, 0.94, 0.76)),
+        }
+    else:
+        definitions = {
+            "hero_bleed": ((0.50, 0.15, 0.92, 0.86), (0.00, 0.02, 0.48, 0.94)),
+            "poster": ((0.44, 0.14, 0.92, 0.88), (0.01, 0.08, 0.42, 0.92)),
+            "editorial_overlap": ((0.45, 0.15, 0.92, 0.86), (0.04, 0.10, 0.425, 0.88)),
+            "asymmetric_split": ((0.44, 0.15, 0.92, 0.86), (0.04, 0.12, 0.40, 0.86)),
+            "negative_space": ((0.42, 0.15, 0.92, 0.86), (0.06, 0.20, 0.36, 0.76)),
+        }
+    text, art = definitions[editorial_composition]
+    protected_text = base["text"]
+    text = (
+        max(text[0], protected_text[0]), max(text[1], protected_text[1]),
+        min(text[2], protected_text[2]), min(text[3], protected_text[3]),
+    )
+    anchor = (
+        (0.18, 0.50)
+        if layout_variant == "hero_center" and editorial_composition == "hero_bleed"
+        else base["anchor"]
+    )
+    return {**base, "text": text, "art": art, "support": text, "anchor": anchor}
 
 
 def _style_tokens(design_style):
@@ -568,10 +813,14 @@ def _style_tokens(design_style):
 
 
 def viral_composition_zones(
-    width, height, layout_variant, visual_treatment=None
+    width, height, layout_variant, visual_treatment=None,
+    editorial_composition=None,
 ):
     """Return pixel-safe, non-overlapping text and artwork regions."""
-    definition = VIRAL_COMPOSITION_ZONES[layout_variant]
+    definition = (
+        _editorial_composition_definition(layout_variant, editorial_composition)
+        if editorial_composition else VIRAL_COMPOSITION_ZONES[layout_variant]
+    )
 
     def pixels(rect):
         return tuple(
@@ -587,7 +836,8 @@ def viral_composition_zones(
         "overlap_allowed": False,
         "crop_mode": (
             "cover"
-            if visual_treatment == "visual_focus"
+            if editorial_composition in {"hero_bleed", "poster"}
+            or visual_treatment == "visual_focus"
             else "contain"
             if visual_treatment in {"illustration", "diagram"}
             else definition["crop_mode"]
@@ -598,13 +848,13 @@ def viral_composition_zones(
 
 def viral_artwork_rect(
     width, height, layout_variant, visual_treatment="illustration",
-    visual_weight="medium",
+    visual_weight="medium", editorial_composition=None,
 ):
     """Return the weight-adjusted artwork rectangle inside the protected zone."""
     if visual_weight not in VISUAL_WEIGHTS:
         raise SocialTextRenderError("unsupported_visual_weight")
     zone = viral_composition_zones(
-        width, height, layout_variant, visual_treatment
+        width, height, layout_variant, visual_treatment, editorial_composition
     )["art_rect"]
     padding = round(
         min(width, height) * VIRAL_DESIGN_TOKENS["artwork_padding"][visual_weight]
@@ -613,6 +863,47 @@ def viral_artwork_rect(
         zone[0] + padding, zone[1] + padding,
         zone[2] - padding, zone[3] - padding,
     )
+
+
+def editorial_composition_geometry(
+    width, height, layout_variant, visual_treatment, visual_weight,
+    editorial_composition,
+    optical_lock=None,
+):
+    """Expose the exact deterministic production collision geometry."""
+    if editorial_composition not in EDITORIAL_COMPOSITIONS:
+        raise SocialTextRenderError("unsupported_editorial_composition")
+    zones = viral_composition_zones(
+        width, height, layout_variant, visual_treatment,
+        editorial_composition,
+    )
+    optical_lock = optical_lock or select_optical_lock(
+        editorial_composition, layout_variant, visual_weight
+    )
+    if optical_lock not in OPTICAL_LOCKS:
+        raise SocialTextRenderError("unsupported_optical_lock")
+    artwork_bounds = viral_artwork_rect(
+        width, height, layout_variant, visual_treatment, visual_weight,
+        editorial_composition,
+    )
+    text_rect = zones["text_rect"]
+    lock_target = {
+        "edge_lock": (artwork_bounds[0], (artwork_bounds[1] + artwork_bounds[3]) // 2),
+        "baseline_lock": ((artwork_bounds[0] + artwork_bounds[2]) // 2, artwork_bounds[1]),
+        "focal_lock": (round(artwork_bounds[0] + (artwork_bounds[2] - artwork_bounds[0]) * zones["anchor"][0]), round(artwork_bounds[1] + (artwork_bounds[3] - artwork_bounds[1]) * zones["anchor"][1])),
+        "centre_lock": ((artwork_bounds[0] + artwork_bounds[2]) // 2, (artwork_bounds[1] + artwork_bounds[3]) // 2),
+        "tension_lock": (artwork_bounds[0], artwork_bounds[1]),
+        "none": ((text_rect[0] + text_rect[2]) // 2, (text_rect[1] + text_rect[3]) // 2),
+    }[optical_lock]
+    return {
+        **zones,
+        "artwork_bounds": artwork_bounds,
+        "negative_space_rect": zones["text_rect"],
+        "artwork_fit": zones["crop_mode"],
+        "editorial_composition": editorial_composition,
+        "optical_lock": optical_lock,
+        "optical_lock_target": lock_target,
+    }
 
 
 def _analyze_text_region(image, box):
@@ -645,6 +936,7 @@ def _analyze_text_region(image, box):
 def _build_designed_carousel_canvas(
     source_image, layout_variant, visual_treatment="illustration",
     visual_weight="medium", furniture_variant="dual_rail",
+    editorial_composition=None,
 ):
     """Make artwork secondary to a deterministic, branded social-card canvas."""
     width, height = source_image.size
@@ -657,9 +949,13 @@ def _build_designed_carousel_canvas(
     panel = (18, 34, 58, 255)
 
     composition = viral_composition_zones(
-        width, height, layout_variant, visual_treatment
+        width, height, layout_variant, visual_treatment, editorial_composition
     )
     radius = max(16, round(scale * 0.035))
+
+    integrated = editorial_composition in {
+        "hero_bleed", "editorial_overlap", "negative_space", "poster",
+    }
 
     def paste_artwork(zone, *, opacity=235, mode=None, anchor=None):
         zone_width = zone[2] - zone[0]
@@ -682,17 +978,24 @@ def _build_designed_carousel_canvas(
                 method=Image.Resampling.LANCZOS,
                 centering=anchor,
             )
-        artwork = Image.alpha_composite(
-            artwork, Image.new("RGBA", artwork.size, (8, 20, 38, 54))
-        )
+        if not integrated:
+            artwork = Image.alpha_composite(
+                artwork, Image.new("RGBA", artwork.size, (8, 20, 38, 54))
+            )
         mask = Image.new("L", artwork.size, 0)
-        ImageDraw.Draw(mask).rounded_rectangle(
-            (0, 0, zone_width, zone_height), radius=radius, fill=opacity
-        )
+        if integrated:
+            ImageDraw.Draw(mask).rectangle(
+                (0, 0, zone_width, zone_height), fill=opacity
+            )
+        else:
+            ImageDraw.Draw(mask).rounded_rectangle(
+                (0, 0, zone_width, zone_height), radius=radius, fill=opacity
+            )
         canvas.paste(artwork, (zone[0], zone[1]), mask)
 
     zone = viral_artwork_rect(
-        width, height, layout_variant, visual_treatment, visual_weight
+        width, height, layout_variant, visual_treatment, visual_weight,
+        editorial_composition,
     )
     if visual_treatment == "typography_only":
         pass
@@ -722,12 +1025,13 @@ def _build_designed_carousel_canvas(
         )
     elif visual_treatment == "visual_focus":
         paste_artwork(zone)
-        draw.rounded_rectangle(
-            zone,
-            radius=radius,
-            outline=accent_green,
-            width=max(3, round(scale * 0.006)),
-        )
+        if not integrated:
+            draw.rounded_rectangle(
+                zone,
+                radius=radius,
+                outline=accent_green,
+                width=max(3, round(scale * 0.006)),
+            )
     elif visual_treatment == "feature_cards":
         paste_artwork(zone, opacity=150)
         gap = max(10, round(scale * 0.014))
@@ -810,9 +1114,28 @@ def _draw_role_composition(
     design_style,
     visual_treatment,
     visual_weight,
+    typography_presentation=None,
+    editorial_composition=None,
+    optical_lock=None,
     measure_only=False,
 ):
     design_layout = select_design_layout(layout_role, layout_variant)
+    typography_presentation = typography_presentation or select_typography_presentation(
+        layout_role, visual_treatment, visual_weight
+    )
+    if typography_presentation not in TYPOGRAPHY_PRESENTATIONS:
+        raise SocialTextRenderError("unsupported_typography_presentation")
+    editorial_composition = editorial_composition or select_editorial_composition(
+        layout_role, visual_treatment, visual_weight, design_layout,
+        typography_presentation, title,
+    )
+    if editorial_composition not in EDITORIAL_COMPOSITIONS:
+        raise SocialTextRenderError("unsupported_editorial_composition")
+    optical_lock = optical_lock or select_optical_lock(
+        editorial_composition, design_layout, visual_weight
+    )
+    if optical_lock not in OPTICAL_LOCKS:
+        raise SocialTextRenderError("unsupported_optical_lock")
     tokens = _style_tokens(design_style)
     content_width = width - 2 * margin
     scale = min(width, height)
@@ -822,7 +1145,7 @@ def _draw_role_composition(
         MIN_FONT_SIZE,
         round(scale * (0.052 if design_style == "viral_carousel" else 0.039)),
     )
-    padding = max(12, round(scale * 0.022))
+    padding = max(12, round(scale * 0.018))
     layout_tokens = {
         "hero_left": {
             "region": (margin, round(height * 0.14), round(width * 0.74), round(height * 0.86)),
@@ -882,10 +1205,24 @@ def _draw_role_composition(
         },
     }
     config = layout_tokens[design_layout]
+    if editorial_composition == "hero_bleed" and design_layout == "hero_center":
+        config = dict(config)
+        config["lines"] = (6, config["lines"][1], config["lines"][2])
+        config["preferred"] = (5, config["preferred"][1], config["preferred"][2])
+    presentation_scale = {
+        "display": 1.00,
+        "editorial": 0.78,
+        "quiet": 0.65,
+        "overlay_fallback": 0.72,
+    }[typography_presentation]
+    presentation_scale *= VIRAL_DESIGN_TOKENS["editorial_composition"][
+        editorial_composition
+    ]["headline_scale"]
     if design_style == "viral_carousel" and design_layout != "compact_statement":
         config = dict(config)
         config["region"] = viral_composition_zones(
-            width, height, design_layout
+            width, height, design_layout, visual_treatment,
+            editorial_composition,
         )["text_rect"]
     region_left, region_top, region_right, region_bottom = config["region"]
     if design_style != "viral_carousel":
@@ -947,6 +1284,7 @@ def _draw_role_composition(
             continue
         if kind == "title" and design_style == "viral_carousel":
             font_scale *= VIRAL_DESIGN_TOKENS["visual_weight_scale"][visual_weight]
+            font_scale *= presentation_scale
             word_count = len(re.findall(r"\b[\w']+\b", value, re.UNICODE))
             if word_count <= 4:
                 font_scale *= 1.16 if visual_treatment == "typography_only" else 1.08
@@ -969,9 +1307,14 @@ def _draw_role_composition(
             "align": config["align"],
             "stroke_width": stroke_width,
             "preferred_max_lines": preferred,
+            "balanced": design_style == "viral_carousel" and kind != "cta",
         }
         if kind == "title" and emphasis:
-            block = _fit_mixed_headline(
+            balanced = block_options.pop("balanced")
+            mixed_fitter = (
+                _fit_balanced_mixed_headline if balanced else _fit_mixed_headline
+            )
+            block = mixed_fitter(
                 draw, value, emphasis, block_box, **block_options
             )
         else:
@@ -982,16 +1325,59 @@ def _draw_role_composition(
         blocks.append(block)
         cursor = block["bounds"][3] + gap
 
+    if design_style == "viral_carousel" and blocks:
+        typography_top = min(block["bounds"][1] for block in blocks)
+        typography_bottom = max(block["bounds"][3] for block in blocks)
+        available = region_bottom - region_top
+        used = typography_bottom - typography_top
+        optical_fraction = {
+            "hero_left": 0.42,
+            "hero_center": 0.52,
+            "split_left": 0.48,
+            "split_right": 0.48,
+            "editorial_statement": 0.38,
+            "visual_focus": 0.50,
+            "closing": 0.50,
+            "compact_statement": 0.40,
+        }[design_layout]
+        if editorial_composition in {"hero_bleed", "poster"}:
+            optical_fraction = 0.58 if design_layout in {"hero_center", "visual_focus"} else 0.46
+        elif editorial_composition == "negative_space":
+            optical_fraction = 0.44
+        if optical_lock == "edge_lock":
+            optical_fraction = 0.50
+        elif optical_lock == "baseline_lock":
+            optical_fraction = 0.18
+        elif optical_lock == "tension_lock":
+            optical_fraction = 0.36
+        target_top = region_top + max(0, available - used) * optical_fraction
+        shift = round(target_top - typography_top)
+        for block in blocks:
+            block["position"] = (block["position"][0], block["position"][1] + shift)
+            block["bounds"] = (
+                block["bounds"][0], block["bounds"][1] + shift,
+                block["bounds"][2], block["bounds"][3] + shift,
+            )
+
     typography_bounds = (
         min(block["bounds"][0] for block in blocks),
         min(block["bounds"][1] for block in blocks),
         max(block["bounds"][2] for block in blocks),
         max(block["bounds"][3] for block in blocks),
     )
-    if typography_bounds[3] > region_bottom:
+    if (
+        typography_bounds[0] < region_left
+        or typography_bounds[2] > region_right
+        or typography_bounds[3] > region_bottom
+    ):
         raise SocialTextRenderError("text_does_not_fit")
     if measure_only:
-        result = {"typography_bounds": typography_bounds, "layout": design_layout}
+        result = {
+            "typography_bounds": typography_bounds,
+            "layout": design_layout,
+            "editorial_composition": editorial_composition,
+            "optical_lock": optical_lock,
+        }
         for block in blocks:
             kind = block["kind"]
             if kind not in {"title", "body", "cta"}:
@@ -1005,24 +1391,20 @@ def _draw_role_composition(
                 "bounds": block["bounds"],
             }
         return result
-    if analysis["busy"]:
-        surface_padding = max(10, round(scale * 0.018))
-        surface_bounds = (
-            max(margin, typography_bounds[0] - surface_padding),
-            max(margin, typography_bounds[1] - surface_padding),
-            min(width - margin, typography_bounds[2] + surface_padding),
-            min(height - margin, typography_bounds[3] + surface_padding),
-        )
-        surface_fill = (
-            (8, 12, 20, tokens["surface_alpha"])
-            if foreground[0] > 128
-            else (248, 248, 244, min(140, tokens["surface_alpha"] + 18))
-        )
-        draw.rounded_rectangle(
-            surface_bounds,
-            radius=max(3, surface_padding // 3),
-            fill=surface_fill,
-        )
+    if analysis["busy"] and typography_presentation == "overlay_fallback":
+        scrim_padding = max(12, round(scale * 0.024))
+        scrim_top = max(margin, typography_bounds[1] - scrim_padding)
+        scrim_bottom = min(height - margin, typography_bounds[3] + scrim_padding)
+        scrim_left = max(margin, typography_bounds[0] - scrim_padding)
+        scrim_right = min(width - margin, typography_bounds[2] + scrim_padding)
+        scrim_colour = (8, 12, 20) if foreground[0] > 128 else (248, 248, 244)
+        for offset in range(max(1, scrim_bottom - scrim_top)):
+            edge_distance = min(offset, scrim_bottom - scrim_top - offset - 1)
+            alpha = round(92 * min(1.0, edge_distance / max(1, scrim_padding)))
+            draw.line(
+                (scrim_left, scrim_top + offset, scrim_right, scrim_top + offset),
+                fill=(*scrim_colour, alpha),
+            )
 
     for block in blocks:
         if block["kind"] == "title" and "mixed_lines" in block:
@@ -1091,6 +1473,9 @@ def preflight_viral_carousel_text(
     layout_variant,
     visual_treatment,
     visual_weight="medium",
+    typography_presentation=None,
+    editorial_composition=None,
+    optical_lock=None,
     allow_compact_fallback=True,
 ):
     """Measure the exact production typography path without rendering output."""
@@ -1100,6 +1485,32 @@ def preflight_viral_carousel_text(
             "headline_fits": False,
             "support_fits": not bool(body),
             "failure_reason": "unsupported_visual_weight",
+        }
+    if (
+        typography_presentation is not None
+        and typography_presentation not in TYPOGRAPHY_PRESENTATIONS
+    ):
+        return {
+            "fits": False,
+            "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": "unsupported_typography_presentation",
+        }
+    if optical_lock is not None and optical_lock not in OPTICAL_LOCKS:
+        return {
+            "fits": False, "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": "unsupported_optical_lock",
+        }
+    if (
+        editorial_composition is not None
+        and editorial_composition not in EDITORIAL_COMPOSITIONS
+    ):
+        return {
+            "fits": False,
+            "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": "unsupported_editorial_composition",
         }
     try:
         title = _validated_text("title", title, required=True)
@@ -1162,6 +1573,9 @@ def preflight_viral_carousel_text(
         "design_style": "viral_carousel",
         "visual_treatment": visual_treatment,
         "visual_weight": visual_weight,
+        "typography_presentation": typography_presentation,
+        "editorial_composition": editorial_composition,
+        "optical_lock": optical_lock,
         "measure_only": True,
     }
     used_layout = layout_variant
@@ -1221,6 +1635,8 @@ def preflight_viral_carousel_text(
         "support_lines": support.get("lines", 0),
         "failure_reason": None,
         "layout": used_layout,
+        "editorial_composition": measurement["editorial_composition"],
+        "typography_bounds": measurement["typography_bounds"],
     }
 
 
@@ -1240,6 +1656,9 @@ def render_social_text(
     visual_treatment=None,
     visual_weight="medium",
     furniture_variant="dual_rail",
+    typography_presentation=None,
+    editorial_composition=None,
+    optical_lock=None,
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
     if layout != "carousel":
@@ -1263,6 +1682,18 @@ def render_social_text(
         raise SocialTextRenderError("unsupported_visual_weight")
     if furniture_variant not in FURNITURE_VARIANTS:
         raise SocialTextRenderError("unsupported_furniture_variant")
+    if (
+        typography_presentation is not None
+        and typography_presentation not in TYPOGRAPHY_PRESENTATIONS
+    ):
+        raise SocialTextRenderError("unsupported_typography_presentation")
+    if (
+        editorial_composition is not None
+        and editorial_composition not in EDITORIAL_COMPOSITIONS
+    ):
+        raise SocialTextRenderError("unsupported_editorial_composition")
+    if optical_lock is not None and optical_lock not in OPTICAL_LOCKS:
+        raise SocialTextRenderError("unsupported_optical_lock")
     if not isinstance(image_bytes, bytes) or not image_bytes:
         raise SocialTextRenderError("invalid_image")
     if len(image_bytes) > MAX_INPUT_BYTES:
@@ -1320,6 +1751,13 @@ def render_social_text(
     content_width = width - 2 * margin
     if layout_role is not None:
         effective_variant = select_design_layout(layout_role, layout_variant)
+        effective_typography = typography_presentation or select_typography_presentation(
+            layout_role, visual_treatment, visual_weight
+        )
+        effective_composition = editorial_composition or select_editorial_composition(
+            layout_role, visual_treatment, visual_weight, effective_variant,
+            effective_typography, title,
+        )
         if design_style == "viral_carousel":
             image = _build_designed_carousel_canvas(
                 image,
@@ -1327,6 +1765,7 @@ def render_social_text(
                 visual_treatment or "illustration",
                 visual_weight,
                 furniture_variant,
+                effective_composition,
             )
         composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
         try:
@@ -1347,6 +1786,9 @@ def render_social_text(
                 design_style=design_style,
                 visual_treatment=visual_treatment,
                 visual_weight=visual_weight,
+                typography_presentation=typography_presentation,
+                editorial_composition=effective_composition,
+                optical_lock=optical_lock,
             )
         except SocialTextRenderError as exc:
             if exc.reason != "text_does_not_fit":
@@ -1355,6 +1797,7 @@ def render_social_text(
                 image = _build_designed_carousel_canvas(
                     image, effective_variant, "typography_only", visual_weight,
                     furniture_variant,
+                    effective_composition,
                 )
             composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
             _draw_role_composition(
@@ -1374,6 +1817,9 @@ def render_social_text(
                 design_style=design_style,
                 visual_treatment=visual_treatment,
                 visual_weight=visual_weight,
+                typography_presentation=typography_presentation,
+                editorial_composition=effective_composition,
+                optical_lock=optical_lock,
             )
         image = Image.alpha_composite(image, composition_layer)
         output = BytesIO()

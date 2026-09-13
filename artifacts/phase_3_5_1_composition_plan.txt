@@ -1,0 +1,79 @@
+PHASE 3.5.1 EDITORIAL COMPOSITION PLAN
+
+SLIDE 1
+role: cover
+treatment: visual_focus
+layout: hero_center
+visual_weight: heavy
+typography_presentation: display
+editorial_composition: hero_bleed
+artwork fitting mode: cover
+artwork final bounds: (61, 0, 963, 563)
+text final bounds: (142.0, 634, 882.0, 844)
+negative-space strategy: protected quiet field (123, 584, 901, 881)
+why selected: heavy hero expands to an edge while type locks to the opposing quiet field
+
+SLIDE 2
+role: info
+treatment: typography_only
+layout: visual_focus
+visual_weight: light
+typography_presentation: quiet
+editorial_composition: quiet
+artwork fitting mode: cover
+artwork final bounds: (200, 149, 824, 435)
+text final bounds: (100, 650, 921.0, 835)
+negative-space strategy: protected quiet field (82, 584, 942, 901)
+why selected: closing remains restrained and typography-led
+
+SLIDE 3
+role: info
+treatment: illustration
+layout: split_left
+visual_weight: medium
+typography_presentation: editorial
+editorial_composition: asymmetric_split
+artwork fitting mode: contain
+artwork final bounds: (620, 129, 977, 875)
+text final bounds: (100, 451, 524.0, 570)
+negative-space strategy: protected quiet field (82, 164, 553, 881)
+why selected: bounded 58/42-style relationship replaces a mechanical half split
+
+SLIDE 4
+role: info
+treatment: illustration
+layout: split_right
+visual_weight: medium
+typography_presentation: editorial
+editorial_composition: asymmetric_split
+artwork fitting mode: contain
+artwork final bounds: (47, 129, 404, 875)
+text final bounds: (489.0, 454, 924.0, 566)
+negative-space strategy: protected quiet field (471, 164, 942, 881)
+why selected: bounded 58/42-style relationship replaces a mechanical half split
+
+SLIDE 5
+role: info
+treatment: diagram
+layout: visual_focus
+visual_weight: heavy
+typography_presentation: display
+editorial_composition: hero_bleed
+artwork fitting mode: cover
+artwork final bounds: (61, 0, 963, 563)
+text final bounds: (120, 651, 902.0, 852)
+negative-space strategy: protected quiet field (102, 584, 922, 901)
+why selected: heavy hero expands to an edge while type locks to the opposing quiet field
+
+SLIDE 6
+role: cta
+treatment: typography_only
+layout: closing
+visual_weight: light
+typography_presentation: quiet
+editorial_composition: quiet
+artwork fitting mode: contain
+artwork final bounds: (835, 159, 886, 179)
+text final bounds: (152.0, 509, 872.0, 639)
+negative-space strategy: protected quiet field (133, 307, 891, 840)
+why selected: closing remains restrained and typography-led

@@ -35,6 +35,17 @@ OVERLAY_METAPHOR_FAMILIES = {
     "node_network", "document", "device", "card_stack", "human_figure",
     "process_arrow", "distinct_object", "transformation", "focal_object",
 }
+OVERLAY_TYPOGRAPHY_PRESENTATIONS = {
+    "editorial", "display", "quiet", "overlay_fallback",
+}
+OVERLAY_EDITORIAL_COMPOSITIONS = {
+    "hero_bleed", "editorial_overlap", "asymmetric_split",
+    "negative_space", "poster", "vertical_editorial", "quiet",
+}
+OVERLAY_OPTICAL_LOCKS = {
+    "edge_lock", "baseline_lock", "focal_lock", "centre_lock",
+    "tension_lock", "none",
+}
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
 OVERLAY_LAYOUT_VARIANTS = {
     "hero_left",
@@ -63,6 +74,7 @@ SAFE_GENERATION_FAILURE_REASONS = {
     "unsupported_visual_treatment",
     "unsupported_visual_weight",
     "unsupported_furniture_variant",
+    "unsupported_editorial_composition",
 }
 DESIGN_STYLE_MARKERS = {
     "Style: realistic social media image": "realistic",
@@ -143,6 +155,9 @@ def build_content_pack_overlay_prompt(
     visual_weight=None,
     furniture_variant=None,
     metaphor_family=None,
+    typography_presentation=None,
+    editorial_composition=None,
+    optical_lock=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -185,6 +200,27 @@ def build_content_pack_overlay_prompt(
             and (
                 not isinstance(metaphor_family, str)
                 or metaphor_family not in OVERLAY_METAPHOR_FAMILIES
+            )
+        )
+        or (
+            typography_presentation is not None
+            and (
+                not isinstance(typography_presentation, str)
+                or typography_presentation not in OVERLAY_TYPOGRAPHY_PRESENTATIONS
+            )
+        )
+        or (
+            editorial_composition is not None
+            and (
+                not isinstance(editorial_composition, str)
+                or editorial_composition not in OVERLAY_EDITORIAL_COMPOSITIONS
+            )
+        )
+        or (
+            optical_lock is not None
+            and (
+                not isinstance(optical_lock, str)
+                or optical_lock not in OVERLAY_OPTICAL_LOCKS
             )
         )
         or (
@@ -236,6 +272,12 @@ def build_content_pack_overlay_prompt(
         payload["furniture_variant"] = furniture_variant
     if metaphor_family is not None:
         payload["metaphor_family"] = metaphor_family
+    if typography_presentation is not None:
+        payload["typography_presentation"] = typography_presentation
+    if editorial_composition is not None:
+        payload["editorial_composition"] = editorial_composition
+    if optical_lock is not None:
+        payload["optical_lock"] = optical_lock
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -275,6 +317,9 @@ def parse_overlay_prompt(prompt):
         "visual_weight",
         "furniture_variant",
         "metaphor_family",
+        "typography_presentation",
+        "editorial_composition",
+        "optical_lock",
     }
     if (
         not isinstance(payload, dict)
@@ -337,6 +382,29 @@ def parse_overlay_prompt(prompt):
             and (
                 not isinstance(payload["metaphor_family"], str)
                 or payload["metaphor_family"] not in OVERLAY_METAPHOR_FAMILIES
+            )
+        )
+        or (
+            "typography_presentation" in payload
+            and (
+                not isinstance(payload["typography_presentation"], str)
+                or payload["typography_presentation"]
+                not in OVERLAY_TYPOGRAPHY_PRESENTATIONS
+            )
+        )
+        or (
+            "editorial_composition" in payload
+            and (
+                not isinstance(payload["editorial_composition"], str)
+                or payload["editorial_composition"]
+                not in OVERLAY_EDITORIAL_COMPOSITIONS
+            )
+        )
+        or (
+            "optical_lock" in payload
+            and (
+                not isinstance(payload["optical_lock"], str)
+                or payload["optical_lock"] not in OVERLAY_OPTICAL_LOCKS
             )
         )
     ):
@@ -473,6 +541,16 @@ def generate_pending_carousel_images(
                     overlay["visual_weight"] = overlay_payload["visual_weight"]
                 if "furniture_variant" in overlay_payload:
                     overlay["furniture_variant"] = overlay_payload["furniture_variant"]
+                if "typography_presentation" in overlay_payload:
+                    overlay["typography_presentation"] = overlay_payload[
+                        "typography_presentation"
+                    ]
+                if "editorial_composition" in overlay_payload:
+                    overlay["editorial_composition"] = overlay_payload[
+                        "editorial_composition"
+                    ]
+                if "optical_lock" in overlay_payload:
+                    overlay["optical_lock"] = overlay_payload["optical_lock"]
                 image_url = image_generator(
                     overlay_payload["background_prompt"],
                     overlay=overlay,

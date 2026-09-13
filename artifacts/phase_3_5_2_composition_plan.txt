@@ -1,0 +1,79 @@
+PHASE 3.5.2 FINAL COMPOSITION PLAN
+
+SLIDE 1
+role: cover
+treatment: visual_focus
+visual_weight: heavy
+composition mode: hero_bleed
+optical lock mode: edge_lock
+artwork fit: cover
+artwork bounds: (614, 0, 1024, 983)
+typography bounds: (103.5, 393, 572.5, 631)
+negative-space strategy: measured field (82, 143, 594, 881)
+furniture: dual_rail
+adjacent distinction: hero side-lock
+
+SLIDE 2
+role: info
+treatment: typography_only
+visual_weight: light
+composition mode: quiet
+optical lock mode: none
+artwork fit: cover
+artwork bounds: (200, 149, 824, 435)
+typography bounds: (100, 650, 921.0, 835)
+negative-space strategy: measured field (82, 584, 942, 901)
+furniture: corner_marker
+adjacent distinction: quiet breaks the adjacent geometry
+
+SLIDE 3
+role: info
+treatment: illustration
+visual_weight: medium
+composition mode: asymmetric_split
+optical lock mode: centre_lock
+artwork fit: contain
+artwork bounds: (620, 129, 977, 875)
+typography bounds: (100, 451, 524.0, 570)
+negative-space strategy: measured field (82, 164, 553, 881)
+furniture: framed_edge
+adjacent distinction: asymmetric_split breaks the adjacent geometry
+
+SLIDE 4
+role: info
+treatment: illustration
+visual_weight: medium
+composition mode: vertical_editorial
+optical lock mode: baseline_lock
+artwork fit: contain
+artwork bounds: (211, 436, 1018, 998)
+typography bounds: (107.0, 125, 719.0, 284)
+negative-space strategy: measured field (82, 102, 737, 389)
+furniture: none
+adjacent distinction: vertical_editorial breaks the adjacent geometry
+
+SLIDE 5
+role: info
+treatment: diagram
+visual_weight: heavy
+composition mode: hero_bleed
+optical lock mode: focal_lock
+artwork fit: cover
+artwork bounds: (61, 0, 963, 563)
+typography bounds: (120, 651, 902.0, 852)
+negative-space strategy: measured field (102, 584, 922, 901)
+furniture: framed_edge
+adjacent distinction: hero_bleed breaks the adjacent geometry
+
+SLIDE 6
+role: cta
+treatment: typography_only
+visual_weight: light
+composition mode: quiet
+optical lock mode: none
+artwork fit: contain
+artwork bounds: (835, 159, 886, 179)
+typography bounds: (152.0, 509, 872.0, 639)
+negative-space strategy: measured field (133, 307, 891, 840)
+furniture: single_rail
+adjacent distinction: restrained close

@@ -10,7 +10,12 @@ from smu_core.models import Post
 from smu_core.services.access import subscription_required
 from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
 from smu_core.services.content import ContentPackGenerationError
-from smu_core.services.social_text import preflight_viral_carousel_text
+from smu_core.services.social_text import (
+    preflight_viral_carousel_text,
+    select_editorial_composition,
+    select_optical_lock,
+    select_typography_presentation,
+)
 
 
 content_pack_bp = Blueprint("content_pack", __name__)
@@ -491,6 +496,9 @@ def _carousel_presentations(slides):
         )
         if visual_weight == "heavy" and layout == "editorial_statement":
             layout = "visual_focus"
+        typography_presentation = select_typography_presentation(
+            role, treatment, visual_weight
+        )
         presentations.append(
             {
                 "role": role,
@@ -498,6 +506,11 @@ def _carousel_presentations(slides):
                 "layout": layout,
                 "semantic_text": semantic_text,
                 "visual_weight": visual_weight,
+                "typography_presentation": typography_presentation,
+                "editorial_composition": select_editorial_composition(
+                    role, treatment, visual_weight, layout,
+                    typography_presentation, slide["title"],
+                ),
                 "metaphor": metaphor,
                 "artwork_required": treatment != "typography_only",
                 "furniture": (
@@ -558,6 +571,37 @@ def _carousel_presentations(slides):
     ):
         relief_index = 1 + len(presentations[1:-1]) // 2
         presentations[relief_index]["visual_weight"] = "light"
+    for index, presentation in enumerate(presentations):
+        presentation["typography_presentation"] = select_typography_presentation(
+            presentation["role"], presentation["treatment"],
+            presentation["visual_weight"],
+        )
+        presentation["editorial_composition"] = select_editorial_composition(
+            presentation["role"], presentation["treatment"],
+            presentation["visual_weight"], presentation["layout"],
+            presentation["typography_presentation"], slides[index]["title"],
+        )
+        if index:
+            previous = presentations[index - 1]
+            semantic = presentation["semantic_text"].lower()
+            genuine_split = (
+                presentation["treatment"] in {"comparison", "process"}
+                or any(word in semantic for word in ("versus", "compare", "before", "after"))
+            )
+            mirrored_pair = (
+                {previous["layout"], presentation["layout"]}
+                == {"split_left", "split_right"}
+                and previous["treatment"] == presentation["treatment"]
+                and previous["visual_weight"] != "heavy"
+                and presentation["visual_weight"] != "heavy"
+            )
+            if mirrored_pair and not genuine_split:
+                presentation["editorial_composition"] = "vertical_editorial"
+                presentation["furniture"] = "none"
+        presentation["optical_lock"] = select_optical_lock(
+            presentation["editorial_composition"], presentation["layout"],
+            presentation["visual_weight"],
+        )
     return presentations
 
 
@@ -632,6 +676,9 @@ def _validate_viral_carousel_copy(slides, presentations=None):
             layout_variant=layout,
             visual_treatment=treatment,
             visual_weight=presentation["visual_weight"],
+            typography_presentation=presentation["typography_presentation"],
+            editorial_composition=presentation["editorial_composition"],
+            optical_lock=presentation["optical_lock"],
         )
         if not result["fits"]:
             support_failure = bool(body) and not result["support_fits"]
@@ -1060,6 +1107,9 @@ def create_content_pack_carousel():
                 visual_weight=presentation["visual_weight"],
                 furniture_variant=presentation["furniture"],
                 metaphor_family=presentation["metaphor"],
+                typography_presentation=presentation["typography_presentation"],
+                editorial_composition=presentation["editorial_composition"],
+                optical_lock=presentation["optical_lock"],
             )
 
             post = Post(

@@ -1,0 +1,13 @@
+PHASE 3.5 EDITORIAL TYPOGRAPHY REVIEW
+
+Previous behavior: busy text regions received one dark/light rounded surface around measured typography.
+Responsible path: social_text._draw_role_composition.
+Modes: display, editorial, quiet, overlay_fallback.
+Scale: display > editorial > quiet; visual weight remains an independent multiplier.
+Wrapping: measured dynamic line partitioning minimizes raggedness and penalizes avoidable final-word orphans.
+Support: medium-weight deck, smaller than headline, with explicit inter-block spacing.
+Contrast: direct type by default; overlay_fallback uses a soft local gradient scrim, never a rounded label.
+Protected zones: unchanged and used as invisible hard boundaries.
+Preflight parity: production and preflight call the same fitter and optical-placement function.
+API calls: 0. Credits: unchanged.
+Phase 3.1 through Phase 3.4.2: preserved.

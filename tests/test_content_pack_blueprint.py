@@ -606,6 +606,95 @@ Visual: A semantic network connecting source and audience"""
     assert presentation["layout"] == "visual_focus"
 
 
+def test_planner_derives_allowlisted_typography_presentations():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Strong cover
+Visual: One focal object
+Slide 2:
+Title: Editorial explanation
+Visual: One document under analysis
+Slide 3:
+CTA: Finish with purpose
+Visual: Typography-only statement"""
+    )
+
+    presentations = content_pack_routes._carousel_presentations(slides)
+
+    assert [item["typography_presentation"] for item in presentations] == [
+        "display", "editorial", "quiet",
+    ]
+
+
+def test_planner_derives_deterministic_editorial_composition_rhythm():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Strong cover
+Visual Weight: heavy
+Visual: One focal object
+Slide 2:
+Title: A concise internal payoff
+Visual Weight: heavy
+Visual: One document under analysis
+Slide 3:
+CTA: Finish with purpose
+Visual: Typography-only statement"""
+    )
+
+    first = content_pack_routes._carousel_presentations(slides)
+    second = content_pack_routes._carousel_presentations(slides)
+
+    assert [item["editorial_composition"] for item in first] == [
+        "hero_bleed", "poster", "quiet",
+    ]
+    assert first == second
+
+
+def test_nonsemantic_mirrored_internal_pair_remaps_to_vertical_composition():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Strong cover
+Visual: One focal object
+Slide 2:
+Title: Reveal the strongest idea
+Visual Weight: medium
+Visual: One document under analysis
+Slide 3:
+Title: Adapt for every audience
+Visual Weight: medium
+Visual: One human figure adapting an idea for an audience
+Slide 4:
+CTA: Finish with purpose
+Visual: Typography-only statement"""
+    )
+    presentations = content_pack_routes._carousel_presentations(slides)
+    assert presentations[1]["layout"] != presentations[2]["layout"]
+    assert presentations[2]["editorial_composition"] == "vertical_editorial"
+    assert presentations[2]["optical_lock"] == "baseline_lock"
+    assert presentations[2]["furniture"] == "none"
+
+
+def test_genuine_comparison_split_is_not_remapped_to_vertical():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Strong cover
+Visual: One focal object
+Slide 2:
+Title: Before and after
+Visual: Compare two states before and after
+Slide 3:
+Title: Compare the outcomes
+Visual: Comparison of the two outcomes
+Slide 4:
+CTA: Finish with purpose"""
+    )
+    presentations = content_pack_routes._carousel_presentations(slides)
+    assert all(
+        item["editorial_composition"] != "vertical_editorial"
+        for item in presentations[1:3]
+    )
+
+
 def test_carousel_plan_breaks_adjacent_diagram_and_metaphor_repetition():
     slides = content_pack_routes._parse_content_pack_carousel_slides(
         """Slide 1:

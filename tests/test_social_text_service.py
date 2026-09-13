@@ -444,7 +444,7 @@ def test_light_and_dark_regions_choose_opposite_readable_foregrounds():
     assert social_text._analyze_text_region(dark, box)["foreground"] == (255, 255, 255, 255)
 
 
-def test_busy_background_uses_one_localized_surface_bounded_to_typography(monkeypatch):
+def test_busy_background_does_not_draw_default_text_container(monkeypatch):
     image = Image.new("RGB", (1000, 1000))
     draw = ImageDraw.Draw(image)
     for y in range(0, 1000, 20):
@@ -469,10 +469,70 @@ def test_busy_background_uses_one_localized_surface_bounded_to_typography(monkey
         layout_role="info",
     )
 
-    assert len(surfaces) == 1
-    left, top, right, bottom = surfaces[0]
-    assert (right - left) * (bottom - top) / 1_000_000 < 0.35
-    assert bottom < round(1000 * 0.78)
+    assert surfaces == []
+
+
+def test_overlay_fallback_uses_soft_scrim_not_rounded_text_container(monkeypatch):
+    image = Image.new("RGB", (1000, 1000))
+    draw = ImageDraw.Draw(image)
+    for y in range(0, 1000, 20):
+        for x in range(0, 1000, 20):
+            fill = "white" if (x // 20 + y // 20) % 2 else "black"
+            draw.rectangle((x, y, x + 19, y + 19), fill=fill)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    surfaces, scrim_lines = [], []
+    original_rectangle = ImageDraw.ImageDraw.rounded_rectangle
+    original_line = ImageDraw.ImageDraw.line
+
+    def capture_rectangle(self, bounds, *args, **kwargs):
+        if kwargs.get("fill") in {(8, 12, 20, 112), (248, 248, 244, 130)}:
+            surfaces.append(bounds)
+        return original_rectangle(self, bounds, *args, **kwargs)
+
+    def capture_line(self, points, *args, **kwargs):
+        fill = kwargs.get("fill")
+        if isinstance(fill, tuple) and len(fill) == 4 and fill[3] <= 92:
+            scrim_lines.append(points)
+        return original_line(self, points, *args, **kwargs)
+
+    monkeypatch.setattr(ImageDraw.ImageDraw, "rounded_rectangle", capture_rectangle)
+    monkeypatch.setattr(ImageDraw.ImageDraw, "line", capture_line)
+    social_text.render_social_text(
+        buffer.getvalue(), title="Busy but readable", layout_role="info",
+        typography_presentation="overlay_fallback",
+    )
+
+    assert surfaces == []
+    assert scrim_lines
+
+
+def test_typography_presentations_have_deterministic_scale_hierarchy():
+    sizes = {}
+    for presentation in ("display", "editorial", "quiet"):
+        result = social_text.preflight_viral_carousel_text(
+            title="Time", layout_role="info",
+            layout_variant="visual_focus",
+            visual_treatment="illustration", visual_weight="medium",
+            typography_presentation=presentation,
+        )
+        assert result["fits"] is True
+        sizes[presentation] = result["headline_font_size"]
+
+    assert sizes["display"] > sizes["editorial"] > sizes["quiet"]
+
+
+def test_balanced_wrap_avoids_single_word_orphan_when_two_lines_fit():
+    image = Image.new("RGBA", (1024, 1024))
+    draw = ImageDraw.Draw(image)
+    font = social_text._load_font(50, "black")
+
+    lines = social_text._balanced_wrap_text(
+        draw, "Adapt for every audience.", font, 430, 3
+    )
+
+    assert len(lines) == 2
+    assert len(lines[-1].split()) > 1
 
 
 def test_role_aware_layouts_draw_no_decorative_dash_or_accent(monkeypatch):
@@ -1556,3 +1616,111 @@ def test_structured_treatments_use_provider_artwork_inside_safe_zone(treatment):
 
     assert sample[0] > sample[1]
     assert sample[0] > sample[2]
+
+
+@pytest.mark.parametrize("composition", sorted(social_text.EDITORIAL_COMPOSITIONS))
+def test_editorial_composition_vocabulary_is_renderable_and_collision_safe(composition):
+    geometry = social_text.editorial_composition_geometry(
+        1024, 1024, "split_left", "illustration", "medium", composition
+    )
+    art = geometry["artwork_bounds"]
+    text = geometry["text_rect"]
+
+    assert 0 <= art[0] < art[2] <= 1024
+    assert 0 <= art[1] < art[3] <= 1024
+    assert 0 <= text[0] < text[2] <= 1024
+    assert 0 <= text[1] < text[3] <= 1024
+    assert art[2] <= text[0] or art[0] >= text[2] or art[3] <= text[1] or art[1] >= text[3]
+
+
+def test_editorial_composition_selection_is_deterministic_and_role_aware():
+    arguments = ("cover", "illustration", "heavy", "hero_left", "display", "Make content matter")
+    assert social_text.select_editorial_composition(*arguments) == "hero_bleed"
+    assert social_text.select_editorial_composition(*arguments) == "hero_bleed"
+    assert social_text.select_editorial_composition(
+        "cta", "typography_only", "light", "closing", "quiet", "Start now"
+    ) == "quiet"
+
+
+def test_long_display_headline_does_not_receive_poster_composition():
+    selected = social_text.select_editorial_composition(
+        "phrase", "illustration", "heavy", "split_left", "display",
+        "A deliberately longer headline needs measured editorial room to remain readable",
+    )
+
+    assert selected != "poster"
+
+
+def test_unknown_editorial_composition_fails_safely_in_preflight_and_render():
+    result = social_text.preflight_viral_carousel_text(
+        title="Safe title", layout_role="info", layout_variant="split_left",
+        visual_treatment="illustration", editorial_composition="random",
+    )
+    assert result["failure_reason"] == "unsupported_editorial_composition"
+    with pytest.raises(social_text.SocialTextRenderError) as raised:
+        social_text.render_social_text(
+            source_bytes(), title="Safe title", layout_role="info",
+            layout_variant="split_left", design_style="viral_carousel",
+            visual_treatment="illustration", editorial_composition="random",
+        )
+    assert raised.value.reason == "unsupported_editorial_composition"
+
+
+def test_composition_preflight_reports_exact_production_geometry_with_polish_emphasis():
+    arguments = {
+        "title": "Jeden pomysł, wiele możliwości",
+        "emphasis": {"text": "wiele możliwości", "role": "accent"},
+        "layout_role": "cover", "layout_variant": "hero_left",
+        "visual_treatment": "illustration", "visual_weight": "heavy",
+        "typography_presentation": "display", "editorial_composition": "hero_bleed",
+    }
+    result = social_text.preflight_viral_carousel_text(**arguments)
+    output = social_text.render_social_text(
+        source_bytes(), design_style="viral_carousel", **arguments
+    )
+
+    assert result["fits"] is True
+    assert result["editorial_composition"] == "hero_bleed"
+    assert result["typography_bounds"]
+    assert output.startswith(b"\x89PNG")
+
+
+@pytest.mark.parametrize("lock", sorted(social_text.OPTICAL_LOCKS))
+def test_optical_lock_vocabulary_is_allowlisted_and_deterministic(lock):
+    geometry = social_text.editorial_composition_geometry(
+        1024, 1024, "split_left", "illustration", "medium",
+        "asymmetric_split", lock,
+    )
+    assert geometry["optical_lock"] == lock
+    assert geometry["optical_lock_target"] == social_text.editorial_composition_geometry(
+        1024, 1024, "split_left", "illustration", "medium",
+        "asymmetric_split", lock,
+    )["optical_lock_target"]
+
+
+def test_unknown_optical_lock_is_rejected_safely():
+    result = social_text.preflight_viral_carousel_text(
+        title="Safe title", layout_role="info", layout_variant="split_left",
+        visual_treatment="illustration", optical_lock="random",
+    )
+    assert result["failure_reason"] == "unsupported_optical_lock"
+
+
+def test_heavy_hero_center_cover_is_side_biased_not_stacked():
+    geometry = social_text.editorial_composition_geometry(
+        1024, 1024, "hero_center", "visual_focus", "heavy", "hero_bleed"
+    )
+    assert geometry["text_rect"][2] < geometry["artwork_bounds"][0]
+    assert geometry["artwork_bounds"][3] > geometry["text_rect"][3]
+    assert geometry["optical_lock"] == "edge_lock"
+
+
+def test_vertical_editorial_geometry_is_safe_and_in_canvas():
+    geometry = social_text.editorial_composition_geometry(
+        1024, 1024, "split_right", "illustration", "medium",
+        "vertical_editorial",
+    )
+    art, text = geometry["artwork_bounds"], geometry["text_rect"]
+    assert art[1] > text[3]
+    assert all(0 <= value <= 1024 for value in (*art, *text))
+    assert geometry["optical_lock"] == "baseline_lock"

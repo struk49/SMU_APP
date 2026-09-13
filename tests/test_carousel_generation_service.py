@@ -486,6 +486,98 @@ def test_v1_payload_rejects_invalid_metaphor_family(metaphor):
         )
 
 
+def test_typography_presentation_survives_payload_and_worker(app, module):
+    user = create_user(module, email="editorial-type@example.com")
+    post = make_pending(module, user, group_id="editorial-type")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background", "Exact headline", layout_role="info",
+        layout_variant="split_left", visual_treatment="illustration",
+        typography_presentation="editorial",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert carousel_generation.parse_overlay_prompt(post.prompt)[
+        "typography_presentation"
+    ] == "editorial"
+    assert calls[0]["overlay"]["typography_presentation"] == "editorial"
+
+
+@pytest.mark.parametrize("presentation", ["label", "", 1, False, [], {}])
+def test_v1_payload_rejects_invalid_typography_presentation(presentation):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title",
+            typography_presentation=presentation,
+        )
+
+
+def test_editorial_composition_survives_payload_and_worker(app, module):
+    user = create_user(module, email="composition@example.com")
+    post = make_pending(module, user, group_id="composition")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background", "Exact headline", layout_role="cover",
+        layout_variant="hero_left", visual_treatment="illustration",
+        editorial_composition="hero_bleed",
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert carousel_generation.parse_overlay_prompt(post.prompt)[
+        "editorial_composition"
+    ] == "hero_bleed"
+    assert calls[0]["overlay"]["editorial_composition"] == "hero_bleed"
+
+
+@pytest.mark.parametrize("composition", ["random", "", 1, False, [], {}])
+def test_v1_payload_rejects_invalid_editorial_composition(composition):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title",
+            editorial_composition=composition,
+        )
+
+
+def test_optical_lock_survives_payload_and_worker(app, module):
+    user = create_user(module, email="optical-lock@example.com")
+    post = make_pending(module, user, group_id="optical-lock")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background", "Exact headline", layout_role="cover",
+        layout_variant="hero_center", visual_treatment="visual_focus",
+        editorial_composition="hero_bleed", optical_lock="edge_lock",
+    )
+    module.db.session.commit()
+    calls = []
+    result = run_worker(
+        module, lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+    assert result["succeeded_count"] == 1
+    assert calls[0]["overlay"]["optical_lock"] == "edge_lock"
+
+
+@pytest.mark.parametrize("lock", ["random", "", 1, False, [], {}])
+def test_v1_payload_rejects_invalid_optical_lock(lock):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", optical_lock=lock,
+        )
+
+
 def test_v1_payload_accepts_and_worker_forwards_furniture(app, module):
     user = create_user(module, email="furniture@example.com")
     post = make_pending(module, user, group_id="furniture")
