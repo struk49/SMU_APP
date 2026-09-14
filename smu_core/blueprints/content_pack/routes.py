@@ -40,6 +40,31 @@ CAMPAIGN_ART_STYLES = {
     "corporate": "professional corporate social media design with polished editorial illustration",
     "pixar": "3D animated film look with conceptual dimensional illustration",
 }
+DESIGN_MANAGER_STYLES = {
+    "auto", "editorial_illustration", "minimal_premium", "photorealistic",
+    "three_d_clay", "bold_graphic", "collage_magazine",
+}
+DESIGN_MANAGER_PALETTES = {
+    "auto", "smu_classic", "monochrome", "warm_sunset", "cool_tech",
+    "earth_and_cream", "electric", "soft_pastel",
+}
+STYLE_GRAMMARS = {
+    "editorial_illustration": ("contemporary editorial illustration", "layered editorial depth", "controlled paper grain", "expressive simplified silhouettes"),
+    "minimal_premium": ("premium minimalist product-editorial art", "precise restrained depth", "refined matte surfaces", "geometric forms with generous negative space"),
+    "photorealistic": ("cinematic editorial photography", "believable natural depth of field", "realistic materials", "environmental forms with no stock-photo posing"),
+    "three_d_clay": ("contemporary sculptural 3D clay editorial design", "soft directional studio depth", "tactile clay and matte materials", "bold dimensional focal forms"),
+    "bold_graphic": ("high-contrast graphic poster art", "flat dramatic depth through scale and crop", "clean ink and print surfaces", "oversized angular geometry"),
+    "collage_magazine": ("asymmetric editorial magazine collage", "layered cutout depth and overlap", "paper, photographic, and printed textures", "cut-paper forms with controlled irregularity"),
+}
+PALETTE_INTENTS = {
+    "smu_classic": "deep navy, warm yellow, mint, and controlled blue",
+    "monochrome": "black, charcoal, warm off-white, and controlled grey",
+    "warm_sunset": "deep burgundy, coral, amber, and cream",
+    "cool_tech": "deep blue, cyan, violet, and cool white",
+    "earth_and_cream": "forest green, terracotta, sand, and cream",
+    "electric": "near-black, electric blue, vivid lime, and selective magenta",
+    "soft_pastel": "soft blue, lavender, peach, mint, and warm off-white",
+}
 TYPOGRAPHY_ONLY_BACKGROUND = "LOCAL_TYPOGRAPHY_CANVAS_NO_ARTWORK_PROMPT"
 STRUCTURE_ROLES = {"cover", "phrase", "info", "cta"}
 STRUCTURE_TREATMENTS = {
@@ -318,7 +343,32 @@ def _visual_metaphor(slide):
     )
 
 
-def _campaign_art_direction(image_style, slides):
+def _resolve_design_style(requested, slides):
+    if requested in DESIGN_MANAGER_STYLES - {"auto"}:
+        return requested
+    corpus = " ".join(str(slide.get(key) or "") for slide in slides for key in ("title", "body", "visual")).lower()
+    tendencies = (
+        ("photorealistic", ("founder", "lifestyle", "human story", "emotion", "community")),
+        ("three_d_clay", ("technology", "system", "product", "software", "platform")),
+        ("bold_graphic", ("warning", "mistake", "myth", "list", "stop", "strongest")),
+        ("collage_magazine", ("culture", "creative", "story", "history", "expressive")),
+        ("minimal_premium", ("saas", "professional", "strategy", "leadership", "business")),
+    )
+    return next((style for style, terms in tendencies if any(term in corpus for term in terms)), "editorial_illustration")
+
+
+def _resolve_palette(requested, resolved_style, slides):
+    if requested in DESIGN_MANAGER_PALETTES - {"auto"}:
+        return requested
+    defaults = {
+        "editorial_illustration": "warm_sunset", "minimal_premium": "monochrome",
+        "photorealistic": "earth_and_cream", "three_d_clay": "soft_pastel",
+        "bold_graphic": "electric", "collage_magazine": "warm_sunset",
+    }
+    return defaults[resolved_style]
+
+
+def _campaign_art_direction(image_style, slides, design_style=None, palette=None):
     """Normalize one safe visual world for every artwork slide in the set."""
     corpus = " ".join(
         value
@@ -335,23 +385,32 @@ def _campaign_art_direction(image_style, slides):
         if any(word in corpus for word in ("people", "audience", "community"))
         else "focal_object_system"
     )
+    if design_style is None and palette is None:
+        return {
+            "art_style": CAMPAIGN_ART_STYLES.get(image_style, "premium editorial illustration"),
+            "visual_theme": "one coherent conceptual campaign",
+            "palette_intent": "deep navy with controlled yellow, mint, and blue accents",
+            "lighting_or_depth": "confident dimensional depth and controlled studio lighting" if image_style in {"realistic", "pixar"} else "layered editorial depth with crisp focal separation",
+            "texture_intent": "soft matte dimensional surfaces with restrained tactile detail" if image_style in {"realistic", "pixar"} else "layered paper and editorial cutout surfaces with controlled grain",
+            "shape_language": "bold simple silhouettes with consistent rounded geometry",
+            "composition_energy": "confident asymmetry with one immediate focal hierarchy",
+            "campaign_motif": motif,
+            "image_detail_level": "editorial detail legible at mobile thumbnail size",
+        }
+    requested_style = design_style if design_style in DESIGN_MANAGER_STYLES else "auto"
+    requested_palette = palette if palette in DESIGN_MANAGER_PALETTES else "auto"
+    resolved_style = _resolve_design_style(requested_style, slides)
+    resolved_palette = _resolve_palette(requested_palette, resolved_style, slides)
+    art_style, depth, texture, shapes = STYLE_GRAMMARS[resolved_style]
     return {
-        "art_style": CAMPAIGN_ART_STYLES.get(
-            image_style, "premium editorial illustration"
-        ),
+        "resolved_style": resolved_style,
+        "resolved_palette": resolved_palette,
+        "art_style": art_style,
         "visual_theme": "one coherent conceptual campaign",
-        "palette_intent": "deep navy with controlled yellow, mint, and blue accents",
-        "lighting_or_depth": (
-            "confident dimensional depth and controlled studio lighting"
-            if image_style in {"realistic", "pixar"}
-            else "layered editorial depth with crisp focal separation"
-        ),
-        "texture_intent": (
-            "soft matte dimensional surfaces with restrained tactile detail"
-            if image_style in {"realistic", "pixar"}
-            else "layered paper and editorial cutout surfaces with controlled grain"
-        ),
-        "shape_language": "bold simple silhouettes with consistent rounded geometry",
+        "palette_intent": PALETTE_INTENTS[resolved_palette],
+        "lighting_or_depth": depth,
+        "texture_intent": texture,
+        "shape_language": shapes,
         "composition_energy": "confident asymmetry with one immediate focal hierarchy",
         "campaign_motif": motif,
         "image_detail_level": "editorial detail legible at mobile thumbnail size",
@@ -1009,6 +1068,14 @@ def content_pack():
 def create_content_pack_carousel():
     content_pack_result = request.form.get("content_pack_result", "").strip()
     image_style = request.form.get("image_style", "").strip()
+    design_manager_style = request.form.get("design_manager_style")
+    colour_theme = request.form.get("colour_theme")
+    design_manager_style = design_manager_style.strip().lower() if design_manager_style is not None else None
+    colour_theme = colour_theme.strip().lower() if colour_theme is not None else None
+    if design_manager_style is not None and design_manager_style not in DESIGN_MANAGER_STYLES:
+        design_manager_style = "auto"
+    if colour_theme is not None and colour_theme not in DESIGN_MANAGER_PALETTES:
+        colour_theme = "auto"
 
     if not content_pack_result:
         flash("No content pack found.", "danger")
@@ -1046,7 +1113,9 @@ def create_content_pack_carousel():
             return redirect(url_for("content_pack"))
 
         presentations = _carousel_presentations(slides)
-        campaign_direction = _campaign_art_direction(image_style, slides)
+        campaign_direction = _campaign_art_direction(
+            image_style, slides, design_manager_style, colour_theme
+        )
         if image_style == "viral_carousel":
             _validate_viral_carousel_copy(slides, presentations)
 
@@ -1110,6 +1179,8 @@ def create_content_pack_carousel():
                 typography_presentation=presentation["typography_presentation"],
                 editorial_composition=presentation["editorial_composition"],
                 optical_lock=presentation["optical_lock"],
+                campaign_style=campaign_direction.get("resolved_style"),
+                campaign_palette=campaign_direction.get("resolved_palette"),
             )
 
             post = Post(

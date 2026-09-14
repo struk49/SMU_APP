@@ -46,6 +46,14 @@ OVERLAY_OPTICAL_LOCKS = {
     "edge_lock", "baseline_lock", "focal_lock", "centre_lock",
     "tension_lock", "none",
 }
+OVERLAY_CAMPAIGN_STYLES = {
+    "editorial_illustration", "minimal_premium", "photorealistic",
+    "three_d_clay", "bold_graphic", "collage_magazine",
+}
+OVERLAY_CAMPAIGN_PALETTES = {
+    "smu_classic", "monochrome", "warm_sunset", "cool_tech",
+    "earth_and_cream", "electric", "soft_pastel",
+}
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
 OVERLAY_LAYOUT_VARIANTS = {
     "hero_left",
@@ -158,6 +166,8 @@ def build_content_pack_overlay_prompt(
     typography_presentation=None,
     editorial_composition=None,
     optical_lock=None,
+    campaign_style=None,
+    campaign_palette=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -223,6 +233,8 @@ def build_content_pack_overlay_prompt(
                 or optical_lock not in OVERLAY_OPTICAL_LOCKS
             )
         )
+        or (campaign_style is not None and campaign_style not in OVERLAY_CAMPAIGN_STYLES)
+        or (campaign_palette is not None and campaign_palette not in OVERLAY_CAMPAIGN_PALETTES)
         or (
             layout_role is not None
             and (
@@ -278,6 +290,10 @@ def build_content_pack_overlay_prompt(
         payload["editorial_composition"] = editorial_composition
     if optical_lock is not None:
         payload["optical_lock"] = optical_lock
+    if campaign_style is not None:
+        payload["campaign_style"] = campaign_style
+    if campaign_palette is not None:
+        payload["campaign_palette"] = campaign_palette
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -320,6 +336,8 @@ def parse_overlay_prompt(prompt):
         "typography_presentation",
         "editorial_composition",
         "optical_lock",
+        "campaign_style",
+        "campaign_palette",
     }
     if (
         not isinstance(payload, dict)
@@ -407,6 +425,8 @@ def parse_overlay_prompt(prompt):
                 or payload["optical_lock"] not in OVERLAY_OPTICAL_LOCKS
             )
         )
+        or ("campaign_style" in payload and payload["campaign_style"] not in OVERLAY_CAMPAIGN_STYLES)
+        or ("campaign_palette" in payload and payload["campaign_palette"] not in OVERLAY_CAMPAIGN_PALETTES)
     ):
         raise OverlayPayloadError()
     if payload["version"] != OVERLAY_PAYLOAD_VERSION:
@@ -551,6 +571,10 @@ def generate_pending_carousel_images(
                     ]
                 if "optical_lock" in overlay_payload:
                     overlay["optical_lock"] = overlay_payload["optical_lock"]
+                if "campaign_style" in overlay_payload:
+                    overlay["campaign_style"] = overlay_payload["campaign_style"]
+                if "campaign_palette" in overlay_payload:
+                    overlay["campaign_palette"] = overlay_payload["campaign_palette"]
                 image_url = image_generator(
                     overlay_payload["background_prompt"],
                     overlay=overlay,

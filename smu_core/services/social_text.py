@@ -71,6 +71,23 @@ OPTICAL_LOCKS = {
     "edge_lock", "baseline_lock", "focal_lock", "centre_lock",
     "tension_lock", "none",
 }
+CAMPAIGN_STYLES = {
+    "editorial_illustration", "minimal_premium", "photorealistic",
+    "three_d_clay", "bold_graphic", "collage_magazine",
+}
+CAMPAIGN_PALETTES = {
+    "smu_classic", "monochrome", "warm_sunset", "cool_tech",
+    "earth_and_cream", "electric", "soft_pastel",
+}
+CAMPAIGN_PALETTE_COLOURS = {
+    "smu_classic": ((9, 18, 34, 255), (244, 211, 94, 255), (101, 214, 166, 255), (86, 142, 246, 255), (18, 34, 58, 255)),
+    "monochrome": ((18, 18, 19, 255), (245, 242, 233, 255), (156, 158, 160, 255), (88, 90, 94, 255), (35, 35, 37, 255)),
+    "warm_sunset": ((65, 20, 35, 255), (245, 178, 66, 255), (234, 101, 89, 255), (255, 226, 181, 255), (100, 35, 43, 255)),
+    "cool_tech": ((10, 25, 67, 255), (74, 224, 238, 255), (137, 103, 255, 255), (225, 244, 255, 255), (18, 45, 94, 255)),
+    "earth_and_cream": ((28, 58, 45, 255), (218, 139, 94, 255), (224, 199, 151, 255), (250, 239, 211, 255), (48, 78, 60, 255)),
+    "electric": ((12, 12, 18, 255), (53, 128, 255, 255), (180, 255, 42, 255), (255, 58, 177, 255), (28, 28, 42, 255)),
+    "soft_pastel": ((63, 66, 92, 255), (255, 193, 175, 255), (177, 220, 210, 255), (196, 188, 235, 255), (89, 91, 122, 255)),
+}
 FURNITURE_VARIANTS = {
     "dual_rail", "single_rail", "corner_marker", "framed_edge", "none",
 }
@@ -937,16 +954,18 @@ def _build_designed_carousel_canvas(
     source_image, layout_variant, visual_treatment="illustration",
     visual_weight="medium", furniture_variant="dual_rail",
     editorial_composition=None,
+    campaign_style=None, campaign_palette="smu_classic",
 ):
     """Make artwork secondary to a deterministic, branded social-card canvas."""
     width, height = source_image.size
     scale = min(width, height)
-    canvas = Image.new("RGBA", source_image.size, (9, 18, 34, 255))
+    background, accent_yellow, accent_green, accent_blue, panel = (
+        CAMPAIGN_PALETTE_COLOURS.get(
+            campaign_palette, CAMPAIGN_PALETTE_COLOURS["smu_classic"]
+        )
+    )
+    canvas = Image.new("RGBA", source_image.size, background)
     draw = ImageDraw.Draw(canvas)
-    accent_yellow = (244, 211, 94, 255)
-    accent_green = (101, 214, 166, 255)
-    accent_blue = (86, 142, 246, 255)
-    panel = (18, 34, 58, 255)
 
     composition = viral_composition_zones(
         width, height, layout_variant, visual_treatment, editorial_composition
@@ -1659,6 +1678,8 @@ def render_social_text(
     typography_presentation=None,
     editorial_composition=None,
     optical_lock=None,
+    campaign_style=None,
+    campaign_palette=None,
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
     if layout != "carousel":
@@ -1694,6 +1715,10 @@ def render_social_text(
         raise SocialTextRenderError("unsupported_editorial_composition")
     if optical_lock is not None and optical_lock not in OPTICAL_LOCKS:
         raise SocialTextRenderError("unsupported_optical_lock")
+    if campaign_style is not None and campaign_style not in CAMPAIGN_STYLES:
+        raise SocialTextRenderError("unsupported_campaign_style")
+    if campaign_palette is not None and campaign_palette not in CAMPAIGN_PALETTES:
+        raise SocialTextRenderError("unsupported_campaign_palette")
     if not isinstance(image_bytes, bytes) or not image_bytes:
         raise SocialTextRenderError("invalid_image")
     if len(image_bytes) > MAX_INPUT_BYTES:
@@ -1766,6 +1791,8 @@ def render_social_text(
                 visual_weight,
                 furniture_variant,
                 effective_composition,
+                campaign_style,
+                campaign_palette or "smu_classic",
             )
         composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
         try:
@@ -1798,6 +1825,8 @@ def render_social_text(
                     image, effective_variant, "typography_only", visual_weight,
                     furniture_variant,
                     effective_composition,
+                    campaign_style,
+                    campaign_palette or "smu_classic",
                 )
             composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
             _draw_role_composition(

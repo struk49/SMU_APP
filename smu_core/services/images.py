@@ -7,6 +7,12 @@ from smu_core.services.social_text import render_social_text
 
 
 OPENAI_IMAGE_TIMEOUT_SECONDS = 120
+OPENAI_IMAGE_MODEL = "gpt-image-2.5-flare"
+BENCHMARK_IMAGE_MODELS = {
+    "gpt-image-1",
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst",
+}
 
 
 def generate_openai_image(
@@ -17,10 +23,14 @@ def generate_openai_image(
     upload_jpeg_to_cloudinary_func=None,
     overlay=None,
     render_social_text_func=None,
+    model_override=None,
 ):
     if not openai_api_key:
         raise Exception("OPENAI_API_KEY is missing from your .env file")
 
+    if model_override is not None and model_override not in BENCHMARK_IMAGE_MODELS:
+        raise ValueError("unsupported_image_model_override")
+    image_model = model_override or OPENAI_IMAGE_MODEL
     typography_only = (
         isinstance(overlay, dict)
         and overlay.get("visual_treatment") == "typography_only"
@@ -31,7 +41,7 @@ def generate_openai_image(
         image_bytes = local_canvas.getvalue()
     else:
         result = openai_client.images.generate(
-            model="gpt-image-1",
+            model=image_model,
             prompt=prompt,
             size="1024x1024",
             quality="medium",

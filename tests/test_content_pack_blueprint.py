@@ -695,6 +695,43 @@ CTA: Finish with purpose"""
     )
 
 
+@pytest.mark.parametrize("style", sorted(content_pack_routes.DESIGN_MANAGER_STYLES - {"auto"}))
+def test_explicit_design_manager_style_is_preserved(style):
+    slides = [{"title": "Same campaign", "body": None, "visual": "One transformation"}]
+    direction = content_pack_routes._campaign_art_direction(
+        "viral_carousel", slides, style, "monochrome"
+    )
+    assert direction["resolved_style"] == style
+    assert direction["resolved_palette"] == "monochrome"
+
+
+def test_auto_style_and_palette_resolution_is_deterministic():
+    slides = [{"title": "A founder human story", "body": None, "visual": "A believable community moment"}]
+    first = content_pack_routes._campaign_art_direction("viral_carousel", slides, "auto", "auto")
+    second = content_pack_routes._campaign_art_direction("viral_carousel", slides, "auto", "auto")
+    assert first == second
+    assert first["resolved_style"] == "photorealistic"
+    assert first["resolved_palette"] == "earth_and_cream"
+
+
+def test_style_and_palette_change_prompt_grammar_without_overlay_copy():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "Slide 1:\nTitle: Private exact overlay\nVisual: One source transforming"
+    )
+    plan = content_pack_routes._carousel_presentations(slides)[0]
+    prompts = []
+    for style, palette in (("minimal_premium", "monochrome"), ("three_d_clay", "soft_pastel")):
+        prompts.append(content_pack_routes._build_slide_background_prompt(
+            "Style: viral Instagram business carousel", 0, slides[0]["visual"],
+            plan["role"], plan["layout"], plan["treatment"], plan["semantic_text"],
+            plan["visual_weight"], plan["metaphor"],
+            content_pack_routes._campaign_art_direction("viral_carousel", slides, style, palette),
+        ))
+    assert prompts[0] != prompts[1]
+    assert "Private exact overlay" not in prompts[0]
+    assert "Private exact overlay" not in prompts[1]
+
+
 def test_carousel_plan_breaks_adjacent_diagram_and_metaphor_repetition():
     slides = content_pack_routes._parse_content_pack_carousel_slides(
         """Slide 1:

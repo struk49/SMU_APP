@@ -129,7 +129,7 @@ def test_generate_openai_image_preserves_request_parameters_and_base64_upload():
     assert result == "https://cdn.test/generated.jpg"
     assert client.images.calls == [
         {
-            "model": "gpt-image-1",
+            "model": "gpt-image-2.5-flare",
             "prompt": "A branded image prompt",
             "size": "1024x1024",
             "quality": "medium",
@@ -367,3 +367,29 @@ def test_no_http_download_dependency_is_required(monkeypatch):
             "secure_url": "https://cdn.test/generated.jpg"
         },
     ) == "https://cdn.test/generated.jpg"
+
+
+def test_production_image_model_default_is_gpt_image_2_5_flare():
+    assert images.OPENAI_IMAGE_MODEL == "gpt-image-2.5-flare"
+
+
+@pytest.mark.parametrize("model", sorted(images.BENCHMARK_IMAGE_MODELS))
+def test_development_image_model_override_is_allowlisted(model):
+    client = FakeOpenAIClient()
+    images.generate_openai_image(
+        "Prompt", openai_api_key="test", openai_client=client,
+        upload_jpeg_to_cloudinary_func=lambda data: {"secure_url": "https://test"},
+        model_override=model,
+    )
+    assert client.images.calls[0]["model"] == model
+
+
+def test_arbitrary_image_model_override_is_rejected_before_provider_call():
+    client = FakeOpenAIClient()
+    with pytest.raises(ValueError, match="unsupported_image_model_override"):
+        images.generate_openai_image(
+            "Prompt", openai_api_key="test", openai_client=client,
+            upload_jpeg_to_cloudinary_func=lambda data: {"secure_url": "https://test"},
+            model_override="customer-controlled-model",
+        )
+    assert client.images.calls == []

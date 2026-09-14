@@ -1,0 +1,4 @@
+PHASE 3.6 QUALITY REVIEW
+
+PASS: style grammar, independent palette, campaign lock, metadata parity, typography ownership, API and credit invariants.
+Evidence is synthetic design-grammar review plus captured Phase 3.4.2 provider fidelity; no new provider calls.

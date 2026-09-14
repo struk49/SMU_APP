@@ -1,0 +1,483 @@
+PHASE 3.6 PROVIDER PROMPTS
+
+---
+Exact overlay copy excluded.
+
+---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: contemporary editorial illustration
+- visual theme: one coherent conceptual campaign
+- palette intent: deep burgundy, coral, amber, and cream
+- lighting/depth: layered editorial depth
+- texture: controlled paper grain
+- shape language: expressive simplified silhouettes
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: one oversized raw source form becoming several visibly distinct finished forms
+- action: the source separates, reshapes, and resolves into differentiated outcomes
+- foreground: one partially cropped supporting element entering the artwork zone to establish scale
+- midground: the primary subject and its clearest semantic action
+- background: a simplified contextual environment with layered planes, never a blank framed box
+- spatial relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+- viewpoint: asymmetric side view
+- depth: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+- crop: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+- focal scale: dominant and large, confidently filling the artwork zone
+- supporting elements: one to three
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: one source-specific transformation scene with visibly distinct output forms, avoiding nodes, branches, arrows, and network geometry
+- sequence-specific framing: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+
+3. COMPOSITION / GEOMETRY
+- slide role: cover; sequence purpose: opening campaign hero
+- treatment: visual_focus; visual weight: heavy
+- layout: hero_center; artwork-zone occupancy: dominant
+- Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.
+- Make one dominant subject and its action unmistakable; use large scale, a strong crop, and minimal competition.
+- Keep a large calm central field for oversized headline typography and frame the focal environment around its edges.
+- text-safe space versus artwork space: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+5. NEGATIVE REQUIREMENTS
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition
+- text-free requirements override conflicting typography or signage
+
+
+---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: premium minimalist product-editorial art
+- visual theme: one coherent conceptual campaign
+- palette intent: black, charcoal, warm off-white, and controlled grey
+- lighting/depth: precise restrained depth
+- texture: refined matte surfaces
+- shape language: geometric forms with generous negative space
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: one oversized raw source form becoming several visibly distinct finished forms
+- action: the source separates, reshapes, and resolves into differentiated outcomes
+- foreground: one partially cropped supporting element entering the artwork zone to establish scale
+- midground: the primary subject and its clearest semantic action
+- background: a simplified contextual environment with layered planes, never a blank framed box
+- spatial relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+- viewpoint: asymmetric side view
+- depth: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+- crop: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+- focal scale: dominant and large, confidently filling the artwork zone
+- supporting elements: one to three
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: one source-specific transformation scene with visibly distinct output forms, avoiding nodes, branches, arrows, and network geometry
+- sequence-specific framing: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+
+3. COMPOSITION / GEOMETRY
+- slide role: cover; sequence purpose: opening campaign hero
+- treatment: visual_focus; visual weight: heavy
+- layout: hero_center; artwork-zone occupancy: dominant
+- Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.
+- Make one dominant subject and its action unmistakable; use large scale, a strong crop, and minimal competition.
+- Keep a large calm central field for oversized headline typography and frame the focal environment around its edges.
+- text-safe space versus artwork space: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+5. NEGATIVE REQUIREMENTS
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition
+- text-free requirements override conflicting typography or signage
+
+
+---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: cinematic editorial photography
+- visual theme: one coherent conceptual campaign
+- palette intent: forest green, terracotta, sand, and cream
+- lighting/depth: believable natural depth of field
+- texture: realistic materials
+- shape language: environmental forms with no stock-photo posing
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: one oversized raw source form becoming several visibly distinct finished forms
+- action: the source separates, reshapes, and resolves into differentiated outcomes
+- foreground: one partially cropped supporting element entering the artwork zone to establish scale
+- midground: the primary subject and its clearest semantic action
+- background: a simplified contextual environment with layered planes, never a blank framed box
+- spatial relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+- viewpoint: asymmetric side view
+- depth: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+- crop: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+- focal scale: dominant and large, confidently filling the artwork zone
+- supporting elements: one to three
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: one source-specific transformation scene with visibly distinct output forms, avoiding nodes, branches, arrows, and network geometry
+- sequence-specific framing: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+
+3. COMPOSITION / GEOMETRY
+- slide role: cover; sequence purpose: opening campaign hero
+- treatment: visual_focus; visual weight: heavy
+- layout: hero_center; artwork-zone occupancy: dominant
+- Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.
+- Make one dominant subject and its action unmistakable; use large scale, a strong crop, and minimal competition.
+- Keep a large calm central field for oversized headline typography and frame the focal environment around its edges.
+- text-safe space versus artwork space: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+5. NEGATIVE REQUIREMENTS
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition
+- text-free requirements override conflicting typography or signage
+
+
+---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: contemporary sculptural 3D clay editorial design
+- visual theme: one coherent conceptual campaign
+- palette intent: soft blue, lavender, peach, mint, and warm off-white
+- lighting/depth: soft directional studio depth
+- texture: tactile clay and matte materials
+- shape language: bold dimensional focal forms
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: one oversized raw source form becoming several visibly distinct finished forms
+- action: the source separates, reshapes, and resolves into differentiated outcomes
+- foreground: one partially cropped supporting element entering the artwork zone to establish scale
+- midground: the primary subject and its clearest semantic action
+- background: a simplified contextual environment with layered planes, never a blank framed box
+- spatial relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+- viewpoint: asymmetric side view
+- depth: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+- crop: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+- focal scale: dominant and large, confidently filling the artwork zone
+- supporting elements: one to three
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: one source-specific transformation scene with visibly distinct output forms, avoiding nodes, branches, arrows, and network geometry
+- sequence-specific framing: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+
+3. COMPOSITION / GEOMETRY
+- slide role: cover; sequence purpose: opening campaign hero
+- treatment: visual_focus; visual weight: heavy
+- layout: hero_center; artwork-zone occupancy: dominant
+- Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.
+- Make one dominant subject and its action unmistakable; use large scale, a strong crop, and minimal competition.
+- Keep a large calm central field for oversized headline typography and frame the focal environment around its edges.
+- text-safe space versus artwork space: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+5. NEGATIVE REQUIREMENTS
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition
+- text-free requirements override conflicting typography or signage
+
+
+---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: high-contrast graphic poster art
+- visual theme: one coherent conceptual campaign
+- palette intent: near-black, electric blue, vivid lime, and selective magenta
+- lighting/depth: flat dramatic depth through scale and crop
+- texture: clean ink and print surfaces
+- shape language: oversized angular geometry
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: one oversized raw source form becoming several visibly distinct finished forms
+- action: the source separates, reshapes, and resolves into differentiated outcomes
+- foreground: one partially cropped supporting element entering the artwork zone to establish scale
+- midground: the primary subject and its clearest semantic action
+- background: a simplified contextual environment with layered planes, never a blank framed box
+- spatial relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+- viewpoint: asymmetric side view
+- depth: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+- crop: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+- focal scale: dominant and large, confidently filling the artwork zone
+- supporting elements: one to three
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: one source-specific transformation scene with visibly distinct output forms, avoiding nodes, branches, arrows, and network geometry
+- sequence-specific framing: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+
+3. COMPOSITION / GEOMETRY
+- slide role: cover; sequence purpose: opening campaign hero
+- treatment: visual_focus; visual weight: heavy
+- layout: hero_center; artwork-zone occupancy: dominant
+- Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.
+- Make one dominant subject and its action unmistakable; use large scale, a strong crop, and minimal competition.
+- Keep a large calm central field for oversized headline typography and frame the focal environment around its edges.
+- text-safe space versus artwork space: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+5. NEGATIVE REQUIREMENTS
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition
+- text-free requirements override conflicting typography or signage
+
+
+---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: asymmetric editorial magazine collage
+- visual theme: one coherent conceptual campaign
+- palette intent: deep blue, cyan, violet, and cool white
+- lighting/depth: layered cutout depth and overlap
+- texture: paper, photographic, and printed textures
+- shape language: cut-paper forms with controlled irregularity
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: transformation
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: one oversized raw source form becoming several visibly distinct finished forms
+- action: the source separates, reshapes, and resolves into differentiated outcomes
+- foreground: one partially cropped supporting element entering the artwork zone to establish scale
+- midground: the primary subject and its clearest semantic action
+- background: a simplified contextual environment with layered planes, never a blank framed box
+- spatial relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+- viewpoint: asymmetric side view
+- depth: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+- crop: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+- focal scale: dominant and large, confidently filling the artwork zone
+- supporting elements: one to three
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: one source-specific transformation scene with visibly distinct output forms, avoiding nodes, branches, arrows, and network geometry
+- sequence-specific framing: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+
+3. COMPOSITION / GEOMETRY
+- slide role: cover; sequence purpose: opening campaign hero
+- treatment: visual_focus; visual weight: heavy
+- layout: hero_center; artwork-zone occupancy: dominant
+- Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.
+- Make one dominant subject and its action unmistakable; use large scale, a strong crop, and minimal competition.
+- Keep a large calm central field for oversized headline typography and frame the focal environment around its edges.
+- text-safe space versus artwork space: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+5. NEGATIVE REQUIREMENTS
+- no readable text
+- no words
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no numbers unless the visual concept makes them unavoidable
+- no watermarks
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- no text on screens
+- no text on paper
+- no written signs
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition
+- text-free requirements override conflicting typography or signage

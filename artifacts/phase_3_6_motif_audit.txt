@@ -1,0 +1,1 @@
+Motifs are normalized per slide; repeated non-process metaphors remap to focal_object/visual_focus. Genuine process and comparison repetition remains allowed.

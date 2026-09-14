@@ -578,6 +578,30 @@ def test_v1_payload_rejects_invalid_optical_lock(lock):
         )
 
 
+def test_campaign_style_and_palette_survive_worker_payload(app, module):
+    user = create_user(module, email="multi-style@example.com")
+    post = make_pending(module, user, group_id="multi-style")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background", "Exact headline", layout_role="cover",
+        layout_variant="hero_center", visual_treatment="visual_focus",
+        campaign_style="three_d_clay", campaign_palette="soft_pastel",
+    )
+    module.db.session.commit()
+    calls = []
+    result = run_worker(module, lambda prompt, **kwargs: calls.append(kwargs) or "https://cdn.test/generated.jpg")
+    assert result["succeeded_count"] == 1
+    assert calls[0]["overlay"]["campaign_style"] == "three_d_clay"
+    assert calls[0]["overlay"]["campaign_palette"] == "soft_pastel"
+
+
+@pytest.mark.parametrize("field,value", [("campaign_style", "unknown"), ("campaign_palette", "rainbow")])
+def test_campaign_style_palette_payload_rejects_unknown_values(field, value):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", **{field: value}
+        )
+
+
 def test_v1_payload_accepts_and_worker_forwards_furniture(app, module):
     user = create_user(module, email="furniture@example.com")
     post = make_pending(module, user, group_id="furniture")

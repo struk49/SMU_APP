@@ -1724,3 +1724,27 @@ def test_vertical_editorial_geometry_is_safe_and_in_canvas():
     assert art[1] > text[3]
     assert all(0 <= value <= 1024 for value in (*art, *text))
     assert geometry["optical_lock"] == "baseline_lock"
+
+
+def test_campaign_palette_changes_canvas_independently_of_style():
+    common = {
+        "title": "One exact headline", "layout_role": "info",
+        "layout_variant": "editorial_statement", "design_style": "viral_carousel",
+        "visual_treatment": "typography_only", "campaign_style": "minimal_premium",
+    }
+    monochrome = social_text.render_social_text(
+        source_bytes(), campaign_palette="monochrome", **common
+    )
+    sunset = social_text.render_social_text(
+        source_bytes(), campaign_palette="warm_sunset", **common
+    )
+    assert monochrome != sunset
+
+
+def test_unknown_campaign_style_and_palette_fail_safely():
+    with pytest.raises(social_text.SocialTextRenderError) as style_error:
+        social_text.render_social_text(source_bytes(), title="Title", campaign_style="unknown")
+    with pytest.raises(social_text.SocialTextRenderError) as palette_error:
+        social_text.render_social_text(source_bytes(), title="Title", campaign_palette="unknown")
+    assert style_error.value.reason == "unsupported_campaign_style"
+    assert palette_error.value.reason == "unsupported_campaign_palette"
