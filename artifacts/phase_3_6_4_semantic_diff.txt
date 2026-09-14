@@ -1,0 +1,9 @@
+PHASE 3.6.4 SEMANTIC DIFF
+
+Historical provider prompt was not logged; the bad interpretation below is explicitly an inference from observed output.
+
+INFERRED BAD LIVE INTERPRETATION
+Generic warm lifestyle/editorial scene allowed romantic figures, gift/jewellery-style boxes, and handbag imagery because restaurant campaign identity was absent from internal-slide grounding.
+
+NEW GROUNDED INTERPRETATION
+Every slide explicitly carries a safe current campaign subject, additive semantic domain, slide purpose, restaurant-specific subject/action/environment, then style and palette. Motif variation cannot remove that grounding.

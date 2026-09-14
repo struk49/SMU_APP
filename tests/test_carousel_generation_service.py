@@ -89,6 +89,48 @@ def test_one_pending_row_processes_once_and_becomes_draft(app, module):
     assert calls == ["Prompt group 0"]
 
 
+def test_grounding_metadata_round_trips_and_legacy_payload_remains_valid():
+    grounding = {
+        "campaign_subject": "language-learning activity in a restaurant setting",
+        "semantic_domain": "restaurant + language_learning",
+        "slide_purpose": "arriving and asking a restaurant host for a table",
+        "scene_action": "the host welcomes a guest and indicates an available table",
+    }
+    current = carousel_generation.build_content_pack_overlay_prompt(
+        "Current restaurant provider prompt", "Asking for a table",
+        campaign_grounding=grounding,
+    )
+    legacy = carousel_generation.build_content_pack_overlay_prompt(
+        "Legacy current-row prompt", "Legacy title"
+    )
+
+    assert carousel_generation.parse_overlay_prompt(current)["campaign_grounding"] == grounding
+    assert "campaign_grounding" not in carousel_generation.parse_overlay_prompt(legacy)
+
+
+def test_sequential_worker_rows_use_only_their_own_persisted_campaign_prompt(app, module):
+    user = create_user(module)
+    love = make_pending(module, user, group_id="love", sort_order=0)
+    restaurant = make_pending(module, user, group_id="restaurant", sort_order=0)
+    love.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "CURRENT RELATIONSHIP SCENE", "Relationship phrase"
+    )
+    restaurant.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "CURRENT RESTAURANT SCENE", "Restaurant phrase"
+    )
+    module.db.session.commit()
+    calls = []
+
+    def generate(prompt, *, overlay=None):
+        calls.append(prompt)
+        return f"https://cdn.test/{len(calls)}.jpg"
+
+    run_worker(module, generate, batch_size=2)
+
+    assert calls == ["CURRENT RELATIONSHIP SCENE", "CURRENT RESTAURANT SCENE"]
+    assert "RELATIONSHIP" not in calls[1]
+
+
 def test_batch_processes_five_rows_and_second_run_continues(app, module):
     user = create_user(module)
     posts = [

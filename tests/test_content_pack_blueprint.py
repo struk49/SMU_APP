@@ -552,6 +552,146 @@ Slide 5: Często tu przychodzisz?"""
             "layout_role": "info",
         },
     ]
+
+
+RESTAURANT_CAROUSEL = """Slide 1:
+Title: Polish at the Restaurant
+Visual: A guest arriving at a restaurant
+Slide 2:
+Title: Asking for a table
+Visual: A guest speaking with the restaurant host
+Slide 3:
+Title: Ordering food
+Visual: A diner ordering a meal from a server
+Slide 4:
+Title: Ordering drinks
+Visual: A server bringing drinks to a dining table
+Slide 5:
+Title: Asking for water
+Visual: A diner asking the waiter for water
+Slide 6:
+Title: Asking for the bill
+Visual: A diner requesting the bill and preparing payment"""
+
+LOVE_CAROUSEL = """Slide 1:
+Title: Polish love phrases
+Visual: A warm personal conversation between a couple
+Slide 2:
+Title: Expressing affection
+Visual: Two partners sharing an affectionate moment"""
+
+
+def grounded_prompts(carousel, style="photorealistic", palette="warm_sunset"):
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+    presentations = content_pack_routes._carousel_presentations(slides)
+    direction = content_pack_routes._campaign_art_direction(
+        "viral_carousel", slides, style, palette
+    )
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+    prompts = []
+    for index, (slide, presentation) in enumerate(zip(slides, presentations)):
+        slide_grounding = content_pack_routes._slide_grounding(
+            slide, grounding, presentation["role"]
+        )
+        prompts.append(content_pack_routes._build_slide_background_prompt(
+            "ignored", index, slide["visual"], presentation["role"],
+            presentation["layout"], presentation["treatment"],
+            presentation["semantic_text"], presentation["visual_weight"],
+            presentation["metaphor"], direction, grounding, slide_grounding,
+        ))
+    return slides, presentations, direction, grounding, prompts
+
+
+def test_campaign_grounding_is_fresh_and_current_request_only():
+    _, _, _, restaurant, _ = grounded_prompts(RESTAURANT_CAROUSEL)
+    _, _, _, love, _ = grounded_prompts(LOVE_CAROUSEL)
+    _, _, _, restaurant_again, _ = grounded_prompts(RESTAURANT_CAROUSEL)
+
+    assert restaurant is not restaurant_again
+    assert restaurant == restaurant_again
+    assert "restaurant" in restaurant["semantic_domain"]
+    assert "language_learning" in restaurant["semantic_domain"]
+    assert restaurant["semantic_domain"] == "restaurant + language_learning"
+    assert "relationships" not in restaurant["semantic_domain"]
+    assert "relationships" in love["semantic_domain"]
+
+
+def test_campaign_order_does_not_change_provider_prompts():
+    _, _, _, _, restaurant_first = grounded_prompts(RESTAURANT_CAROUSEL)
+    _, _, _, _, love_second = grounded_prompts(LOVE_CAROUSEL)
+    _, _, _, _, love_first = grounded_prompts(LOVE_CAROUSEL)
+    _, _, _, _, restaurant_second = grounded_prompts(RESTAURANT_CAROUSEL)
+
+    assert restaurant_first == restaurant_second
+    assert love_first == love_second
+
+
+def test_restaurant_prompts_are_current_domain_grounded_without_prior_tokens():
+    slides, presentations, direction, grounding, prompts = grounded_prompts(
+        RESTAURANT_CAROUSEL
+    )
+    joined = "\n".join(prompts).lower()
+
+    assert grounding["resolved_style"] == "photorealistic"
+    assert grounding["resolved_palette"] == "warm_sunset"
+    assert all("current semantic domain: restaurant + language_learning" in prompt for prompt in prompts)
+    assert all("current campaign subject: language-learning activity in a restaurant" in prompt for prompt in prompts)
+    assert "restaurant host" in prompts[1]
+    assert "ordering a meal" in prompts[2]
+    assert "glass and carafe" in prompts[3]
+    assert "glass and carafe" in prompts[4]
+    assert "blank bill folder" in prompts[5]
+    assert not any(token in joined for token in (
+        "romance", "love", "couple", "gift", "handbag", "jewellery", "intimate", "romantic",
+    ))
+    for slide, prompt in zip(slides, prompts):
+        assert slide["title"] not in prompt
+    assert all("ABSOLUTELY NO READABLE TEXT" in prompt for prompt in prompts)
+    assert direction["resolved_style"] == "photorealistic"
+    assert direction["resolved_palette"] == "warm_sunset"
+    assert len(presentations) == 6
+
+
+def test_relationship_fixture_remains_relationship_grounded():
+    _, _, _, grounding, prompts = grounded_prompts(LOVE_CAROUSEL)
+    assert "relationships" in grounding["semantic_domain"]
+    assert all("personal-connection setting" in prompt for prompt in prompts)
+    assert all("restaurant host" not in prompt for prompt in prompts)
+
+
+def test_motif_remapping_cannot_remove_current_domain_grounding():
+    fixture = """Slide 1:
+Title: Restaurant conversation
+Visual: A branching node network inside a restaurant
+Slide 2:
+Title: Restaurant ordering
+Visual: A branching node network around a dining table
+Slide 3:
+Title: Restaurant payment
+Visual: Another branching node network near the bill"""
+    slides, presentations, _, grounding, prompts = grounded_prompts(fixture)
+    assert any(item["metaphor"] == "focal_object" for item in presentations[1:])
+    assert all("restaurant" in prompt.lower() for prompt in prompts)
+    assert grounding["semantic_domain"] == "restaurant + language_learning"
+    assert len(slides) == len(prompts)
+
+
+def test_auto_style_uses_only_current_campaign_and_explicit_choices_stay_authoritative():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(RESTAURANT_CAROUSEL)
+    auto_one = content_pack_routes._campaign_art_direction(
+        "viral_carousel", slides, "auto", "auto"
+    )
+    grounded_prompts(LOVE_CAROUSEL, "bold_graphic", "electric")
+    auto_two = content_pack_routes._campaign_art_direction(
+        "viral_carousel", slides, "auto", "auto"
+    )
+    _, _, explicit, grounding, prompts = grounded_prompts(RESTAURANT_CAROUSEL)
+
+    assert auto_one == auto_two
+    assert explicit["resolved_style"] == "photorealistic"
+    assert explicit["resolved_palette"] == "warm_sunset"
+    assert grounding["campaign_subject"] in prompts[0]
+    assert prompts[0].index("0. CURRENT SEMANTIC GROUNDING") < prompts[0].index("1. CAMPAIGN STYLE LOCK")
     assert all(
         not value.startswith(
             ("Slide ", "Title:", "Subtitle:", "Phrase:", "Translation:")

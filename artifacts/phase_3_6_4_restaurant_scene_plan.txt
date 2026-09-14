@@ -1,0 +1,61 @@
+PHASE 3.6.4 RESTAURANT SCENE PLAN
+
+SLIDE 1
+campaign_subject=language-learning activity in a restaurant dining and service setting
+domain=restaurant + language_learning
+slide_purpose=introducing language-learning activity in a restaurant dining and service setting
+scene_subject=a diner and restaurant staff member in a clear service interaction
+action=the people engage in a practical restaurant conversation
+environment=a recognizable restaurant with dining tables, tableware, and service activity
+motif=distinct_object
+provider_prompt_summary=current grounding precedes style; restaurant subject/action/environment retained
+
+SLIDE 2
+campaign_subject=language-learning activity in a restaurant dining and service setting
+domain=restaurant + language_learning
+slide_purpose=arriving and asking a restaurant host for a table
+scene_subject=a guest speaking with a restaurant host near the entrance
+action=the host welcomes the guest and gestures toward an available dining table
+environment=a recognizable restaurant entrance, host stand, and dining room
+motif=distinct_object
+provider_prompt_summary=current grounding precedes style; restaurant subject/action/environment retained
+
+SLIDE 3
+campaign_subject=language-learning activity in a restaurant dining and service setting
+domain=restaurant + language_learning
+slide_purpose=choosing and ordering food in a restaurant
+scene_subject=a diner ordering a meal from a restaurant server at the table
+action=the diner gestures toward a blank menu as the server takes the order
+environment=a recognizable restaurant dining room with food, tableware, and service context
+motif=distinct_object
+provider_prompt_summary=current grounding precedes style; restaurant subject/action/environment retained
+
+SLIDE 4
+campaign_subject=language-learning activity in a restaurant dining and service setting
+domain=restaurant + language_learning
+slide_purpose=requesting or ordering a drink in a restaurant
+scene_subject=a diner speaking with a restaurant server beside a dining table
+action=the server brings a glass and carafe while the diner makes a polite request
+environment=a restaurant dining room with tableware and clearly visible beverage service
+motif=distinct_object
+provider_prompt_summary=current grounding precedes style; restaurant subject/action/environment retained
+
+SLIDE 5
+campaign_subject=language-learning activity in a restaurant dining and service setting
+domain=restaurant + language_learning
+slide_purpose=requesting or ordering a drink in a restaurant
+scene_subject=a diner speaking with a restaurant server beside a dining table
+action=the server brings a glass and carafe while the diner makes a polite request
+environment=a restaurant dining room with tableware and clearly visible beverage service
+motif=distinct_object
+provider_prompt_summary=current grounding precedes style; restaurant subject/action/environment retained
+
+SLIDE 6
+campaign_subject=language-learning activity in a restaurant dining and service setting
+domain=restaurant + language_learning
+slide_purpose=requesting and paying the restaurant bill
+scene_subject=a diner and restaurant server completing payment at the table
+action=the diner politely requests a blank bill folder and prepares a payment card
+environment=a clearly recognizable restaurant dining room and table setting
+motif=distinct_object
+provider_prompt_summary=current grounding precedes style; restaurant subject/action/environment retained

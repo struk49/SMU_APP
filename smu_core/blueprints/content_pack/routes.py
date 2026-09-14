@@ -280,6 +280,121 @@ def _copy_word_count(value):
     return len(COPY_WORD_RE.findall(value or ""))
 
 
+def _campaign_semantic_domains(slides):
+    """Derive fresh, bounded domains from only the current carousel."""
+    corpus = " ".join(
+        str(slide.get(key) or "")
+        for slide in slides
+        for key in ("title", "body", "visual")
+    ).lower()
+    domain_terms = (
+        ("restaurant", ("restaurant", "table", "menu", "waiter", "server", "food", "drink", "water", "bill", "check", "dining", "order")),
+        ("travel", ("travel", "airport", "hotel", "train", "journey", "trip", "ticket", "station")),
+        ("language_learning", ("polish", "phrase", "translation", "vocabulary", "language", "speak", "conversation")),
+        ("workplace", ("workplace", "office", "colleague", "meeting", "manager", "career")),
+        ("healthcare", ("health", "doctor", "clinic", "hospital", "patient", "medical")),
+        ("relationships", ("love", "romance", "relationship", "couple", "affection", "partner")),
+        ("business", ("business", "customer", "sales", "marketing", "founder", "strategy")),
+        ("technology", ("technology", "software", "platform", "app", "digital", "ai")),
+        ("education", ("teach", "learn", "lesson", "student", "study", "education")),
+        ("lifestyle", ("lifestyle", "home", "fashion", "wellness", "routine")),
+    )
+    def contains(term):
+        return re.search(rf"\b{re.escape(term)}\w*\b", corpus, re.UNICODE) is not None
+
+    domains = tuple(
+        domain for domain, terms in domain_terms if any(contains(term) for term in terms)
+    )
+    return domains or ("general",)
+
+
+def _campaign_grounding(slides, campaign_direction):
+    """Build new request-local semantic identity without retaining customer copy."""
+    domains = _campaign_semantic_domains(slides)
+    domain_set = set(domains)
+    if {"language_learning", "restaurant"} <= domain_set:
+        subject = "language-learning activity in a restaurant dining and service setting"
+        goal = "teach practical restaurant conversation through concrete dining interactions"
+    elif {"language_learning", "travel"} <= domain_set:
+        subject = "language-learning activity in a practical travel setting"
+        goal = "teach practical conversation through concrete travel interactions"
+    elif {"language_learning", "relationships"} <= domain_set:
+        subject = "language-learning activity in a personal-connection setting"
+        goal = "teach relationship-oriented conversation through relevant human interactions"
+    elif "restaurant" in domain_set:
+        subject = "restaurant dining and service interaction"
+        goal = "explain the current restaurant topic through concrete dining scenes"
+    elif "relationships" in domain_set:
+        subject = "relationship and personal-connection interaction"
+        goal = "explain the current relationship topic through relevant human scenes"
+    else:
+        subject = f"current {' and '.join(domains)} topic"
+        goal = "explain the current topic through concrete domain-relevant scenes"
+    return {
+        "campaign_subject": subject,
+        "campaign_goal": goal,
+        "audience": "a mobile social viewer seeking immediate practical understanding",
+        "content_category": "language_learning" if "language_learning" in domain_set else domains[0],
+        "semantic_domain": " + ".join(domains),
+        "current_source_summary": subject,
+        "current_carousel_theme": subject,
+        "resolved_style": campaign_direction.get("resolved_style") or "legacy",
+        "resolved_palette": campaign_direction.get("resolved_palette") or "legacy",
+    }
+
+
+def _slide_grounding(slide, campaign_grounding, role):
+    """Ground one slide in its current campaign without exposing overlay wording."""
+    normalized = " ".join(
+        str(slide.get(key) or "") for key in ("title", "body", "visual")
+    ).lower()
+    domains = set(campaign_grounding["semantic_domain"].split(" + "))
+    if "restaurant" in domains:
+        if any(term in normalized for term in ("bill", "check", "pay", "payment")):
+            purpose = "requesting and paying the restaurant bill"
+            subject = "a diner and restaurant server completing payment at the table"
+            action = "the diner politely requests a blank bill folder and prepares a payment card"
+            environment = "a clearly recognizable restaurant dining room and table setting"
+        elif any(term in normalized for term in ("water", "drink", "beverage")):
+            purpose = "requesting or ordering a drink in a restaurant"
+            subject = "a diner speaking with a restaurant server beside a dining table"
+            action = "the server brings a glass and carafe while the diner makes a polite request"
+            environment = "a restaurant dining room with tableware and clearly visible beverage service"
+        elif any(term in normalized for term in ("food", "dish", "meal", "order")):
+            purpose = "choosing and ordering food in a restaurant"
+            subject = "a diner ordering a meal from a restaurant server at the table"
+            action = "the diner gestures toward a blank menu as the server takes the order"
+            environment = "a recognizable restaurant dining room with food, tableware, and service context"
+        elif any(term in normalized for term in ("table", "reservation", "seat", "host")):
+            purpose = "arriving and asking a restaurant host for a table"
+            subject = "a guest speaking with a restaurant host near the entrance"
+            action = "the host welcomes the guest and gestures toward an available dining table"
+            environment = "a recognizable restaurant entrance, host stand, and dining room"
+        else:
+            purpose = "introducing practical conversation in a restaurant"
+            subject = "a diner and restaurant staff member in a clear service interaction"
+            action = "the people engage in a practical restaurant conversation"
+            environment = "a recognizable restaurant with dining tables, tableware, and service activity"
+    elif "relationships" in domains:
+        purpose = "supporting personal connection through an appropriate human interaction"
+        subject = "two people sharing a warm but natural personal interaction"
+        action = "the people communicate affection or appreciation through expression and gesture"
+        environment = "an everyday social setting appropriate to the current relationship context"
+    else:
+        purpose = "supporting the current slide within the current semantic domain"
+        subject = f"a concrete subject belonging to the current {campaign_grounding['semantic_domain']} domain"
+        action = "the subject performs one clear action that supports the current slide meaning"
+        environment = f"a recognizable {campaign_grounding['semantic_domain']} environment"
+    if role == "cover":
+        purpose = f"introducing {campaign_grounding['campaign_subject']}"
+    return {
+        "slide_purpose": purpose,
+        "scene_subject": subject,
+        "scene_action": action,
+        "scene_environment": environment,
+    }
+
+
 class CarouselQualityError(ValueError):
     """Safe categorical rejection containing metrics but never slide copy."""
 
@@ -430,7 +545,8 @@ def _campaign_art_direction(image_style, slides, design_style=None, palette=None
 
 
 def _scene_brief(
-    visual, semantic_text, treatment, visual_weight, layout, metaphor_family
+    visual, semantic_text, treatment, visual_weight, layout, metaphor_family,
+    campaign_grounding=None, slide_grounding=None,
 ):
     """Build a bounded, copy-safe scene specification for provider prompting."""
     normalized = " ".join(
@@ -490,15 +606,15 @@ def _scene_brief(
         else "centred poster-like view"
     )
     return {
-        "scene_subject": subject,
-        "scene_action": action,
+        "scene_subject": slide_grounding["scene_subject"] if slide_grounding else subject,
+        "scene_action": slide_grounding["scene_action"] if slide_grounding else action,
         "foreground_elements": (
             "one partially cropped supporting element entering the artwork zone to establish scale"
             if heavy else "none required" if not medium else
             "at most one supporting element overlapping the artwork-zone edge"
         ),
         "midground_elements": "the primary subject and its clearest semantic action",
-        "background_environment": (
+        "background_environment": slide_grounding["scene_environment"] if slide_grounding else (
             "a simplified contextual environment with layered planes, never a blank framed box"
             if heavy or medium else "a quiet campaign-colour field with minimal context"
         ),
@@ -856,6 +972,8 @@ def _build_slide_background_prompt(
     visual_weight="medium",
     metaphor_family=None,
     campaign_direction=None,
+    campaign_grounding=None,
+    slide_grounding=None,
 ):
     if visual_treatment == "typography_only":
         return None
@@ -907,7 +1025,7 @@ def _build_slide_background_prompt(
     campaign_direction = campaign_direction or _campaign_art_direction("", [])
     scene = _scene_brief(
         visual, semantic_text, visual_treatment or "illustration", visual_weight,
-        design_layout, metaphor_family,
+        design_layout, metaphor_family, campaign_grounding, slide_grounding,
     )
     occupancy = {"heavy": "dominant", "medium": "substantial", "light": "restrained"}[
         visual_weight
@@ -935,8 +1053,20 @@ def _build_slide_background_prompt(
     heavy_ban = "" if visual_weight != "heavy" else """
 - no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
   isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition"""
+    grounding_section = "" if not campaign_grounding or not slide_grounding else f"""
+0. CURRENT SEMANTIC GROUNDING — HIGHEST PRIORITY
+- current campaign subject: {campaign_grounding["campaign_subject"]}
+- current semantic domain: {campaign_grounding["semantic_domain"]}
+- current campaign goal: {campaign_grounding["campaign_goal"]}
+- current slide purpose: {slide_grounding["slide_purpose"]}
+- current scene action: {slide_grounding["scene_action"]}
+- subject, environment, and action must remain in this current domain
+- style, palette, composition, and motif variety may change presentation only;
+  they must never replace or weaken the current subject, environment, or action
+"""
     return f"""
 Create one text-free artwork scene for a cohesive Instagram carousel.
+{grounding_section}
 
 1. CAMPAIGN STYLE LOCK
 - the normalized campaign visual world below controls the medium for every slide
@@ -1151,6 +1281,7 @@ def create_content_pack_carousel():
         campaign_direction = _campaign_art_direction(
             image_style, slides, design_manager_style, colour_theme
         )
+        campaign_grounding = _campaign_grounding(slides, campaign_direction)
         if image_style == "viral_carousel":
             _validate_viral_carousel_copy(slides, presentations)
 
@@ -1172,6 +1303,9 @@ def create_content_pack_carousel():
 
         for index, slide in enumerate(slides):
             presentation = presentations[index]
+            slide_grounding = _slide_grounding(
+                slide, campaign_grounding, presentation["role"]
+            )
             layout_role = presentation["role"]
             semantic_text = presentation["semantic_text"]
             visual_treatment = presentation["treatment"]
@@ -1187,6 +1321,8 @@ def create_content_pack_carousel():
                 presentation["visual_weight"],
                 presentation["metaphor"],
                 campaign_direction,
+                campaign_grounding,
+                slide_grounding,
             )
             if background_prompt is None:
                 background_prompt = TYPOGRAPHY_ONLY_BACKGROUND
@@ -1216,6 +1352,12 @@ def create_content_pack_carousel():
                 optical_lock=presentation["optical_lock"],
                 campaign_style=campaign_direction.get("resolved_style"),
                 campaign_palette=campaign_direction.get("resolved_palette"),
+                campaign_grounding={
+                    "campaign_subject": campaign_grounding["campaign_subject"],
+                    "semantic_domain": campaign_grounding["semantic_domain"],
+                    "slide_purpose": slide_grounding["slide_purpose"],
+                    "scene_action": slide_grounding["scene_action"],
+                },
             )
 
             post = Post(

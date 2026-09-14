@@ -1,0 +1,579 @@
+PHASE 3.6.4 RESTAURANT PROVIDER PROMPTS
+Secret-safe; exact overlay copy excluded.
+
+--- SLIDE 1 ---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+0. CURRENT SEMANTIC GROUNDING — HIGHEST PRIORITY
+- current campaign subject: language-learning activity in a restaurant dining and service setting
+- current semantic domain: restaurant + language_learning
+- current campaign goal: teach practical restaurant conversation through concrete dining interactions
+- current slide purpose: introducing language-learning activity in a restaurant dining and service setting
+- current scene action: the people engage in a practical restaurant conversation
+- subject, environment, and action must remain in this current domain
+- style, palette, composition, and motif variety may change presentation only;
+  they must never replace or weaken the current subject, environment, or action
+
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: cinematic editorial photography
+- visual theme: one coherent conceptual campaign
+- palette intent: deep burgundy, coral, amber, and cream
+- lighting/depth: believable natural depth of field
+- texture: realistic materials
+- shape language: environmental forms with no stock-photo posing
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: focal_object_system
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: a diner and restaurant staff member in a clear service interaction
+- action: the people engage in a practical restaurant conversation
+- foreground: one partially cropped supporting element entering the artwork zone to establish scale
+- midground: the primary subject and its clearest semantic action
+- background: a recognizable restaurant with dining tables, tableware, and service activity
+- spatial relationship: one dominant subject, with one to three smaller supports visibly acting on or responding to it
+- viewpoint: angled three-quarter editorial view
+- depth: foreground overlap, occlusion, scale contrast, layered planes, and controlled shadows
+- crop: oversize and deliberately crop the focal subject at one or two artwork-zone edges
+- focal scale: dominant and large, confidently filling the artwork zone
+- supporting elements: one to three
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+- sequence-specific framing: A clean introductory hero composition with one relevant focal subject and strong negative space, without trying to illustrate every detail of the source.
+
+3. COMPOSITION / GEOMETRY
+- slide role: cover; sequence purpose: opening campaign hero
+- treatment: illustration; visual weight: heavy
+- layout: hero_left; artwork-zone occupancy: dominant
+- Fill the artwork zone confidently with a dominant subject, deeper layering, dramatic asymmetry, and minimal dead space.
+- Stage a contextual editorial scene with a subject, action, environment, and visible depth.
+- Use one isolated focal subject weighted to the right artwork zone. Keep the protected left typography zone completely free of artwork and detail.
+- text-safe space versus artwork space: protect only the separate text-safe zone; create no large dead margins inside the artwork zone
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+ 5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
+- ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
+- no words, letters, numbers, language characters, captions, labels, titles, or UI copy
+- no signs, logos, watermarks, written language, pseudo-text, gibberish typography,
+  fake handwriting, text-like decorative marks, or letter-like marks
+- no readable text
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no watermarks
+- no text on screens
+- no text on paper
+- no written signs
+- create only scenes, people, objects, environments, shapes, materials, visual
+  metaphors, lighting, and negative space
+- never infer or reproduce overlay wording, translated phrases, or teaching content
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- screens and displays must contain only blank colour fields or abstract geometry
+- paper, books, cards, posters, signs, and menus must be blank and glyph-free
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- no tiny central icon, three small rounded rectangles, simple node cluster, logo-like mark,
+  isolated symbol, generic SaaS UI cards, evenly spaced widgets, empty framed box, or clip-art composition
+- text-free requirements override conflicting typography or signage
+
+
+--- SLIDE 2 ---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+0. CURRENT SEMANTIC GROUNDING — HIGHEST PRIORITY
+- current campaign subject: language-learning activity in a restaurant dining and service setting
+- current semantic domain: restaurant + language_learning
+- current campaign goal: teach practical restaurant conversation through concrete dining interactions
+- current slide purpose: arriving and asking a restaurant host for a table
+- current scene action: the host welcomes the guest and gestures toward an available dining table
+- subject, environment, and action must remain in this current domain
+- style, palette, composition, and motif variety may change presentation only;
+  they must never replace or weaken the current subject, environment, or action
+
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: cinematic editorial photography
+- visual theme: one coherent conceptual campaign
+- palette intent: deep burgundy, coral, amber, and cream
+- lighting/depth: believable natural depth of field
+- texture: realistic materials
+- shape language: environmental forms with no stock-photo posing
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: focal_object_system
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: a guest speaking with a restaurant host near the entrance
+- action: the host welcomes the guest and gestures toward an available dining table
+- foreground: at most one supporting element overlapping the artwork-zone edge
+- midground: the primary subject and its clearest semantic action
+- background: a recognizable restaurant entrance, host stand, and dining room
+- spatial relationship: one clear subject with one subordinate context layer
+- viewpoint: wide conceptual editorial scene
+- depth: one overlapping context plane with clear depth separation
+- crop: use a confident close crop while keeping the whole action legible
+- focal scale: substantial and balanced within the artwork zone
+- supporting elements: zero to two
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: A simple scene or object grouping that supports the first distinct value point, with generous negative space and no speech bubbles.
+- sequence-specific framing: A simple scene or object grouping that supports the first distinct value point, with generous negative space and no speech bubbles.
+
+3. COMPOSITION / GEOMETRY
+- slide role: info; sequence purpose: supporting campaign progression
+- treatment: illustration; visual weight: medium
+- layout: split_right; artwork-zone occupancy: substantial
+- Use balanced, substantial occupancy with moderate scene depth and one context layer.
+- Stage a contextual editorial scene with a subject, action, environment, and visible depth.
+- Contain one subject in the designated left artwork zone. Keep the protected right typography zone empty, with a clean gutter and no divider.
+- text-safe space versus artwork space: protect the text-safe zone while keeping balanced artwork occupancy
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+ 5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
+- ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
+- no words, letters, numbers, language characters, captions, labels, titles, or UI copy
+- no signs, logos, watermarks, written language, pseudo-text, gibberish typography,
+  fake handwriting, text-like decorative marks, or letter-like marks
+- no readable text
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no watermarks
+- no text on screens
+- no text on paper
+- no written signs
+- create only scenes, people, objects, environments, shapes, materials, visual
+  metaphors, lighting, and negative space
+- never infer or reproduce overlay wording, translated phrases, or teaching content
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- screens and displays must contain only blank colour fields or abstract geometry
+- paper, books, cards, posters, signs, and menus must be blank and glyph-free
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- text-free requirements override conflicting typography or signage
+
+
+--- SLIDE 3 ---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+0. CURRENT SEMANTIC GROUNDING — HIGHEST PRIORITY
+- current campaign subject: language-learning activity in a restaurant dining and service setting
+- current semantic domain: restaurant + language_learning
+- current campaign goal: teach practical restaurant conversation through concrete dining interactions
+- current slide purpose: choosing and ordering food in a restaurant
+- current scene action: the diner gestures toward a blank menu as the server takes the order
+- subject, environment, and action must remain in this current domain
+- style, palette, composition, and motif variety may change presentation only;
+  they must never replace or weaken the current subject, environment, or action
+
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: cinematic editorial photography
+- visual theme: one coherent conceptual campaign
+- palette intent: deep burgundy, coral, amber, and cream
+- lighting/depth: believable natural depth of field
+- texture: realistic materials
+- shape language: environmental forms with no stock-photo posing
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: focal_object_system
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: a diner ordering a meal from a restaurant server at the table
+- action: the diner gestures toward a blank menu as the server takes the order
+- foreground: at most one supporting element overlapping the artwork-zone edge
+- midground: the primary subject and its clearest semantic action
+- background: a recognizable restaurant dining room with food, tableware, and service context
+- spatial relationship: one clear subject with one subordinate context layer
+- viewpoint: wide conceptual editorial scene
+- depth: one overlapping context plane with clear depth separation
+- crop: use a confident close crop while keeping the whole action legible
+- focal scale: substantial and balanced within the artwork zone
+- supporting elements: zero to two
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: a clean arrangement of relevant everyday objects in a specific setting
+- sequence-specific framing: A different but cohesive scene supporting the next distinct idea, using an uncluttered composition and one clear focal subject.
+
+3. COMPOSITION / GEOMETRY
+- slide role: info; sequence purpose: supporting campaign progression
+- treatment: illustration; visual weight: medium
+- layout: split_left; artwork-zone occupancy: substantial
+- Use balanced, substantial occupancy with moderate scene depth and one context layer.
+- Stage a contextual editorial scene with a subject, action, environment, and visible depth.
+- Contain one subject in the designated right artwork zone. Keep the protected left typography zone empty, with a clean gutter and no divider.
+- text-safe space versus artwork space: protect the text-safe zone while keeping balanced artwork occupancy
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+ 5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
+- ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
+- no words, letters, numbers, language characters, captions, labels, titles, or UI copy
+- no signs, logos, watermarks, written language, pseudo-text, gibberish typography,
+  fake handwriting, text-like decorative marks, or letter-like marks
+- no readable text
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no watermarks
+- no text on screens
+- no text on paper
+- no written signs
+- create only scenes, people, objects, environments, shapes, materials, visual
+  metaphors, lighting, and negative space
+- never infer or reproduce overlay wording, translated phrases, or teaching content
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- screens and displays must contain only blank colour fields or abstract geometry
+- paper, books, cards, posters, signs, and menus must be blank and glyph-free
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- text-free requirements override conflicting typography or signage
+
+
+--- SLIDE 4 ---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+0. CURRENT SEMANTIC GROUNDING — HIGHEST PRIORITY
+- current campaign subject: language-learning activity in a restaurant dining and service setting
+- current semantic domain: restaurant + language_learning
+- current campaign goal: teach practical restaurant conversation through concrete dining interactions
+- current slide purpose: requesting or ordering a drink in a restaurant
+- current scene action: the server brings a glass and carafe while the diner makes a polite request
+- subject, environment, and action must remain in this current domain
+- style, palette, composition, and motif variety may change presentation only;
+  they must never replace or weaken the current subject, environment, or action
+
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: cinematic editorial photography
+- visual theme: one coherent conceptual campaign
+- palette intent: deep burgundy, coral, amber, and cream
+- lighting/depth: believable natural depth of field
+- texture: realistic materials
+- shape language: environmental forms with no stock-photo posing
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: focal_object_system
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: a diner speaking with a restaurant server beside a dining table
+- action: the server brings a glass and carafe while the diner makes a polite request
+- foreground: none required
+- midground: the primary subject and its clearest semantic action
+- background: a restaurant dining room with tableware and clearly visible beverage service
+- spatial relationship: one simple subject with no competing elements
+- viewpoint: centred poster-like view
+- depth: mostly flat separation with restrained shadow depth
+- crop: keep the simple subject fully legible with comfortable artwork-zone space
+- focal scale: restrained but intentional within the artwork zone
+- supporting elements: zero or one
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: A restrained detail, object, or human moment that supports the slide's idea without becoming a literal diagram or labelled infographic.
+- sequence-specific framing: A restrained detail, object, or human moment that supports the slide's idea without becoming a literal diagram or labelled infographic.
+
+3. COMPOSITION / GEOMETRY
+- slide role: info; sequence purpose: editorial visual pause
+- treatment: illustration; visual weight: light
+- layout: split_right; artwork-zone occupancy: restrained
+- Use a simple restrained scene with intentional breathing room and no unnecessary complexity.
+- Stage a contextual editorial scene with a subject, action, environment, and visible depth.
+- Contain one subject in the designated left artwork zone. Keep the protected right typography zone empty, with a clean gutter and no divider.
+- text-safe space versus artwork space: use intentional breathing room inside the artwork zone without shrinking into an icon
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+ 5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
+- ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
+- no words, letters, numbers, language characters, captions, labels, titles, or UI copy
+- no signs, logos, watermarks, written language, pseudo-text, gibberish typography,
+  fake handwriting, text-like decorative marks, or letter-like marks
+- no readable text
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no watermarks
+- no text on screens
+- no text on paper
+- no written signs
+- create only scenes, people, objects, environments, shapes, materials, visual
+  metaphors, lighting, and negative space
+- never infer or reproduce overlay wording, translated phrases, or teaching content
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- screens and displays must contain only blank colour fields or abstract geometry
+- paper, books, cards, posters, signs, and menus must be blank and glyph-free
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- text-free requirements override conflicting typography or signage
+
+
+--- SLIDE 5 ---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+0. CURRENT SEMANTIC GROUNDING — HIGHEST PRIORITY
+- current campaign subject: language-learning activity in a restaurant dining and service setting
+- current semantic domain: restaurant + language_learning
+- current campaign goal: teach practical restaurant conversation through concrete dining interactions
+- current slide purpose: requesting or ordering a drink in a restaurant
+- current scene action: the server brings a glass and carafe while the diner makes a polite request
+- subject, environment, and action must remain in this current domain
+- style, palette, composition, and motif variety may change presentation only;
+  they must never replace or weaken the current subject, environment, or action
+
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: cinematic editorial photography
+- visual theme: one coherent conceptual campaign
+- palette intent: deep burgundy, coral, amber, and cream
+- lighting/depth: believable natural depth of field
+- texture: realistic materials
+- shape language: environmental forms with no stock-photo posing
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: focal_object_system
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: a diner speaking with a restaurant server beside a dining table
+- action: the server brings a glass and carafe while the diner makes a polite request
+- foreground: at most one supporting element overlapping the artwork-zone edge
+- midground: the primary subject and its clearest semantic action
+- background: a restaurant dining room with tableware and clearly visible beverage service
+- spatial relationship: one clear subject with one subordinate context layer
+- viewpoint: wide conceptual editorial scene
+- depth: one overlapping context plane with clear depth separation
+- crop: use a confident close crop while keeping the whole action legible
+- focal scale: substantial and balanced within the artwork zone
+- supporting elements: zero to two
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: A calm takeaway composition with minimal supporting elements, clear visual hierarchy, and room for concise overlay copy.
+- sequence-specific framing: A calm takeaway composition with minimal supporting elements, clear visual hierarchy, and room for concise overlay copy.
+
+3. COMPOSITION / GEOMETRY
+- slide role: info; sequence purpose: supporting campaign progression
+- treatment: illustration; visual weight: medium
+- layout: split_left; artwork-zone occupancy: substantial
+- Use balanced, substantial occupancy with moderate scene depth and one context layer.
+- Stage a contextual editorial scene with a subject, action, environment, and visible depth.
+- Contain one subject in the designated right artwork zone. Keep the protected left typography zone empty, with a clean gutter and no divider.
+- text-safe space versus artwork space: protect the text-safe zone while keeping balanced artwork occupancy
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+ 5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
+- ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
+- no words, letters, numbers, language characters, captions, labels, titles, or UI copy
+- no signs, logos, watermarks, written language, pseudo-text, gibberish typography,
+  fake handwriting, text-like decorative marks, or letter-like marks
+- no readable text
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no watermarks
+- no text on screens
+- no text on paper
+- no written signs
+- create only scenes, people, objects, environments, shapes, materials, visual
+  metaphors, lighting, and negative space
+- never infer or reproduce overlay wording, translated phrases, or teaching content
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- screens and displays must contain only blank colour fields or abstract geometry
+- paper, books, cards, posters, signs, and menus must be blank and glyph-free
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- text-free requirements override conflicting typography or signage
+
+
+--- SLIDE 6 ---
+
+Create one text-free artwork scene for a cohesive Instagram carousel.
+
+0. CURRENT SEMANTIC GROUNDING — HIGHEST PRIORITY
+- current campaign subject: language-learning activity in a restaurant dining and service setting
+- current semantic domain: restaurant + language_learning
+- current campaign goal: teach practical restaurant conversation through concrete dining interactions
+- current slide purpose: requesting and paying the restaurant bill
+- current scene action: the diner politely requests a blank bill folder and prepares a payment card
+- subject, environment, and action must remain in this current domain
+- style, palette, composition, and motif variety may change presentation only;
+  they must never replace or weaken the current subject, environment, or action
+
+
+1. CAMPAIGN STYLE LOCK
+- the normalized campaign visual world below controls the medium for every slide
+- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
+- the slide-specific concept changes only the scene, subjects, props, framing, and composition
+- do not let the slide-specific concept introduce a different visual medium or art style
+
+- art style: cinematic editorial photography
+- visual theme: one coherent conceptual campaign
+- palette intent: deep burgundy, coral, amber, and cream
+- lighting/depth: believable natural depth of field
+- texture: realistic materials
+- shape language: environmental forms with no stock-photo posing
+- composition energy: confident asymmetry with one immediate focal hierarchy
+- shared campaign motif: focal_object_system
+- detail level: editorial detail legible at mobile thumbnail size
+
+2. SCENE BRIEF
+- main subject: a diner and restaurant server completing payment at the table
+- action: the diner politely requests a blank bill folder and prepares a payment card
+- foreground: at most one supporting element overlapping the artwork-zone edge
+- midground: the primary subject and its clearest semantic action
+- background: a clearly recognizable restaurant dining room and table setting
+- spatial relationship: one clear subject with one subordinate context layer
+- viewpoint: wide conceptual editorial scene
+- depth: one overlapping context plane with clear depth separation
+- crop: use a confident close crop while keeping the whole action legible
+- focal scale: substantial and balanced within the artwork zone
+- supporting elements: zero to two
+- material continuity: use the campaign material language exactly; do not switch medium
+- scene intent: A simple closing composition with one relevant focal element and substantial clean space for a conclusion or call to action.
+- sequence-specific framing: A simple closing composition with one relevant focal element and substantial clean space for a conclusion or call to action.
+
+3. COMPOSITION / GEOMETRY
+- slide role: info; sequence purpose: supporting campaign progression
+- treatment: illustration; visual weight: medium
+- layout: split_right; artwork-zone occupancy: substantial
+- Use balanced, substantial occupancy with moderate scene depth and one context layer.
+- Stage a contextual editorial scene with a subject, action, environment, and visible depth.
+- Contain one subject in the designated left artwork zone. Keep the protected right typography zone empty, with a clean gutter and no divider.
+- text-safe space versus artwork space: protect the text-safe zone while keeping balanced artwork occupancy
+- square 1:1 format
+- keep faces, facial features, and primary objects completely outside the text-safe zone
+
+4. QUALITY BAR
+- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
+- preserve the campaign palette, material, edge language, lighting logic, and sophistication
+- create a complete semantic scene, not placeholder geometry
+
+ 5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
+- ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
+- no words, letters, numbers, language characters, captions, labels, titles, or UI copy
+- no signs, logos, watermarks, written language, pseudo-text, gibberish typography,
+  fake handwriting, text-like decorative marks, or letter-like marks
+- no readable text
+- no letters
+- no handwriting
+- no pseudo-text
+- no gibberish text
+- no typography
+- no captions
+- no labels
+- no readable logos
+- no watermarks
+- no text on screens
+- no text on paper
+- no written signs
+- create only scenes, people, objects, environments, shapes, materials, visual
+  metaphors, lighting, and negative space
+- never infer or reproduce overlay wording, translated phrases, or teaching content
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- screens and displays must contain only blank colour fields or abstract geometry
+- paper, books, cards, posters, signs, and menus must be blank and glyph-free
+- no generated app-store badges
+- no readable app wordmarks
+- no official platform logos or trademark-shaped icons
+- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards
+- text-free requirements override conflicting typography or signage

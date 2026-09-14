@@ -55,6 +55,9 @@ OVERLAY_CAMPAIGN_PALETTES = {
     "earth_and_cream", "electric", "soft_pastel",
 }
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
+GROUNDING_FIELDS = {
+    "campaign_subject", "semantic_domain", "slide_purpose", "scene_action",
+}
 OVERLAY_LAYOUT_VARIANTS = {
     "hero_left",
     "hero_center",
@@ -108,6 +111,19 @@ def _valid_optional_overlay_text(value, max_length):
 
 def _normalize_optional_overlay_text(value):
     return None if isinstance(value, str) and value == "" else value
+
+
+def _valid_campaign_grounding(value):
+    return (
+        isinstance(value, dict)
+        and set(value) == GROUNDING_FIELDS
+        and all(
+            isinstance(value[field], str)
+            and value[field].strip()
+            and len(value[field]) <= 300
+            for field in GROUNDING_FIELDS
+        )
+    )
 
 
 def _valid_typography(typography, title):
@@ -168,6 +184,7 @@ def build_content_pack_overlay_prompt(
     optical_lock=None,
     campaign_style=None,
     campaign_palette=None,
+    campaign_grounding=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -236,6 +253,10 @@ def build_content_pack_overlay_prompt(
         or (campaign_style is not None and campaign_style not in OVERLAY_CAMPAIGN_STYLES)
         or (campaign_palette is not None and campaign_palette not in OVERLAY_CAMPAIGN_PALETTES)
         or (
+            campaign_grounding is not None
+            and not _valid_campaign_grounding(campaign_grounding)
+        )
+        or (
             layout_role is not None
             and (
                 not isinstance(layout_role, str)
@@ -294,6 +315,8 @@ def build_content_pack_overlay_prompt(
         payload["campaign_style"] = campaign_style
     if campaign_palette is not None:
         payload["campaign_palette"] = campaign_palette
+    if campaign_grounding is not None:
+        payload["campaign_grounding"] = dict(campaign_grounding)
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -338,6 +361,7 @@ def parse_overlay_prompt(prompt):
         "optical_lock",
         "campaign_style",
         "campaign_palette",
+        "campaign_grounding",
     }
     if (
         not isinstance(payload, dict)
@@ -427,6 +451,10 @@ def parse_overlay_prompt(prompt):
         )
         or ("campaign_style" in payload and payload["campaign_style"] not in OVERLAY_CAMPAIGN_STYLES)
         or ("campaign_palette" in payload and payload["campaign_palette"] not in OVERLAY_CAMPAIGN_PALETTES)
+        or (
+            "campaign_grounding" in payload
+            and not _valid_campaign_grounding(payload["campaign_grounding"])
+        )
     ):
         raise OverlayPayloadError()
     if payload["version"] != OVERLAY_PAYLOAD_VERSION:

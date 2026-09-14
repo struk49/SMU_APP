@@ -1,0 +1,8 @@
+PHASE 3.6.4 CROSS-CAMPAIGN ISOLATION
+
+Love → Restaurant: PASS
+Restaurant → Love: PASS
+Restaurant prior-token leakage: PASS
+Prompts are identical for each campaign regardless of execution order.
+restaurant_domain=restaurant + language_learning
+love_domain=language_learning + relationships

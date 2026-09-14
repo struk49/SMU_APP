@@ -1,0 +1,3 @@
+PHASE 3.6.4 QUALITY REVIEW
+
+PASS: fresh request-local grounding; campaign/slide/domain propagation; order independence; worker row isolation; motif remains in-domain; explicit and Auto style isolation; restaurant and relationship fixtures; no prior-topic tokens; exact overlay copy excluded; provider text suppression preserved; Flare/styles/palettes/typography/composition/calls/credits preserved; no schema or customer rejection.
