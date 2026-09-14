@@ -1,0 +1,5 @@
+PHASE 3.6.3 QUALITY REVIEW
+
+PASS: exact overlay copy excluded from provider prompts; absolute text-free policy; text-inviting scenes sanitized; phrase pairs preserved; 1-3 pair generation target; mobile-safe floors; no truncation or renderer rewriting; caption/detail separation; styles, palettes, Flare, calls, credits, composition, and optical locks preserved; production preflight used; no OCR or vision.
+
+Synthetic artwork is clearly labelled and is not provider-quality evidence.

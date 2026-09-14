@@ -612,6 +612,9 @@ def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
     assert "Start creating smarter" in prompt
     assert "Get started today" in prompt
     assert "Refer to a concrete next action" in prompt
+    assert "Design every carousel for mobile reading" in prompt
+    assert "never more than three short pairs" in prompt
+    assert "place useful additional context, usage notes, or examples in the Instagram caption" in prompt
 
 
 @pytest.mark.parametrize(

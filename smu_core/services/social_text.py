@@ -26,6 +26,15 @@ MAX_INPUT_BYTES = 20 * 1024 * 1024
 MAX_DIMENSION = 4096
 MAX_PIXELS = 16_000_000
 MIN_FONT_SIZE = 18
+VIRAL_READABILITY_MINIMUMS = {
+    "headline": 52,
+    "phrase": 52,
+    "support": 32,
+    "translation": 32,
+    "eyebrow": 24,
+    "cta": 36,
+    "brand": 24,
+}
 
 TEXT_LIMITS = {
     "title": 180,
@@ -1158,11 +1167,23 @@ def _draw_role_composition(
     tokens = _style_tokens(design_style)
     content_width = width - 2 * margin
     scale = min(width, height)
-    readable_body_size = max(MIN_FONT_SIZE, round(scale * 0.030))
-    readable_brand_size = max(MIN_FONT_SIZE, round(min(width, height) * 0.022))
+    viral_scale = scale / 1024
+    readable_body_size = max(
+        MIN_FONT_SIZE,
+        round(VIRAL_READABILITY_MINIMUMS["support"] * viral_scale)
+        if design_style == "viral_carousel" else round(scale * 0.030),
+    )
+    readable_brand_size = max(
+        MIN_FONT_SIZE,
+        round(VIRAL_READABILITY_MINIMUMS["brand"] * viral_scale)
+        if design_style == "viral_carousel" else round(scale * 0.022),
+    )
     readable_title_size = max(
         MIN_FONT_SIZE,
-        round(scale * (0.052 if design_style == "viral_carousel" else 0.039)),
+        round(VIRAL_READABILITY_MINIMUMS[
+            "phrase" if layout_role == "phrase" else "headline"
+        ] * viral_scale)
+        if design_style == "viral_carousel" else round(scale * 0.039),
     )
     padding = max(12, round(scale * 0.018))
     layout_tokens = {
@@ -1270,7 +1291,10 @@ def _draw_role_composition(
             ),
             max_lines=1,
             start_size=round(content_width * 0.032),
-            min_size=readable_brand_size,
+            min_size=(
+                max(readable_brand_size, round(VIRAL_READABILITY_MINIMUMS["eyebrow"] * viral_scale))
+                if design_style == "viral_carousel" else readable_brand_size
+            ),
             align=config["align"],
             stroke_width=stroke_width,
             weight="semibold",
@@ -1282,7 +1306,19 @@ def _draw_role_composition(
     values = (title, body, cta)
     kinds = ("title", "body", "cta")
     weights = ("black", "medium", "bold")
-    minimums = (readable_title_size, readable_body_size, readable_body_size)
+    minimums = (
+        readable_title_size,
+        max(
+            readable_body_size,
+            round(VIRAL_READABILITY_MINIMUMS[
+                "translation" if layout_role == "phrase" else "support"
+            ] * viral_scale),
+        ) if design_style == "viral_carousel" else readable_body_size,
+        max(
+            readable_body_size,
+            round(VIRAL_READABILITY_MINIMUMS["cta"] * viral_scale),
+        ) if design_style == "viral_carousel" else readable_body_size,
+    )
     if design_style == "viral_carousel":
         height_shares = (0.78, 0.31, 0.17) if not body and not cta else (0.52, 0.31, 0.17)
     else:

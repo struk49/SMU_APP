@@ -157,6 +157,8 @@ def _parse_slide_block(lines):
         "layout_role": "info",
     }
     active_field = None
+    phrase_pairs = []
+    active_phrase_pair = None
 
     for line in lines:
         if not line.strip():
@@ -169,8 +171,12 @@ def _parse_slide_block(lines):
                 active_field = "title"
                 if label == "phrase":
                     slide["layout_role"] = "phrase"
+                    active_phrase_pair = {"phrase": value, "translation": None}
+                    phrase_pairs.append(active_phrase_pair)
             elif label in BODY_FIELD_NAMES:
                 active_field = "body"
+                if label == "translation" and active_phrase_pair is not None:
+                    active_phrase_pair["translation"] = value
             elif label == "visual":
                 active_field = "visual"
             elif label == "visual weight":
@@ -195,6 +201,11 @@ def _parse_slide_block(lines):
                 slide["title"] = slide[field]
                 slide[field] = None
                 break
+
+    if phrase_pairs:
+        slide["phrase_pairs"] = tuple(
+            (pair["phrase"], pair["translation"]) for pair in phrase_pairs
+        )
 
     return slide if any(slide[field] for field in ("title", "body", "cta")) else None
 
@@ -297,11 +308,12 @@ def _reject_carousel_copy(
     word_count = _copy_word_count(value)
     character_count = len((value or "").strip())
     logger.warning(
-        "carousel_copy_quality_rejected slide_index=%s role=%s word_count=%s "
+        "carousel_copy_quality_rejected slide_index=%s role=%s content_type=%s word_count=%s "
         "character_count=%s treatment=%s layout=%s measured_lines=%s "
         "font_size=%s reason=%s structure_reason=%s",
         slide_index,
         role,
+        "language_learning" if role == "phrase" else "general",
         word_count,
         character_count,
         treatment,
@@ -768,11 +780,27 @@ def _safe_visual_direction(visual, semantic_text=None):
     """Map untrusted visual prose to text-free scene categories."""
     normalized = " ".join(value for value in (visual, semantic_text) if value).lower()
     directions = []
+    text_inviting_scenes = (
+        (("document", "article", "workbook", "paper"),
+         "blank layered paper objects with no printing, glyphs, handwriting, or letter-like marks"),
+        (("screen", "interface", "dashboard", "phone", "mobile", "app"),
+         "an abstract glowing display surface containing only plain colour fields and geometric shapes, with no UI, icons, numbers, or glyphs"),
+        (("book", "notebook", "book page"),
+         "a closed book or blank-page book object with no printing, handwriting, numbers, or letter-like marks"),
+        (("poster", "sign", "signage"),
+         "a blank graphic surface made only from colour, shape, texture, and imagery, with no lettering or symbols"),
+        (("menu", "lesson card", "language lesson card"),
+         "a blank card object supported by an everyday conversation scene, with no written content or glyphs"),
+    )
+    for keywords, direction in text_inviting_scenes:
+        if any(keyword in normalized for keyword in keywords):
+            directions.append(direction)
+            break
     scene_categories = (
         (("instagram",),
          "a bold image frame with layered text-free media cards and a strong visual focal area"),
         (("linkedin",),
-         "a refined editorial document composition suggesting considered professional insight"),
+         "a text-free editorial document metaphor made from refined blank layered paper shapes, with no printing or glyphs"),
         (("reddit",),
          "an organic network of conversation nodes suggesting discussion and shared context"),
         (("pinterest",),
@@ -796,7 +824,7 @@ def _safe_visual_direction(visual, semantic_text=None):
         (("problem", "mismatch", "doesn't fit", "does not fit"),
          "one rigid form contrasted against several differently shaped destinations"),
         (("word", "phrase", "vocabulary", "language", "conversation"),
-         "a culturally relevant everyday context supporting language learning"),
+         "a culturally relevant everyday conversation supporting language learning through people, gesture, objects, and a speech or sound metaphor, with no written language"),
         (("food", "travel", "object"),
          "a clean arrangement of relevant everyday objects in a specific setting"),
         (("fact", "research", "information", "evidence"),
@@ -807,14 +835,14 @@ def _safe_visual_direction(visual, semantic_text=None):
         (("people", "person", "smiling", "waving", "greeting"),
          "a friendly conversational interaction in purposeful environmental context"),
         (("phone", "mobile", "app"),
-         "a smartphone used as a secondary prop with abstract text-free interface shapes"),
+         "a display-shaped secondary prop containing only plain colour fields and geometric shapes, with no UI, icons, numbers, or glyphs"),
     )
     for keywords, direction in scene_categories:
         if any(keyword in normalized for keyword in keywords):
             directions.append(direction)
         if len(directions) == 2:
             break
-    return "; ".join(directions) if directions else None
+    return "; ".join(dict.fromkeys(directions)) if directions else None
 
 
 def _build_slide_background_prompt(
@@ -958,9 +986,12 @@ Create one text-free artwork scene for a cohesive Instagram carousel.
 - preserve the campaign palette, material, edge language, lighting logic, and sophistication
 - create a complete semantic scene, not placeholder geometry
 
-5. NEGATIVE REQUIREMENTS
+ 5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
+- ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
+- no words, letters, numbers, language characters, captions, labels, titles, or UI copy
+- no signs, logos, watermarks, written language, pseudo-text, gibberish typography,
+  fake handwriting, text-like decorative marks, or letter-like marks
 - no readable text
-- no words
 - no letters
 - no handwriting
 - no pseudo-text
@@ -969,14 +1000,18 @@ Create one text-free artwork scene for a cohesive Instagram carousel.
 - no captions
 - no labels
 - no readable logos
-- no numbers unless the visual concept makes them unavoidable
 - no watermarks
-- no UI screenshots
-- no generic clip-art look
-- no isolated tiny object surrounded by unnecessary empty space
 - no text on screens
 - no text on paper
 - no written signs
+- create only scenes, people, objects, environments, shapes, materials, visual
+  metaphors, lighting, and negative space
+- never infer or reproduce overlay wording, translated phrases, or teaching content
+- no UI screenshots
+- no generic clip-art look
+- no isolated tiny object surrounded by unnecessary empty space
+- screens and displays must contain only blank colour fields or abstract geometry
+- paper, books, cards, posters, signs, and menus must be blank and glyph-free
 - no generated app-store badges
 - no readable app wordmarks
 - no official platform logos or trademark-shaped icons

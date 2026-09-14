@@ -1289,6 +1289,38 @@ def test_preflight_production_cases_report_measured_results():
     assert cover["support_lines"] <= 6
 
 
+def test_viral_mobile_readability_floors_are_enforced_for_phrase_copy():
+    result = social_text.preflight_viral_carousel_text(
+        title="Czy możesz mi pomóc?",
+        body="Can you help me?",
+        layout_role="phrase",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+        visual_weight="medium",
+    )
+
+    assert result["fits"] is True
+    assert result["headline_font_size"] >= social_text.VIRAL_READABILITY_MINIMUMS["phrase"]
+    assert result["support_font_size"] >= social_text.VIRAL_READABILITY_MINIMUMS["translation"]
+
+
+def test_viral_renderer_fails_instead_of_shrinking_below_readability_floor():
+    result = social_text.preflight_viral_carousel_text(
+        title="Bardzo długa fraza " * 8,
+        body="Very long translation " * 15,
+        layout_role="phrase",
+        layout_variant="split_left",
+        visual_treatment="illustration",
+        visual_weight="medium",
+        allow_compact_fallback=False,
+    )
+
+    assert result["fits"] is False
+    assert result["failure_reason"] in {
+        "carousel_headline_does_not_fit", "carousel_support_does_not_fit"
+    }
+
+
 def test_same_production_headline_fails_in_small_zone_without_renderer_fallback(
     monkeypatch,
 ):

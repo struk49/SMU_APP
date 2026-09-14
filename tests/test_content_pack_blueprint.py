@@ -533,6 +533,7 @@ Slide 5: Często tu przychodzisz?"""
             "brand": None,
             "visual": None,
             "layout_role": "phrase",
+            "phrase_pairs": (("Jak się masz?", "How are you?"),),
         },
         {
             "title": "Szczęśliwej podróży!",
@@ -822,6 +823,58 @@ def test_background_prompt_includes_weight_but_excludes_overlay_copy():
     assert "visual weight: medium" in prompt
     assert "treatment: feature_cards" in prompt
     assert private_copy not in prompt
+
+
+def test_language_learning_pairs_remain_structural_and_bounded():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Phrase: Dzień dobry
+Translation: Good morning
+Phrase: Jak się masz?
+Translation: How are you?
+Phrase: Miłego dnia!
+Translation: Have a nice day!"""
+    )
+
+    assert slides[0]["phrase_pairs"] == (
+        ("Dzień dobry", "Good morning"),
+        ("Jak się masz?", "How are you?"),
+        ("Miłego dnia!", "Have a nice day!"),
+    )
+    assert slides[0]["title"] == "Dzień dobry\nJak się masz?\nMiłego dnia!"
+    assert slides[0]["body"] == "Good morning\nHow are you?\nHave a nice day!"
+
+
+@pytest.mark.parametrize(
+    ("concept", "required"),
+    [
+        ("A workbook document", "blank layered paper objects"),
+        ("A phone screen interface", "abstract glowing display surface"),
+        ("An open book page", "blank-page book object"),
+        ("A poster sign", "blank graphic surface"),
+        ("A language lesson card menu", "blank card object"),
+    ],
+)
+def test_text_inviting_visual_concepts_are_sanitized(concept, required):
+    direction = content_pack_routes._safe_visual_direction(concept, concept)
+    assert required in direction
+    assert "no " in direction
+
+
+def test_language_learning_copy_never_reaches_provider_prompt():
+    phrase = "Czy możesz mi pomóc?"
+    translation = "Can you help me?"
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "ignored", 1, "A language lesson card on a phone screen", "phrase",
+        "split_left", "illustration", f"{phrase} {translation}", "medium",
+        "distinct_object",
+    )
+
+    assert phrase not in prompt
+    assert translation not in prompt
+    assert "ABSOLUTELY NO READABLE TEXT" in prompt
+    assert "no words, letters, numbers, language characters" in prompt
+    assert "All visible typography is added later by SMU" in prompt
 
 
 def test_campaign_art_direction_is_normalized_and_source_appropriate():
@@ -1384,6 +1437,7 @@ def test_support_density_rejection_logs_safe_metrics_without_copy(caplog):
     )
     assert raised.value.character_count == len(private_support.strip())
     assert "carousel_copy_quality_rejected" in caplog.text
+    assert "content_type=" in caplog.text
     assert "slide_index=2" in caplog.text
     assert "role=info" in caplog.text
     assert f"word_count={raised.value.word_count}" in caplog.text
@@ -1649,6 +1703,7 @@ Visual: Two young people smiling and waving"""
             "brand": None,
             "visual": "Two young people smiling and waving",
             "layout_role": "phrase",
+            "phrase_pairs": (("Miłego dnia!", "Have a nice day!"),),
         }
     ]
 

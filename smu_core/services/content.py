@@ -820,6 +820,12 @@ Carousel strategy:
 - Use 2 to 6 `Slide N:` structural blocks and only as many as the source can support
   without filler. Prefer 4-6 for a normally substantive source, but never pad weak
   material. The `Slide N:` markers are parser metadata, not customer-visible copy.
+- Design every carousel for mobile reading. Prefer fewer words, generous spacing,
+  and one immediately understandable lesson per slide over content volume.
+- Never compress several examples into paragraph-like artwork copy. Use another
+  slide when the 2-6 slide policy permits; otherwise select the strongest examples
+  and place useful additional context, usage notes, or examples in the Instagram
+  caption without duplicating the carousel.
 - Give the carousel a deliberate progression: hook/cover, development through
   genuinely distinct ideas, then a useful takeaway, result, conclusion, or CTA when
   justified. Do not require every stage, but ensure each slide adds new meaning.
@@ -853,6 +859,10 @@ Carousel strategy:
 - ONLY when the source genuinely teaches vocabulary or language terms, use Phrase,
   Translation, optional Tip, and Visual. Put the target-language wording in Phrase
   and its meaning in Translation rather than combining both into one field.
+- For genuine language-learning content, prioritize learning clarity: normally use
+  one phrase/translation pair per slide and never more than three short pairs. Keep
+  each pair structurally adjacent, preserve punctuation and diacritics exactly, and
+  never turn several lesson categories into one dense vocabulary block.
 - For every other category, including Product / SaaS, Educational, Tutorial / How-to,
   Build in Public, Story, Opinion, Announcement, List / Tips, and Community /
   Engagement, use Title, optional Body, optional CTA, and Visual. Never use Phrase

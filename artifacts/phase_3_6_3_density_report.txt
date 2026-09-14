@@ -1,0 +1,9 @@
+PHASE 3.6.3 DENSITY REPORT
+1024x1024 production preflight metrics.
+
+slide=1 role=cover phrase_pairs=0 headline_lines=2 support_lines=3 headline_size=65 support_size=55 mobile_readability=PASS
+slide=2 role=phrase phrase_pairs=2 headline_lines=2 support_lines=2 headline_size=71 support_size=58 mobile_readability=PASS
+slide=3 role=phrase phrase_pairs=2 headline_lines=2 support_lines=2 headline_size=97 support_size=58 mobile_readability=PASS
+slide=4 role=phrase phrase_pairs=1 headline_lines=2 support_lines=1 headline_size=126 support_size=58 mobile_readability=PASS
+slide=5 role=phrase phrase_pairs=2 headline_lines=3 support_lines=3 headline_size=59 support_size=48 mobile_readability=PASS
+slide=6 role=cta phrase_pairs=0 headline_lines=2 support_lines=0 headline_size=71 support_size=None mobile_readability=PASS
