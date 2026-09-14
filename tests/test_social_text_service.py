@@ -33,6 +33,117 @@ def source_bytes_with_color(color, *, size=(1000, 1000)):
     return buffer.getvalue()
 
 
+def legacy_balanced_wrap(draw, text, font, max_width, max_lines):
+    paragraphs = text.split("\n")
+    if len(paragraphs) != 1:
+        return social_text._wrap_text(draw, text, font, max_width)
+    words = text.split()
+    if not words:
+        return [""]
+    widths = {
+        (start, end): social_text._line_width(
+            draw, " ".join(words[start:end]), font
+        )
+        for start in range(len(words)) for end in range(start + 1, len(words) + 1)
+    }
+    best = None
+    for line_count in range(1, min(max_lines, len(words)) + 1):
+        states = {(0, 0): (0.0, [])}
+        for line_index in range(line_count):
+            next_states = {}
+            for (used_lines, start), (cost, lines) in states.items():
+                if used_lines != line_index:
+                    continue
+                remaining_lines = line_count - line_index - 1
+                for end in range(start + 1, len(words) + 1):
+                    if len(words) - end < remaining_lines:
+                        break
+                    width = widths[(start, end)]
+                    if width > max_width:
+                        break
+                    raggedness = ((max_width - width) / max_width) ** 2
+                    orphan = 1.5 if end == len(words) and end - start == 1 and len(words) > 2 else 0
+                    key = (line_index + 1, end)
+                    candidate = (cost + raggedness + orphan, lines + [" ".join(words[start:end])])
+                    if key not in next_states or candidate[0] < next_states[key][0]:
+                        next_states[key] = candidate
+            states = next_states
+        candidate = states.get((line_count, len(words)))
+        if candidate and (best is None or candidate[0] < best[0]):
+            best = candidate
+    return best[1] if best else None
+
+
+def test_width_cache_returns_exact_pil_measurement_and_distinguishes_fonts():
+    draw = ImageDraw.Draw(Image.new("RGB", (600, 300)))
+    regular = social_text._load_font(48, "regular")
+    bold = social_text._load_font(48, "bold")
+    larger = social_text._load_font(52, "regular")
+    cache = {}
+
+    regular_width = social_text._cached_line_width(
+        draw, "Dzień dobry", regular, cache, ("font", 48, "regular")
+    )
+    bold_width = social_text._cached_line_width(
+        draw, "Dzień dobry", bold, cache, ("font", 48, "bold")
+    )
+    larger_width = social_text._cached_line_width(
+        draw, "Dzień dobry", larger, cache, ("font", 52, "regular")
+    )
+
+    assert regular_width == social_text._line_width(draw, "Dzień dobry", regular)
+    assert bold_width == social_text._line_width(draw, "Dzień dobry", bold)
+    assert larger_width == social_text._line_width(draw, "Dzień dobry", larger)
+    assert len(cache) == 3
+
+
+def test_repeated_balanced_span_measurement_hits_pil_once(monkeypatch):
+    draw = ImageDraw.Draw(Image.new("RGB", (800, 400)))
+    font = social_text._load_font(48, "regular")
+    calls = []
+    original = social_text._line_width
+
+    def measured(*args):
+        calls.append(args[1])
+        return original(*args)
+
+    monkeypatch.setattr(social_text, "_line_width", measured)
+    cache = {}
+    first = social_text._balanced_wrap_text(
+        draw, "Dzień dobry jak się masz", font, 420, 3,
+        width_cache=cache, font_key=("font", 48, "regular"),
+    )
+    first_call_count = len(calls)
+    second = social_text._balanced_wrap_text(
+        draw, "Dzień dobry jak się masz", font, 420, 4,
+        width_cache=cache, font_key=("font", 48, "regular"),
+    )
+
+    assert first == legacy_balanced_wrap(draw, "Dzień dobry jak się masz", font, 420, 3)
+    assert second == legacy_balanced_wrap(draw, "Dzień dobry jak się masz", font, 420, 4)
+    assert len(calls) - first_call_count == 30  # only the two uncached legacy checks
+
+
+def test_balanced_width_cache_is_operation_local(monkeypatch):
+    draw = ImageDraw.Draw(Image.new("RGB", (800, 400)))
+    font = social_text._load_font(48, "regular")
+    count = 0
+    original = social_text._line_width
+
+    def measured(*args):
+        nonlocal count
+        count += 1
+        return original(*args)
+
+    monkeypatch.setattr(social_text, "_line_width", measured)
+    text = "Czy możesz powtórzyć tę krótką frazę"
+    social_text._balanced_wrap_text(draw, text, font, 420, 3)
+    first_count = count
+    social_text._balanced_wrap_text(draw, text, font, 420, 3)
+
+    assert count == first_count * 2
+
+
 def test_bundled_production_font_and_license_are_present():
     assert social_text.FONT_PATH.is_file()
     assert social_text.FONT_PATH.name == "SMUSocialText-Regular.ttf"

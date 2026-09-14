@@ -1630,6 +1630,30 @@ def test_density_rejection_is_user_safe_and_reserves_no_image_credits(
     assert refreshed.content_packs_used == 1
 
 
+def test_successful_preflight_timing_log_is_safe(client, app, module, monkeypatch, caplog):
+    user = create_user(module)
+    login(client, user)
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    private_copy = "Private preflight headline"
+    result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        f"Slide 1: {private_copy}\nSlide 2: Short lesson\nSlide 3: Clear close",
+    )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": result, "image_style": "viral_carousel"},
+    )
+
+    assert response.status_code == 302
+    assert "carousel_preflight_complete slide_count=3 duration_ms=" in caplog.text
+    assert private_copy not in caplog.text
+
+
 @pytest.mark.parametrize("slide_count", [7, 9])
 def test_carousel_normalizer_caps_oversized_pack_and_preserves_final_cta(
     slide_count,

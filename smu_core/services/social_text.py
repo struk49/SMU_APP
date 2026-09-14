@@ -279,6 +279,14 @@ def _line_width(draw, text, font):
     return box[2] - box[0]
 
 
+def _cached_line_width(draw, text, font, cache, font_key):
+    """Return an exact PIL width from a cache owned by one fitting operation."""
+    key = (font_key, text)
+    if key not in cache:
+        cache[key] = _line_width(draw, text, font)
+    return cache[key]
+
+
 def _wrap_text(draw, text, font, max_width):
     lines = []
     for paragraph in text.split("\n"):
@@ -304,7 +312,9 @@ def _wrap_text(draw, text, font, max_width):
     return lines
 
 
-def _balanced_wrap_text(draw, text, font, max_width, max_lines):
+def _balanced_wrap_text(
+    draw, text, font, max_width, max_lines, *, width_cache=None, font_key=None
+):
     """Choose measured line breaks with low raggedness and no avoidable orphan."""
     paragraphs = text.split("\n")
     if len(paragraphs) != 1:
@@ -312,9 +322,15 @@ def _balanced_wrap_text(draw, text, font, max_width, max_lines):
     words = text.split()
     if not words:
         return [""]
-    widths = {
-        (start, end): _line_width(draw, " ".join(words[start:end]), font)
+    width_cache = {} if width_cache is None else width_cache
+    font_key = font_key or (getattr(font, "path", None), font.size, font.getname())
+    span_text = {
+        (start, end): " ".join(words[start:end])
         for start in range(len(words)) for end in range(start + 1, len(words) + 1)
+    }
+    widths = {
+        span: _cached_line_width(draw, value, font, width_cache, font_key)
+        for span, value in span_text.items()
     }
     best = None
     for line_count in range(1, min(max_lines, len(words)) + 1):
@@ -344,6 +360,21 @@ def _balanced_wrap_text(draw, text, font, max_width, max_lines):
     return best[1] if best else None
 
 
+def _largest_fitting_size(start_size, min_size, evaluate):
+    """Find the largest exact fitting size for a monotonic typography fit."""
+    low, high = min_size, start_size
+    best = None
+    while low <= high:
+        size = (low + high) // 2
+        result = evaluate(size)
+        if result is None:
+            high = size - 1
+        else:
+            best = result
+            low = size + 1
+    return best
+
+
 def _fit_block(
     draw,
     text,
@@ -360,13 +391,18 @@ def _fit_block(
     min_size = max(min_size, MIN_FONT_SIZE)
     start_size = max(start_size, min_size)
     line_targets = [max_lines]
+    width_cache = {}
     if preferred_max_lines and preferred_max_lines < max_lines:
         line_targets.insert(0, preferred_max_lines)
     for line_target in line_targets:
-        for size in range(start_size, min_size - 1, -1):
+        def evaluate(size):
             font = _load_font(size, weight)
             lines = (
-                _balanced_wrap_text(draw, text, font, max_width, line_target)
+                _balanced_wrap_text(
+                    draw, text, font, max_width, line_target,
+                    width_cache=width_cache,
+                    font_key=(str(FONT_PATH), size, weight),
+                )
                 if balanced else _wrap_text(draw, text, font, max_width)
             )
             spacing = max(4, size // 5)
@@ -377,6 +413,11 @@ def _fit_block(
                 )
                 if box[2] - box[0] <= max_width and box[3] - box[1] <= max_height:
                     return font, rendered, spacing
+            return None
+
+        fitted = _largest_fitting_size(start_size, min_size, evaluate)
+        if fitted is not None:
+            return fitted
 
     raise SocialTextRenderError("text_does_not_fit")
 
@@ -658,6 +699,7 @@ def _fit_balanced_mixed_headline(
     emphasis_start = text.index(emphasis["text"])
     emphasis_end = emphasis_start + len(emphasis["text"])
     line_targets = [max_lines]
+    width_cache = {}
     if preferred_max_lines and preferred_max_lines < max_lines:
         line_targets.insert(0, preferred_max_lines)
     for line_target in line_targets:
@@ -668,7 +710,9 @@ def _fit_balanced_mixed_headline(
             }[emphasis["role"]]
             fonts = (base_font, _load_font(size, emphasis_weight))
             lines = _balanced_wrap_text(
-                draw, text, base_font, right - left, line_target
+                draw, text, base_font, right - left, line_target,
+                width_cache=width_cache,
+                font_key=(str(FONT_PATH), size, "black"),
             )
             if not lines or len(lines) > line_target:
                 continue

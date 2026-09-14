@@ -1,0 +1,15 @@
+PHASE 3.6.5 TYPOGRAPHY PREFLIGHT BENCHMARK
+fixture=production-shaped six-slide language-learning carousel
+before_median_ms=528.696
+after_median_ms=85.368
+improvement_percent=83.9
+textbbox_before=5307
+textbbox_after=746
+line_width_before=5152
+line_width_after=543
+cache_hits=0
+cache_misses=353
+cache_entries_created=353
+cache_peak_entries_per_fit=126
+output_equivalence=PASS
+provider_calls=0 database_writes=0

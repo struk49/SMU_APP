@@ -1,0 +1,7 @@
+PHASE 3.6.5 OUTPUT EQUIVALENCE
+slide=1 role=cover layout=hero_center composition=hero_bleed old_lines=2/3 new_lines=2/3 old_font=65/55 new_font=65/55 old_bounds=(97.5, 321, 578.5, 703) new_bounds=(97.5, 321, 578.5, 703) PASS
+slide=2 role=phrase layout=split_left composition=asymmetric_split old_lines=2/2 new_lines=2/2 old_font=71/58 new_font=71/58 old_bounds=(100, 360, 541, 669) new_bounds=(100, 360, 541, 669) PASS
+slide=3 role=phrase layout=split_right composition=asymmetric_split old_lines=2/2 new_lines=2/2 old_font=97/58 new_font=97/58 old_bounds=(486.0, 320, 924.0, 713) new_bounds=(486.0, 320, 924.0, 713) PASS
+slide=4 role=phrase layout=split_left composition=asymmetric_split old_lines=2/1 new_lines=2/1 old_font=126/58 new_font=126/58 old_bounds=(100, 338, 539, 692) new_bounds=(100, 338, 539, 692) PASS
+slide=5 role=phrase layout=split_right composition=asymmetric_split old_lines=3/3 new_lines=3/3 old_font=59/48 new_font=59/48 old_bounds=(490.0, 303, 924.0, 730) new_bounds=(490.0, 303, 924.0, 730) PASS
+slide=6 role=cta layout=closing composition=quiet old_lines=2/0 new_lines=2/0 old_font=71/None new_font=71/None old_bounds=(155.0, 495, 869.0, 653) new_bounds=(155.0, 495, 869.0, 653) PASS

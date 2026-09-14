@@ -1,5 +1,6 @@
 import logging
 import re
+from time import perf_counter
 import uuid
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
@@ -1283,7 +1284,13 @@ def create_content_pack_carousel():
         )
         campaign_grounding = _campaign_grounding(slides, campaign_direction)
         if image_style == "viral_carousel":
+            preflight_started = perf_counter()
             _validate_viral_carousel_copy(slides, presentations)
+            logger.info(
+                "carousel_preflight_complete slide_count=%s duration_ms=%.1f",
+                len(slides),
+                (perf_counter() - preflight_started) * 1000,
+            )
 
         required_images = len(slides)
         user = current_user._get_current_object()
