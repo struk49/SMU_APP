@@ -48,6 +48,142 @@ HASHTAGS:
 """
 
 
+def story_validate(slides):
+    direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+    return content_pack_routes._validate_carousel_story(slides, grounding)
+
+
+def story_slide(title, body=None, *, role="info", pairs=(), cta=None, visual=None):
+    slide = {
+        "title": title, "body": body, "cta": cta, "brand": None,
+        "visual": visual, "layout_role": role,
+    }
+    if pairs:
+        slide["phrase_pairs"] = tuple(pairs)
+    return slide
+
+
+def test_story_validator_rejects_teaching_example_as_campaign_cover_without_inventing_copy():
+    slides = [
+        story_slide("Co pan poleca?", "What do you recommend?", role="phrase", pairs=(("Co pan poleca?", "What do you recommend?"),)),
+        story_slide("Dania wegetariańskie", "Vegetarian dishes", role="phrase", pairs=(("Czy są dania wegetariańskie?", "Are there vegetarian dishes?"),)),
+    ]
+    before = [dict(slide) for slide in slides]
+
+    with pytest.raises(content_pack_routes.CarouselStoryError) as raised:
+        story_validate(slides)
+
+    assert raised.value.reason == "cover_is_teaching"
+    assert slides == before
+
+
+def test_story_validator_moves_existing_campaign_cover_and_preserves_wording():
+    teaching = story_slide("Co pan poleca?", "What do you recommend?", role="phrase", pairs=(("Co pan poleca?", "What do you recommend?"),))
+    cover = story_slide("Polish at a Restaurant", "Useful dining phrases", visual="restaurant campaign")
+    closing = story_slide("Save these phrases", cta="Practise soon", role="cta", visual="typography-only")
+
+    result = story_validate([teaching, cover, closing])
+
+    assert result[0]["title"] == cover["title"]
+    assert result[0]["story_role"] == "campaign_cover"
+    assert result[1]["title"] == teaching["title"]
+    assert result[-1]["story_role"] == "closing"
+
+
+@pytest.mark.parametrize("count", [2, 3, 4, 5, 6])
+def test_story_validator_preserves_valid_slide_counts_without_padding(count):
+    slides = [story_slide("Polish Restaurant Phrases", "Dining confidently")]
+    for index in range(1, count - 1):
+        slides.append(story_slide(
+            f"Krótka fraza {index}", f"Short phrase {index}", role="phrase",
+            pairs=((f"Krótka fraza {index}", f"Short phrase {index}"),),
+        ))
+    if count > 1:
+        slides.append(story_slide("Save and practise", role="cta", visual="typography-only"))
+
+    assert len(story_validate(slides)) == count
+
+
+def test_story_validator_allows_two_short_grouped_pairs_but_rejects_three():
+    cover = story_slide("Polish Restaurant Phrases", "A quick dining guide")
+    closing = story_slide("Save these phrases", role="cta")
+    short_pairs = (("Tak", "Yes"), ("Nie", "No"))
+    grouped = story_slide("Quick answers", "Yes and no", role="phrase", pairs=short_pairs)
+    assert story_validate([cover, grouped, closing])[1]["phrase_pairs"] == short_pairs
+
+    overloaded = story_slide(
+        "Too many phrases", "Several translations", role="phrase",
+        pairs=((*short_pairs, ("Proszę", "Please"))),
+    )
+    with pytest.raises(content_pack_routes.CarouselStoryError) as raised:
+        story_validate([cover, overloaded, closing])
+    assert raised.value.reason == "teaching_unit_overload"
+
+
+def test_story_validator_rejects_teaching_payload_in_closing_and_accepts_clean_closing():
+    cover = story_slide("Polish Restaurant Phrases", "Dining confidently")
+    teaching = story_slide("Poproszę rachunek", "The bill, please", role="phrase", pairs=(("Poproszę rachunek", "The bill, please"),))
+    clean = story_slide("Save these phrases", "Practise before your visit", role="cta")
+    assert story_validate([cover, teaching, clean])[-1]["story_role"] == "closing"
+
+    overloaded = story_slide(
+        "Reservations and bills", "Several lessons", role="phrase", cta="Save these",
+        pairs=(("Mam rezerwację", "I have a reservation"), ("Poproszę rachunek", "The bill, please")),
+    )
+    with pytest.raises(content_pack_routes.CarouselStoryError):
+        story_validate([cover, teaching, overloaded])
+
+
+def test_story_validator_preserves_polish_unicode_and_non_language_story():
+    polish = "ą ć ę ł ń ó ś ź ż Ą Ć Ę Ł Ń Ó Ś Ź Ż"
+    language = [
+        story_slide("Polish alphabet", "Useful characters"),
+        story_slide(polish, "Polish characters", role="phrase", pairs=((polish, "Polish characters"),)),
+    ]
+    assert story_validate(language)[1]["title"] == polish
+
+    business = [
+        story_slide("A Better Content Workflow", "From source to campaign"),
+        story_slide("Start with evidence", "Keep the source authoritative"),
+        story_slide("Publish with confidence", role="cta"),
+    ]
+    result = story_validate(business)
+    assert [slide["story_role"] for slide in result] == ["campaign_cover", "development", "closing"]
+
+
+def test_invalid_story_route_reserves_no_credits_and_creates_no_rows(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="story-invalid@example.com")
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(args) or True,
+    )
+    invalid = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "Slide 1:\nPhrase: Co pan poleca?\nTranslation: What do you recommend?\n"
+        "Slide 2:\nPhrase: Poproszę rachunek\nTranslation: The bill, please",
+    )
+    caplog.set_level(logging.WARNING, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": invalid, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "clean carousel" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+    assert "carousel_story_rejected reason=cover_is_teaching" in caplog.text
+    assert "Co pan poleca?" not in caplog.text
+    assert "Poproszę rachunek" not in caplog.text
+
+
 @contextmanager
 def captured_templates(app):
     recorded = []

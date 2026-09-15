@@ -1,0 +1,7 @@
+PHASE 3.6.7 ROLE-AWARE VISUAL BUDGET
+campaign_cover blocks<=2 characters<=140 phrase_pairs=0
+teaching blocks<=3 characters<=240 phrase_pairs<=1 normally; 2 only when short
+development blocks<=3 characters<=280
+takeaway blocks<=3 characters<=180 phrase_pairs=0
+closing blocks<=3 characters<=180 phrase_pairs=0
+no truncation no rewrite no font-floor change

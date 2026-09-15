@@ -1,0 +1,4 @@
+PHASE 3.6.7 STORY BEFORE/AFTER — DETERMINISTIC OFFLINE EVIDENCE
+before=first teaching example; internal teaching; overloaded final teaching+CTA
+after=PASS safely rejected reason=cover_is_teaching slide_index=1
+normalization=only an existing genuine cover may move to position one; no copy invented

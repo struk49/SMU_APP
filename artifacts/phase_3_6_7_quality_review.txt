@@ -1,0 +1,7 @@
+PHASE 3.6.7 QUALITY REVIEW
+valid_language=PASS non_language=PASS two_to_six_slides=PASS
+phase_3_6_6_scene_contrast=preserved
+preflight_duration_ms=192.726
+line_width_calls=543
+textbbox_calls=746
+provider_calls=0 database_writes=0

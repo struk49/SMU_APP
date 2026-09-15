@@ -318,6 +318,8 @@ def _campaign_semantic_domains(slides):
     domains = tuple(
         domain for domain, terms in domain_terms if any(contains(term) for term in terms)
     )
+    if any(slide.get("phrase_pairs") for slide in slides) and "language_learning" not in domains:
+        domains = (*domains, "language_learning")
     return domains or ("general",)
 
 
@@ -487,6 +489,135 @@ class CarouselQualityError(ValueError):
         self.font_size = font_size
         self.structure_reason = structure_reason
         super().__init__(reason)
+
+
+class CarouselStoryError(ValueError):
+    """A bounded structural failure that never contains customer copy."""
+
+    REASONS = {
+        "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
+        "closing_unit_overload", "visual_budget_exceeded", "story_structure_invalid",
+    }
+
+    def __init__(self, reason, *, slide_index=0, story_role="unknown"):
+        self.reason = reason if reason in self.REASONS else "story_structure_invalid"
+        self.slide_index = slide_index
+        self.story_role = story_role
+        super().__init__(self.reason)
+
+
+def _story_reject(reason, *, slide_index=0, story_role="unknown"):
+    logger.warning(
+        "carousel_story_rejected reason=%s slide_index=%s story_role=%s",
+        reason, slide_index, story_role,
+    )
+    raise CarouselStoryError(
+        reason, slide_index=slide_index, story_role=story_role
+    )
+
+
+def _visible_story_blocks(slide):
+    return sum(bool(str(slide.get(field) or "").strip()) for field in (
+        "title", "body", "cta", "eyebrow",
+    ))
+
+
+def _story_characters(slide):
+    return sum(len(str(slide.get(field) or "").strip()) for field in (
+        "title", "body", "cta", "eyebrow",
+    ))
+
+
+def _is_campaign_cover(slide, campaign_grounding):
+    if slide.get("phrase_pairs") or slide.get("layout_role") in {"phrase", "cta"}:
+        return False
+    if _visible_story_blocks(slide) > 2 or _story_characters(slide) > 140:
+        return False
+    domains = set(campaign_grounding["semantic_domain"].split(" + "))
+    if "language_learning" not in domains:
+        return True
+    normalized = " ".join(
+        str(slide.get(field) or "") for field in ("title", "body", "visual")
+    ).lower()
+    campaign_terms = {
+        "language", "learn", "phrase", "phrases", "polish", "vocabulary",
+        "conversation", "speak", "restaurant", "travel", "workplace",
+    }
+    return any(re.search(rf"\b{term}\w*\b", normalized, re.UNICODE) for term in campaign_terms)
+
+
+def _validate_carousel_story(
+    slides, campaign_grounding, *, enforce_visual_budget=True
+):
+    """Normalize only safe ordering/roles, then enforce one semantic job per slide."""
+    if not 2 <= len(slides) <= CONTENT_PACK_CAROUSEL_MAX_SLIDES:
+        _story_reject("story_structure_invalid")
+    domains = set(campaign_grounding["semantic_domain"].split(" + "))
+    language_learning = "language_learning" in domains
+    if not _is_campaign_cover(slides[0], campaign_grounding):
+        later_cover = next(
+            (
+                index for index, slide in enumerate(slides[1:], start=1)
+                if _is_campaign_cover(slide, campaign_grounding)
+            ),
+            None,
+        )
+        if later_cover is None:
+            _story_reject(
+                "cover_is_teaching" if slides[0].get("phrase_pairs") else "missing_campaign_cover",
+                slide_index=1, story_role="campaign_cover",
+            )
+        slides = [slides[later_cover], *slides[:later_cover], *slides[later_cover + 1:]]
+
+    normalized = []
+    for index, original in enumerate(slides):
+        slide = dict(original)
+        phrase_pairs = tuple(slide.get("phrase_pairs") or ())
+        is_final = index == len(slides) - 1
+        if index == 0:
+            story_role = "campaign_cover"
+        elif is_final and slide.get("layout_role") == "cta":
+            story_role = "closing"
+        elif phrase_pairs:
+            story_role = "teaching"
+        elif is_final:
+            story_role = "takeaway"
+        else:
+            story_role = "development"
+        slide["story_role"] = story_role
+
+        if any(not phrase or not translation for phrase, translation in phrase_pairs):
+            _story_reject("story_structure_invalid", slide_index=index + 1, story_role=story_role)
+        if language_learning and story_role == "teaching":
+            if len(phrase_pairs) > 2:
+                _story_reject("teaching_unit_overload", slide_index=index + 1, story_role=story_role)
+            if len(phrase_pairs) == 2 and any(
+                _copy_word_count(phrase) > 5 or _copy_word_count(translation) > 6
+                for phrase, translation in phrase_pairs
+            ):
+                _story_reject("teaching_unit_overload", slide_index=index + 1, story_role=story_role)
+            if phrase_pairs and slide.get("cta"):
+                _story_reject("teaching_unit_overload", slide_index=index + 1, story_role=story_role)
+        if story_role in {"closing", "takeaway"} and phrase_pairs:
+            _story_reject("closing_unit_overload", slide_index=index + 1, story_role=story_role)
+        if "\n" in str(slide.get("title") or "") and not phrase_pairs:
+            _story_reject("story_structure_invalid", slide_index=index + 1, story_role=story_role)
+
+        limits = {
+            "campaign_cover": (2, 140),
+            "teaching": (3, 240),
+            "development": (3, 280),
+            "takeaway": (3, 180),
+            "closing": (3, 180),
+        }
+        max_blocks, max_characters = limits[story_role]
+        if enforce_visual_budget and (
+            _visible_story_blocks(slide) > max_blocks
+            or _story_characters(slide) > max_characters
+        ):
+            _story_reject("visual_budget_exceeded", slide_index=index + 1, story_role=story_role)
+        normalized.append(slide)
+    return normalized
 
 
 def _reject_carousel_copy(
@@ -1374,11 +1505,15 @@ def create_content_pack_carousel():
             )
             return redirect(url_for("content_pack"))
 
-        presentations = _carousel_presentations(slides)
         campaign_direction = _campaign_art_direction(
             image_style, slides, design_manager_style, colour_theme
         )
         campaign_grounding = _campaign_grounding(slides, campaign_direction)
+        slides = _validate_carousel_story(
+            slides, campaign_grounding,
+            enforce_visual_budget=image_style == "viral_carousel",
+        )
+        presentations = _carousel_presentations(slides)
         scene_plan = _scene_variety_plan(slides, presentations, campaign_grounding)
         logger.info(
             "carousel_design_plan slide_count=%s scene_modes=%s",
@@ -1500,6 +1635,21 @@ def create_content_pack_carousel():
         )
         return redirect(url_for("view_post", post_id=first_post.id))
 
+    except CarouselStoryError as exc:
+        db.session.rollback()
+        if exc.reason == "visual_budget_exceeded":
+            flash(
+                "We couldn't create this carousel because one slide was too "
+                "text-heavy. Please regenerate the Content Pack.",
+                "danger",
+            )
+        else:
+            flash(
+                "We couldn't turn that result into a clean carousel. "
+                "Please generate the Content Pack again.",
+                "danger",
+            )
+        return redirect(url_for("content_pack"))
     except CarouselQualityError:
         db.session.rollback()
         flash(

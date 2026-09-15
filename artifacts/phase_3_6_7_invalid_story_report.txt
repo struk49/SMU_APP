@@ -1,0 +1,4 @@
+PHASE 3.6.7 INVALID STORY
+PASS safely rejected reason=cover_is_teaching slide_index=1
+credit_reservation=0 row_creation=0 provider_calls=0
+logging=safe reason/index/role only

@@ -1,0 +1,4 @@
+PHASE 3.6.7 VALID LANGUAGE STRUCTURE
+result=PASS slide_count=5 roles=campaign_cover,teaching,teaching,teaching,closing
+phrase_pairs_per_teaching=1,1,1
+unicode=preserved exactly
