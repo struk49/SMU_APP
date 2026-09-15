@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from datetime import timedelta
 import logging
+import re
 
 import pytest
 from flask import template_rendered, url_for
@@ -10,7 +11,10 @@ from conftest import create_user, login
 from smu_core.models import BrandBrief, Post
 from smu_core.blueprints.content_pack import routes as content_pack_routes
 from smu_core.services import carousel_generation
-from smu_core.services.content import ContentPackGenerationError
+from smu_core.services.content import (
+    CarouselStructureRepairError,
+    ContentPackGenerationError,
+)
 from smu_core.services.time_utils import utc_now
 
 
@@ -172,7 +176,7 @@ def test_invalid_story_route_reserves_no_credits_and_creates_no_rows(
         "Slide 1:\nPhrase: Co pan poleca?\nTranslation: What do you recommend?\n"
         "Slide 2:\nPhrase: Poproszę rachunek\nTranslation: The bill, please",
     )
-    caplog.set_level(logging.WARNING, logger=content_pack_routes.__name__)
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
 
     response = client.post(
         "/content-pack/create-carousel",
@@ -186,11 +190,18 @@ def test_invalid_story_route_reserves_no_credits_and_creates_no_rows(
     assert len(repair_calls) == 1
     assert module.Post.query.count() == 0
     assert "carousel_story_rejected reason=cover_is_teaching" in caplog.text
+    assert "stage=initial_validation result=invalid reason=cover_is_teaching" in caplog.text
+    assert "stage=repair_eligibility result=eligible reason=cover_is_teaching" in caplog.text
+    assert "stage=repair_call result=completed" in caplog.text
+    assert "stage=repair_parse result=malformed reason=insufficient_slide_markers" in caplog.text
+    assert "stage=request_outcome result=rejected reason=cover_is_teaching" in caplog.text
     assert "Co pan poleca?" not in caplog.text
     assert "Poproszę rachunek" not in caplog.text
 
 
-def test_valid_initial_story_never_calls_repair(client, app, module, monkeypatch):
+def test_valid_initial_story_never_calls_repair(
+    client, app, module, monkeypatch, caplog
+):
     user = create_user(module, email="story-valid@example.com")
     login(client, user)
     repair_calls = []
@@ -208,6 +219,7 @@ def test_valid_initial_story_never_calls_repair(client, app, module, monkeypatch
         "Slide 1:\nTitle: Polish at a Restaurant\nSubtitle: Useful dining phrases\n"
         "Slide 2:\nCTA: Save and practise",
     )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
 
     response = client.post(
         "/content-pack/create-carousel",
@@ -218,10 +230,12 @@ def test_valid_initial_story_never_calls_repair(client, app, module, monkeypatch
     assert repair_calls == []
     assert len(reserve_calls) == 1
     assert module.Post.query.count() == 0
+    assert "stage=initial_validation result=valid repair_attempted=false" in caplog.text
+    assert "stage=repair_eligibility" not in caplog.text
 
 
 def test_one_repair_can_create_valid_story_before_credits_and_preserve_unicode(
-    client, app, module, monkeypatch
+    client, app, module, monkeypatch, caplog
 ):
     user = create_user(module, email="story-repaired@example.com")
     login(client, user)
@@ -254,6 +268,7 @@ def test_one_repair_can_create_valid_story_before_credits_and_preserve_unicode(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
         initial,
     )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
 
     response = client.post(
         "/content-pack/create-carousel",
@@ -268,10 +283,16 @@ def test_one_repair_can_create_valid_story_before_credits_and_preserve_unicode(
     payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
     assert payloads[1]["overlay"]["title"] == "Czy są dania wegetariańskie?"
     assert payloads[2]["overlay"]["title"] == "Poproszę rachunek."
+    assert "stage=repair_call result=completed" in caplog.text
+    assert "stage=repair_parse result=valid slide_count=4" in caplog.text
+    assert "stage=pair_preservation result=pass original_pair_count=2 repaired_pair_count=2" in caplog.text
+    assert "stage=repaired_validation result=valid slide_count=4" in caplog.text
+    assert "Czy są dania" not in caplog.text
+    assert len(set(re.findall(r"trace_id=([0-9a-f]{10})", caplog.text))) == 1
 
 
 def test_repair_that_changes_translation_is_rejected_before_credits(
-    client, app, module, monkeypatch
+    client, app, module, monkeypatch, caplog
 ):
     user = create_user(module, email="translation-change@example.com")
     login(client, user)
@@ -296,6 +317,7 @@ def test_repair_that_changes_translation_is_rejected_before_credits(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
         initial,
     )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
 
     response = client.post(
         "/content-pack/create-carousel",
@@ -307,6 +329,8 @@ def test_repair_that_changes_translation_is_rejected_before_credits(
     assert "clean carousel" in response.get_data(as_text=True)
     assert reserve_calls == []
     assert module.Post.query.count() == 0
+    assert "stage=pair_preservation result=fail original_pair_count=1 repaired_pair_count=1" in caplog.text
+    assert "Dziękuję" not in caplog.text
 
 
 @pytest.mark.parametrize(
@@ -323,7 +347,7 @@ def test_repair_that_changes_translation_is_rejected_before_credits(
     ],
 )
 def test_invalid_repair_outputs_fail_cleanly_before_credits_or_rows(
-    repair_result, client, app, module, monkeypatch
+    repair_result, client, app, module, monkeypatch, caplog
 ):
     user = create_user(module, email=f"repair-failure-{abs(hash(repair_result))}@example.com")
     login(client, user)
@@ -344,6 +368,7 @@ def test_invalid_repair_outputs_fail_cleanly_before_credits_or_rows(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
         initial,
     )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
 
     response = client.post(
         "/content-pack/create-carousel",
@@ -356,10 +381,13 @@ def test_invalid_repair_outputs_fail_cleanly_before_credits_or_rows(
     assert repair_calls == [1]
     assert reserve_calls == []
     assert module.Post.query.count() == 0
+    assert "stage=repair_call result=completed" in caplog.text
+    assert "stage=repair_parse result=" in caplog.text or "stage=repaired_validation result=invalid" in caplog.text
+    assert "Dziękuję" not in caplog.text
 
 
 def test_repair_provider_exception_fails_cleanly_before_credits_or_rows(
-    client, app, module, monkeypatch
+    client, app, module, monkeypatch, caplog
 ):
     user = create_user(module, email="repair-exception@example.com")
     login(client, user)
@@ -381,6 +409,7 @@ def test_repair_provider_exception_fails_cleanly_before_credits_or_rows(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
         initial,
     )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
 
     response = client.post(
         "/content-pack/create-carousel",
@@ -394,6 +423,8 @@ def test_repair_provider_exception_fails_cleanly_before_credits_or_rows(
     assert "private provider response" not in body
     assert reserve_calls == []
     assert module.Post.query.count() == 0
+    assert "stage=repair_call result=exception reason=unexpected_exception" in caplog.text
+    assert "private provider response" not in caplog.text
 
 
 def test_non_language_structure_repair_can_continue_through_existing_credit_path(
@@ -436,7 +467,7 @@ def test_non_language_structure_repair_can_continue_through_existing_credit_path
 
 
 def test_overloaded_teaching_repair_splits_pairs_and_preserves_all_polish_unicode(
-    client, app, module, monkeypatch
+    client, app, module, monkeypatch, caplog
 ):
     user = create_user(module, email="repair-unicode@example.com")
     login(client, user)
@@ -474,6 +505,7 @@ def test_overloaded_teaching_repair_splits_pairs_and_preserves_all_polish_unicod
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
         initial,
     )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
 
     response = client.post(
         "/content-pack/create-carousel",
@@ -494,6 +526,177 @@ def test_overloaded_teaching_repair_splits_pairs_and_preserves_all_polish_unicod
         "Czy mogę prosić menu?",
         "Dziękuję.",
     ]
+    assert "stage=initial_validation result=invalid reason=teaching_unit_overload" in caplog.text
+    assert "stage=pair_preservation result=pass original_pair_count=4 repaired_pair_count=4" in caplog.text
+    assert "stage=repaired_validation result=valid slide_count=6" in caplog.text
+    assert "Czy mogę prosić menu" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected_result"),
+    [
+        ("provider_unavailable", "provider_unavailable"),
+        ("provider_timeout", "timeout"),
+        ("provider_error", "exception"),
+    ],
+)
+def test_repair_provider_failure_has_bounded_diagnostic_and_no_customer_copy(
+    reason, expected_result, client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="repair-timeout-trace@example.com")
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            CarouselStructureRepairError(reason)
+        ),
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    customer_copy = "Poufna fraza klienta"
+    invalid = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        f"Slide 1:\nPhrase: {customer_copy}\nTranslation: Private phrase\n"
+        "Slide 2:\nCTA: Save this phrase",
+    )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": invalid, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "clean carousel" in response.get_data(as_text=True)
+    assert f"stage=repair_call result={expected_result} reason={reason}" in caplog.text
+    assert "stage=request_outcome result=rejected reason=cover_is_teaching" in caplog.text
+    assert customer_copy not in caplog.text
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_initial_nonrepairable_reason_is_traced_without_repair(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="repair-ineligible-trace@example.com")
+    login(client, user)
+    repair_calls = []
+    def nonrepairable(*args, **kwargs):
+        raise content_pack_routes.CarouselStoryError("story_structure_invalid")
+
+    monkeypatch.setattr(content_pack_routes, "_validate_carousel_story", nonrepairable)
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append(1),
+    )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": CONTENT_PACK_RESULT, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert repair_calls == []
+    assert "stage=repair_eligibility result=ineligible reason=story_structure_invalid" in caplog.text
+
+
+def test_repair_parser_exception_has_distinct_safe_diagnostic(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="repair-parser-trace@example.com")
+    login(client, user)
+    repaired = (
+        "Slide 1:\nTitle: Repaired Campaign\nSubtitle: Safe structure\n"
+        "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you."
+    )
+    original_parse = content_pack_routes._parse_content_pack_carousel_slides
+
+    def parse_or_fail(value):
+        if "Repaired Campaign" in value:
+            raise ValueError("private parser context")
+        return original_parse(value)
+
+    monkeypatch.setattr(content_pack_routes, "_parse_content_pack_carousel_slides", parse_or_fail)
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure", lambda *args, **kwargs: repaired,
+    )
+    invalid = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "Slide 1:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 2:\nCTA: Save this phrase",
+    )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": invalid, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "stage=repair_parse result=parse_failed reason=parser_exception" in caplog.text
+    assert "private parser context" not in caplog.text
+    assert "Dziękuję" not in caplog.text
+
+
+def test_wrapper_text_before_valid_repair_is_safely_ignored_and_traced(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="repair-wrapper-trace@example.com")
+    login(client, user)
+    repaired = (
+        "```text\nHere is the repaired carousel:\n"
+        "Slide 1:\nTitle: Polish Restaurant Phrases\nSubtitle: A dining guide\n"
+        "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you."
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure", lambda *args, **kwargs: repaired,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    invalid = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "Slide 1:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 2:\nCTA: Save this phrase",
+    )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": invalid, "image_style": "viral_carousel"},
+    )
+
+    assert response.status_code == 302
+    assert "stage=repair_parse result=valid slide_count=2" in caplog.text
+    assert "stage=repaired_validation result=valid slide_count=2" in caplog.text
+    assert "Dziękuję" not in caplog.text
+
+
+def test_phrase_pair_multiset_preserves_reordering_duplicates_and_unicode():
+    first = story_slide(
+        "Dziękuję.", "Thank you.", role="phrase",
+        pairs=(("Dziękuję.", "Thank you."),),
+    )
+    duplicate = dict(first)
+    menu = story_slide(
+        "Czy mogę prosić menu?", "May I have the menu?", role="phrase",
+        pairs=(("Czy mogę prosić menu?", "May I have the menu?"),),
+    )
+
+    assert content_pack_routes._repair_preserves_phrase_pairs(
+        [first, duplicate, menu], [menu, duplicate, first]
+    )
+    assert not content_pack_routes._repair_preserves_phrase_pairs(
+        [first, duplicate, menu], [menu, first]
+    )
 
 
 @contextmanager
