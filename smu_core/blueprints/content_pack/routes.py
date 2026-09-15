@@ -94,7 +94,7 @@ SUBJECT_CATEGORIES = {
 }
 REPAIRABLE_STORY_REASONS = {
     "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
-    "closing_unit_overload", "visual_budget_exceeded",
+    "closing_unit_overload", "visual_budget_exceeded", "multiple_primary_headings",
 }
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
@@ -504,7 +504,8 @@ class CarouselStoryError(ValueError):
 
     REASONS = {
         "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
-        "closing_unit_overload", "visual_budget_exceeded", "story_structure_invalid",
+        "closing_unit_overload", "visual_budget_exceeded",
+        "multiple_primary_headings", "story_structure_invalid",
     }
 
     def __init__(self, reason, *, slide_index=0, story_role="unknown"):
@@ -609,7 +610,11 @@ def _validate_carousel_story(
         if story_role in {"closing", "takeaway"} and phrase_pairs:
             _story_reject("closing_unit_overload", slide_index=index + 1, story_role=story_role)
         if "\n" in str(slide.get("title") or "") and not phrase_pairs:
-            _story_reject("story_structure_invalid", slide_index=index + 1, story_role=story_role)
+            _story_reject(
+                "multiple_primary_headings",
+                slide_index=index + 1,
+                story_role=story_role,
+            )
 
         limits = {
             "campaign_cover": (2, 140),

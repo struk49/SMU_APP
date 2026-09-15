@@ -897,6 +897,10 @@ Carousel strategy:
   challenge, turning point, and lesson;
   vocabulary moves from cover through distinct terms to an optional closing CTA.
 - Structural labels are metadata and must not be repeated inside their values.
+- Emit exactly one `Title:` field per slide. Never repeat `Title:`, never emit
+  `Headline:`, and never place multiple independent headings on one slide. Put
+  genuinely supporting wording in one allowed `Subtitle:` or `Body:` field while
+  preserving one semantic job per slide.
 - Visual describes only a simple, relevant, text-free scene or composition: a
   concise semantic scene, object, action, or visual metaphor for that slide's
   specific meaning. Translate abstract ideas into
@@ -1056,6 +1060,7 @@ def repair_carousel_structure(
     allowed_reasons = {
         "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
         "closing_unit_overload", "visual_budget_exceeded",
+        "multiple_primary_headings",
     }
     if failure_reason not in allowed_reasons:
         raise CarouselStructureRepairError("reason_not_repairable")
@@ -1077,6 +1082,11 @@ Authoritative contract:
   Two pairs are allowed only when short, directly related, and intentionally grouped;
   never three. Do not combine a phrase pair with CTA or long explanation.
 - Development slides have one job, at most 3 visible blocks and 280 characters.
+- Use only supported field labels. Emit exactly one `Title:` per slide, never emit
+  `Headline:`, and never repeat a primary heading. For
+  `multiple_primary_headings`, retain one existing primary heading and move existing
+  genuinely supporting wording into an allowed Subtitle, Body, or separate slide;
+  do not rewrite it or invent a hierarchy unsupported by the existing content.
 - Takeaway/closing slides contain no surplus phrase pairs, at most 3 visible blocks
   and 180 characters, and use a restrained conclusion or source-supported action.
 - Preserve every fact. Preserve Phrase and Translation strings exactly, including

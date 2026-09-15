@@ -156,6 +156,145 @@ def test_story_validator_preserves_polish_unicode_and_non_language_story():
     assert [slide["story_role"] for slide in result] == ["campaign_cover", "development", "closing"]
 
 
+@pytest.mark.parametrize(
+    ("carousel", "expected_index", "expected_role"),
+    [
+        (
+            "Slide 1:\nTitle: Polish at a Restaurant\n"
+            "Title: Useful phrases for dining confidently\n"
+            "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.",
+            1,
+            "campaign_cover",
+        ),
+        (
+            "Slide 1:\nTitle: Polish at a Restaurant\nSubtitle: Useful phrases\n"
+            "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+            "Slide 3:\nTitle: Practise before dining\n"
+            "Slide 4:\nTitle: Keep these phrases close\n"
+            "Title: A quick review before your meal\nCTA: Save this guide",
+            4,
+            "closing",
+        ),
+    ],
+)
+def test_duplicate_titles_have_specific_repairable_story_reason(
+    carousel, expected_index, expected_role
+):
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+
+    with pytest.raises(content_pack_routes.CarouselStoryError) as raised:
+        story_validate(slides)
+
+    assert raised.value.reason == "multiple_primary_headings"
+    assert raised.value.slide_index == expected_index
+    assert raised.value.story_role == expected_role
+    assert "\n" in slides[expected_index - 1]["title"]
+
+
+def test_ambiguous_incomplete_pair_remains_nonrepairable_story_structure_invalid():
+    slides = [
+        story_slide("Polish Restaurant Phrases", "A dining guide"),
+        story_slide(
+            "Dziękuję.", role="phrase", pairs=(("Dziękuję.", None),)
+        ),
+    ]
+
+    with pytest.raises(content_pack_routes.CarouselStoryError) as raised:
+        story_validate(slides)
+
+    assert raised.value.reason == "story_structure_invalid"
+    assert raised.value.reason not in content_pack_routes.REPAIRABLE_STORY_REASONS
+
+
+def test_unsupported_headline_label_is_not_silently_accepted_as_a_field():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "Slide 1:\nHeadline: Polish at a Restaurant\n"
+        "Slide 2:\nCTA: Save this guide"
+    )
+
+    assert slides[0]["title"] == "Headline: Polish at a Restaurant"
+    assert "headline" not in slides[0]
+
+
+@pytest.mark.parametrize(
+    ("initial", "repaired", "expected_index", "expected_role", "slide_count"),
+    [
+        (
+            "Slide 1:\nTitle: Polish at a Restaurant\n"
+            "Title: Useful phrases for dining confidently\n"
+            "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+            "Slide 3:\nCTA: Save this guide",
+            "Slide 1:\nTitle: Polish at a Restaurant\n"
+            "Subtitle: Useful phrases for dining confidently\n"
+            "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+            "Slide 3:\nCTA: Save this guide",
+            1,
+            "campaign_cover",
+            3,
+        ),
+        (
+            "Slide 1:\nTitle: Polish at a Restaurant\nSubtitle: Useful phrases\n"
+            "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+            "Slide 3:\nTitle: Practise before dining\n"
+            "Slide 4:\nTitle: Keep these phrases close\n"
+            "Title: A quick review before your meal\nCTA: Save this guide",
+            "Slide 1:\nTitle: Polish at a Restaurant\nSubtitle: Useful phrases\n"
+            "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+            "Slide 3:\nTitle: Practise before dining\n"
+            "Slide 4:\nTitle: Keep these phrases close\n"
+            "Body: A quick review before your meal\nCTA: Save this guide",
+            4,
+            "closing",
+            4,
+        ),
+    ],
+)
+def test_production_shaped_multiple_headings_get_exactly_one_repair(
+    initial, repaired, expected_index, expected_role, slide_count,
+    client, app, module, monkeypatch, caplog,
+):
+    user = create_user(
+        module, email=f"multiple-headings-{expected_role}@example.com"
+    )
+    login(client, user)
+    repair_calls, reserve_calls = [], []
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append((args, kwargs)) or repaired,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda user, count, commit=False: reserve_calls.append((count, commit)) or False,
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+    caplog.set_level(logging.INFO, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+    )
+
+    assert response.status_code == 302
+    assert len(repair_calls) == 1
+    assert repair_calls[0][1]["failure_reason"] == "multiple_primary_headings"
+    assert reserve_calls == [(slide_count, False)]
+    assert module.Post.query.count() == 0
+    assert (
+        "stage=initial_validation result=invalid "
+        "reason=multiple_primary_headings"
+    ) in caplog.text
+    assert (
+        "stage=repair_eligibility result=eligible "
+        "reason=multiple_primary_headings"
+    ) in caplog.text
+    assert f"stage=repaired_validation result=valid slide_count={slide_count}" in caplog.text
+    assert f"slide_index={expected_index} story_role={expected_role}" in caplog.text
+    assert "Dziękuję" not in caplog.text
+
+
 def test_invalid_story_route_reserves_no_credits_and_creates_no_rows(
     client, app, module, monkeypatch, caplog
 ):

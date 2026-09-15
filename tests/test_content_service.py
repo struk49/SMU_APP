@@ -20,6 +20,8 @@ def test_phase_3_6_6_prompt_separates_campaign_cover_teaching_and_closing_roles(
     assert "must not promote the first example, phrase pair" in prompt
     assert "Reserve Phrase/Translation teaching pairs for internal slides" in prompt
     assert "semantic role `closing`" in prompt
+    assert "exactly one `Title:` field per slide" in prompt
+    assert "never emit `Headline:`" in prompt
 
 
 class FakeYoutubeDL:
@@ -189,6 +191,28 @@ def test_structure_repair_uses_same_text_model_and_preserves_source_copy_in_prom
     assert "Dziękuję." in client.calls[0]["input"]
     assert "Thank you." in client.calls[0]["input"]
     assert "fake-api-key" not in client.calls[0]["input"]
+
+
+def test_multiple_primary_heading_repair_prompt_uses_supported_fields_only():
+    client = FakeOpenAIClient(
+        "Slide 1:\nTitle: Existing title\nSubtitle: Existing support\n"
+        "Slide 2:\nCTA: Existing action"
+    )
+
+    content.repair_carousel_structure(
+        "Slide 1:\nTitle: Existing title\nTitle: Existing support\n"
+        "Slide 2:\nCTA: Existing action",
+        failure_reason="multiple_primary_headings",
+        semantic_domain="general",
+        openai_api_key="key",
+        openai_client=client,
+    )
+
+    prompt = " ".join(client.calls[0]["input"].split())
+    assert "For `multiple_primary_headings`" in prompt
+    assert "exactly one `Title:` per slide" in prompt
+    assert "never emit `Headline:`" in prompt
+    assert "Subtitle, Body, or separate slide" in prompt
 
 
 def test_structure_repair_rejects_nonrepairable_reason_without_provider_call():
