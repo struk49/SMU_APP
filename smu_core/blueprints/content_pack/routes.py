@@ -2,6 +2,7 @@ import logging
 import re
 from time import perf_counter
 import uuid
+from collections import Counter
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
@@ -87,6 +88,10 @@ SHOT_TYPES = {
 SUBJECT_CATEGORIES = {
     "person_interaction", "document_object", "food_object", "device",
     "environment", "hands_action", "abstract_symbol", "focal_object",
+}
+REPAIRABLE_STORY_REASONS = {
+    "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
+    "closing_unit_overload", "visual_budget_exceeded",
 }
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
@@ -618,6 +623,17 @@ def _validate_carousel_story(
             _story_reject("visual_budget_exceeded", slide_index=index + 1, story_role=story_role)
         normalized.append(slide)
     return normalized
+
+
+def _repair_preserves_phrase_pairs(original_slides, repaired_slides):
+    def pairs(slides):
+        return Counter(
+            pair
+            for slide in slides
+            for pair in tuple(slide.get("phrase_pairs") or ())
+        )
+
+    return pairs(original_slides) == pairs(repaired_slides)
 
 
 def _reject_carousel_copy(
@@ -1509,10 +1525,66 @@ def create_content_pack_carousel():
             image_style, slides, design_manager_style, colour_theme
         )
         campaign_grounding = _campaign_grounding(slides, campaign_direction)
-        slides = _validate_carousel_story(
-            slides, campaign_grounding,
-            enforce_visual_budget=image_style == "viral_carousel",
-        )
+        try:
+            slides = _validate_carousel_story(
+                slides, campaign_grounding,
+                enforce_visual_budget=image_style == "viral_carousel",
+            )
+            logger.info("carousel_story_validation result=valid repair_attempted=false")
+        except CarouselStoryError as initial_error:
+            logger.info(
+                "carousel_story_validation result=invalid reason=%s",
+                initial_error.reason,
+            )
+            if initial_error.reason not in REPAIRABLE_STORY_REASONS:
+                raise
+            logger.info("carousel_structure_repair attempted=true")
+            original_slides = slides
+            try:
+                repaired_idea = _content_pack_helper("repair_carousel_structure")(
+                    carousel_idea,
+                    failure_reason=initial_error.reason,
+                    semantic_domain=campaign_grounding["semantic_domain"],
+                )
+                if not isinstance(repaired_idea, str) or sum(
+                    bool(SLIDE_MARKER_RE.match(line.strip()))
+                    for line in repaired_idea.splitlines()
+                ) < CONTENT_PACK_CAROUSEL_MIN_SLIDES:
+                    raise ValueError("invalid_repair_output")
+                repaired_parsed = _parse_content_pack_carousel_slides(repaired_idea)
+                if not CONTENT_PACK_CAROUSEL_MIN_SLIDES <= len(
+                    repaired_parsed
+                ) <= CONTENT_PACK_CAROUSEL_MAX_SLIDES:
+                    raise ValueError("invalid_repair_output")
+                repaired_slides = _normalize_content_pack_carousel_slides(repaired_parsed)
+                if not _repair_preserves_phrase_pairs(original_slides, repaired_slides):
+                    raise ValueError("translation_changed")
+                campaign_direction = _campaign_art_direction(
+                    image_style, repaired_slides,
+                    design_manager_style, colour_theme,
+                )
+                campaign_grounding = _campaign_grounding(
+                    repaired_slides, campaign_direction
+                )
+                slides = _validate_carousel_story(
+                    repaired_slides, campaign_grounding,
+                    enforce_visual_budget=image_style == "viral_carousel",
+                )
+            except CarouselStoryError as repaired_error:
+                logger.info(
+                    "carousel_structure_repair result=invalid reason=%s",
+                    repaired_error.reason,
+                )
+                raise
+            except Exception:
+                logger.info(
+                    "carousel_structure_repair result=invalid reason=repair_failed"
+                )
+                raise initial_error from None
+            logger.info(
+                "carousel_structure_repair result=valid slide_count=%s",
+                len(slides),
+            )
         presentations = _carousel_presentations(slides)
         scene_plan = _scene_variety_plan(slides, presentations, campaign_grounding)
         logger.info(

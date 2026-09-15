@@ -158,9 +158,14 @@ def test_invalid_story_route_reserves_no_credits_and_creates_no_rows(
     user = create_user(module, email="story-invalid@example.com")
     login(client, user)
     reserve_calls = []
+    repair_calls = []
     set_content_pack_helper(
         app, monkeypatch, "reserve_ai_image_credits",
         lambda *args, **kwargs: reserve_calls.append(args) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append((args, kwargs)) or "malformed",
     )
     invalid = CONTENT_PACK_RESULT.replace(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
@@ -178,10 +183,317 @@ def test_invalid_story_route_reserves_no_credits_and_creates_no_rows(
     assert response.status_code == 200
     assert "clean carousel" in response.get_data(as_text=True)
     assert reserve_calls == []
+    assert len(repair_calls) == 1
     assert module.Post.query.count() == 0
     assert "carousel_story_rejected reason=cover_is_teaching" in caplog.text
     assert "Co pan poleca?" not in caplog.text
     assert "Poproszę rachunek" not in caplog.text
+
+
+def test_valid_initial_story_never_calls_repair(client, app, module, monkeypatch):
+    user = create_user(module, email="story-valid@example.com")
+    login(client, user)
+    repair_calls = []
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append(1),
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(args) or False,
+    )
+    valid = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "Slide 1:\nTitle: Polish at a Restaurant\nSubtitle: Useful dining phrases\n"
+        "Slide 2:\nCTA: Save and practise",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": valid, "image_style": "viral_carousel"},
+    )
+
+    assert response.status_code == 302
+    assert repair_calls == []
+    assert len(reserve_calls) == 1
+    assert module.Post.query.count() == 0
+
+
+def test_one_repair_can_create_valid_story_before_credits_and_preserve_unicode(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="story-repaired@example.com")
+    login(client, user)
+    repair_calls, reserve_calls = [], []
+    initial = (
+        "Slide 1:\nPhrase: Czy są dania wegetariańskie?\n"
+        "Translation: Are there vegetarian dishes?\n"
+        "Slide 2:\nPhrase: Poproszę rachunek.\nTranslation: The bill, please."
+    )
+    repaired = (
+        "Slide 1:\nTitle: Polish Restaurant Phrases\nSubtitle: A practical dining guide\n"
+        "Slide 2:\nPhrase: Czy są dania wegetariańskie?\n"
+        "Translation: Are there vegetarian dishes?\n"
+        "Slide 3:\nPhrase: Poproszę rachunek.\nTranslation: The bill, please.\n"
+        "Slide 4:\nCTA: Save these phrases"
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append((args, kwargs)) or repaired,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda user, count, commit=False: reserve_calls.append((count, commit)) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order).all()
+
+    assert response.status_code == 302
+    assert len(repair_calls) == 1
+    assert reserve_calls == [(4, False)]
+    assert len(posts) == 4
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+    assert payloads[1]["overlay"]["title"] == "Czy są dania wegetariańskie?"
+    assert payloads[2]["overlay"]["title"] == "Poproszę rachunek."
+
+
+def test_repair_that_changes_translation_is_rejected_before_credits(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="translation-change@example.com")
+    login(client, user)
+    reserve_calls = []
+    initial = (
+        "Slide 1:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 2:\nCTA: Save this phrase"
+    )
+    changed = (
+        "Slide 1:\nTitle: Polish Basics\nSubtitle: Useful phrases\n"
+        "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thanks.\n"
+        "Slide 3:\nCTA: Save this phrase"
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure", lambda *args, **kwargs: changed,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "clean carousel" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+@pytest.mark.parametrize(
+    "repair_result",
+    [
+        "",
+        "not a carousel",
+        "Slide 1:\nTitle: Only one slide",
+        "\n".join(f"Slide {index}:\nTitle: Slide {index}" for index in range(1, 8)),
+        (
+            "Slide 1:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+            "Slide 2:\nCTA: Save this phrase"
+        ),
+    ],
+)
+def test_invalid_repair_outputs_fail_cleanly_before_credits_or_rows(
+    repair_result, client, app, module, monkeypatch
+):
+    user = create_user(module, email=f"repair-failure-{abs(hash(repair_result))}@example.com")
+    login(client, user)
+    repair_calls, reserve_calls = [], []
+    initial = (
+        "Slide 1:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 2:\nCTA: Save this phrase"
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append(1) or repair_result,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "clean carousel" in response.get_data(as_text=True)
+    assert repair_calls == [1]
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_repair_provider_exception_fails_cleanly_before_credits_or_rows(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="repair-exception@example.com")
+    login(client, user)
+    reserve_calls = []
+
+    def fail_repair(*args, **kwargs):
+        raise RuntimeError("private provider response must not reach the customer")
+
+    set_content_pack_helper(app, monkeypatch, "repair_carousel_structure", fail_repair)
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    initial = (
+        "Slide 1:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 2:\nCTA: Save this phrase"
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    body = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "clean carousel" in body
+    assert "private provider response" not in body
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_non_language_structure_repair_can_continue_through_existing_credit_path(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="repair-product@example.com")
+    login(client, user)
+    reserve_calls = []
+    initial = (
+        "Slide 1:\nTitle: Build Review\nBody: One focused review reduces rework while "
+        "keeping campaign decisions visible to the team in a shared workflow.\n"
+        "Subtitle: A deliberately excessive fourth visible block that breaks the budget.\n"
+        "CTA: Review together\nSlide 2:\nCTA: Keep the next decision visible"
+    )
+    repaired = (
+        "Slide 1:\nTitle: Make Reviews Visible\nSubtitle: One shared campaign workflow\n"
+        "Slide 2:\nTitle: Reduce Rework\nBody: Keep decisions visible to the team.\n"
+        "Slide 3:\nCTA: Review together"
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure", lambda *args, **kwargs: repaired,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda user, count, commit=False: reserve_calls.append((count, commit)) or False,
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+    )
+
+    assert response.status_code == 302
+    assert reserve_calls == [(3, False)]
+    assert module.Post.query.count() == 0
+
+
+def test_overloaded_teaching_repair_splits_pairs_and_preserves_all_polish_unicode(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="repair-unicode@example.com")
+    login(client, user)
+    reserve_calls = []
+    initial = (
+        "Slide 1:\nTitle: Polish at a Restaurant\nSubtitle: Four useful phrases\n"
+        "Slide 2:\nPhrase: Czy są dania wegetariańskie?\n"
+        "Translation: Are there vegetarian dishes?\n"
+        "Phrase: Poproszę rachunek.\nTranslation: The bill, please.\n"
+        "Phrase: Czy mogę prosić menu?\nTranslation: May I have the menu?\n"
+        "Slide 3:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 4:\nCTA: Save these phrases"
+    )
+    repaired = (
+        "Slide 1:\nTitle: Polish at a Restaurant\nSubtitle: Four useful phrases\n"
+        "Slide 2:\nPhrase: Czy są dania wegetariańskie?\n"
+        "Translation: Are there vegetarian dishes?\n"
+        "Slide 3:\nPhrase: Poproszę rachunek.\nTranslation: The bill, please.\n"
+        "Slide 4:\nPhrase: Czy mogę prosić menu?\nTranslation: May I have the menu?\n"
+        "Slide 5:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 6:\nCTA: Save these phrases"
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure", lambda *args, **kwargs: repaired,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda user, count, commit=False: reserve_calls.append((count, commit)) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order).all()
+
+    assert response.status_code == 302
+    assert reserve_calls == [(6, False)]
+    assert len(posts) == 6
+    titles = [
+        carousel_generation.parse_overlay_prompt(post.prompt)["overlay"]["title"]
+        for post in posts
+    ]
+    assert titles[1:5] == [
+        "Czy są dania wegetariańskie?",
+        "Poproszę rachunek.",
+        "Czy mogę prosić menu?",
+        "Dziękuję.",
+    ]
 
 
 @contextmanager

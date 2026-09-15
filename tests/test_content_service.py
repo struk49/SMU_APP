@@ -50,17 +50,15 @@ class FakeResponse:
 
 
 class FakeOpenAIClient:
-    def __init__(self):
+    def __init__(self, output_text="PACK OUTPUT"):
         self.calls = []
         self.responses = self
+        self.output_text = output_text
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
 
-        class Response:
-            output_text = "PACK OUTPUT"
-
-        return Response()
+        return type("Response", (), {"output_text": self.output_text})()
 
 
 def caption_entry(text, ext="vtt"):
@@ -84,12 +82,14 @@ def fail_caption_fetch(url, timeout=10):
 def test_content_service_exports_and_app_wrappers_remain_callable(module):
     assert callable(content.extract_tiktok_transcript)
     assert callable(content.generate_content_pack)
+    assert callable(content.repair_carousel_structure)
     assert callable(content.extract_content_pack_section)
     assert callable(content.apply_image_style)
     assert callable(content.get_placeholder_image_url)
     assert not hasattr(content, "build_brand_context")
     assert callable(module.extract_tiktok_transcript)
     assert callable(module.generate_content_pack)
+    assert callable(module.repair_carousel_structure)
     assert callable(module.extract_content_pack_section)
     assert callable(module.apply_image_style)
     assert callable(module.get_placeholder_image_url)
@@ -123,8 +123,13 @@ def test_app_wrappers_delegate_with_existing_late_bound_dependencies(monkeypatch
         }
         return "pack"
 
+    def fake_repair(carousel_idea, **kwargs):
+        calls["repair"] = {"carousel_idea": carousel_idea, **kwargs}
+        return "repaired"
+
     monkeypatch.setattr(smu_app.content_service, "extract_tiktok_transcript", fake_extract)
     monkeypatch.setattr(smu_app.content_service, "generate_content_pack", fake_generate)
+    monkeypatch.setattr(smu_app.content_service, "repair_carousel_structure", fake_repair)
     monkeypatch.setattr(
         smu_app.content_service,
         "extract_content_pack_section",
@@ -143,6 +148,9 @@ def test_app_wrappers_delegate_with_existing_late_bound_dependencies(monkeypatch
 
     assert smu_app.extract_tiktok_transcript("https://tiktok.test/video") == "transcript"
     assert smu_app.generate_content_pack("source", "brand") == "pack"
+    assert smu_app.repair_carousel_structure(
+        "Slide 1: draft", failure_reason="cover_is_teaching", semantic_domain="language"
+    ) == "repaired"
     assert smu_app.extract_content_pack_section("text", "SECTION") == "SECTION:text"
     assert smu_app.apply_image_style("prompt", "style") == "style:prompt"
     assert smu_app.get_placeholder_image_url() == "https://cdn.test/placeholder.jpg"
@@ -152,6 +160,90 @@ def test_app_wrappers_delegate_with_existing_late_bound_dependencies(monkeypatch
     assert calls["extract"]["openai_client"] is smu_app.openai_client
     assert calls["generate"]["openai_api_key"] == smu_app.OPENAI_API_KEY
     assert calls["generate"]["openai_client"] is smu_app.openai_client
+    assert calls["repair"] == {
+        "carousel_idea": "Slide 1: draft",
+        "failure_reason": "cover_is_teaching",
+        "semantic_domain": "language",
+        "openai_api_key": smu_app.OPENAI_API_KEY,
+        "openai_client": smu_app.openai_client,
+    }
+
+
+def test_structure_repair_uses_same_text_model_and_preserves_source_copy_in_prompt():
+    repaired = "Slide 1:\nTitle: Polish campaign\n\nSlide 2:\nPhrase: Dziękuję.\nTranslation: Thank you."
+    client = FakeOpenAIClient(repaired)
+
+    result = content.repair_carousel_structure(
+        "Slide 1:\nPhrase: Dziękuję.\nTranslation: Thank you.",
+        failure_reason="cover_is_teaching",
+        semantic_domain="language_education",
+        openai_api_key="fake-api-key",
+        openai_client=client,
+    )
+
+    assert result == repaired
+    assert len(client.calls) == 1
+    assert client.calls[0]["model"] == "gpt-4.1-mini"
+    assert client.calls[0]["timeout"] == content.CONTENT_PACK_TIMEOUT_SECONDS
+    assert "Return ONLY `Slide N:` blocks" in client.calls[0]["input"]
+    assert "Dziękuję." in client.calls[0]["input"]
+    assert "Thank you." in client.calls[0]["input"]
+    assert "fake-api-key" not in client.calls[0]["input"]
+
+
+def test_structure_repair_rejects_nonrepairable_reason_without_provider_call():
+    client = FakeOpenAIClient()
+
+    with pytest.raises(content.CarouselStructureRepairError, match="reason_not_repairable"):
+        content.repair_carousel_structure(
+            "Slide 1: draft",
+            failure_reason="story_structure_invalid",
+            semantic_domain="general",
+            openai_api_key="key",
+            openai_client=client,
+        )
+
+    assert client.calls == []
+
+
+@pytest.mark.parametrize(
+    "provider_output",
+    ["", "UNREPAIRABLE", "INSTAGRAM_CAPTION:\nNo\n\nCAROUSEL_IDEA:\nSlide 1: No"],
+)
+def test_structure_repair_rejects_invalid_or_full_pack_output(provider_output):
+    client = FakeOpenAIClient(provider_output)
+
+    with pytest.raises(content.CarouselStructureRepairError, match="invalid_repair_output"):
+        content.repair_carousel_structure(
+            "Slide 1: draft",
+            failure_reason="missing_campaign_cover",
+            semantic_domain="general",
+            openai_api_key="key",
+            openai_client=client,
+        )
+
+
+def test_structure_repair_provider_failure_is_secret_safe(caplog):
+    secret = "sk-provider-secret"
+
+    class FailingClient(FakeOpenAIClient):
+        def create(self, **kwargs):
+            raise RuntimeError(f"provider rejected credential {secret}")
+
+    with caplog.at_level(logging.ERROR), pytest.raises(
+        content.CarouselStructureRepairError
+    ) as exc_info:
+        content.repair_carousel_structure(
+            "Slide 1: draft",
+            failure_reason="missing_campaign_cover",
+            semantic_domain="general",
+            openai_api_key="key",
+            openai_client=FailingClient(),
+        )
+
+    assert secret not in str(exc_info.value)
+    assert secret not in caplog.text
+    assert "RuntimeError" in caplog.text
 
 
 def test_requested_subtitles_are_preferred_over_other_caption_sources():
@@ -628,7 +720,9 @@ def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
     assert "Get started today" in prompt
     assert "Refer to a concrete next action" in prompt
     assert "Design every carousel for mobile reading" in prompt
-    assert "never more than three short pairs" in prompt
+    assert "A second pair is allowed only when both phrases and translations are short" in prompt
+    assert "Never put three or more phrase pairs on one slide" in prompt
+    assert "campaign cover has at most 2 visible blocks and 140 characters" in prompt
     assert "place useful additional context, usage notes, or examples in the Instagram caption" in prompt
 
 

@@ -831,6 +831,16 @@ def generate_content_pack(source_text, brand_context=""):
     )
 
 
+def repair_carousel_structure(carousel_idea, *, failure_reason, semantic_domain):
+    return content_service.repair_carousel_structure(
+        carousel_idea,
+        failure_reason=failure_reason,
+        semantic_domain=semantic_domain,
+        openai_api_key=OPENAI_API_KEY,
+        openai_client=openai_client,
+    )
+
+
 def extract_content_pack_section(text, section_name):
     return content_service.extract_content_pack_section(text, section_name)
 
@@ -931,6 +941,10 @@ app.extensions.setdefault("smu_content_pack_helpers", {}).update({
         **kwargs,
     ),
     "generate_content_pack": lambda *args, **kwargs: generate_content_pack(
+        *args,
+        **kwargs,
+    ),
+    "repair_carousel_structure": lambda *args, **kwargs: repair_carousel_structure(
         *args,
         **kwargs,
     ),

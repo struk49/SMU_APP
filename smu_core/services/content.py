@@ -30,6 +30,14 @@ class ContentPackGenerationError(RuntimeError):
         super().__init__(reason)
 
 
+class CarouselStructureRepairError(RuntimeError):
+    """Safe bounded failure from the optional carousel-only repair request."""
+
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
+
+
 def _content_pack_provider_reason(error):
     if isinstance(error, (APITimeoutError, httpx.TimeoutException)):
         return "provider_timeout"
@@ -854,6 +862,10 @@ Carousel strategy:
 - The cover uses Title and optional Subtitle. Content uses either Title with Body,
   or the vocabulary structure below. Body is normally one concise sentence and must
   not restate the headline. A closing CTA is one short action, never a paragraph.
+- Match the authoritative visual budgets: campaign cover has at most 2 visible blocks
+  and 140 characters; teaching has at most 3 visible blocks and 240 characters;
+  development has at most 3 blocks and 280 characters; takeaway and closing have at
+  most 3 blocks and 180 characters. Never truncate or pad to meet these budgets.
 - Treat 2-6 headline words and 0-12 support words as the normal internal-slide
   budget. Reject caption-like prose, multiple sentences, stacked claims, and support
   that merely repeats the headline. Put explanation in the Instagram caption.
@@ -864,7 +876,9 @@ Carousel strategy:
   Translation, optional Tip, and Visual. Put the target-language wording in Phrase
   and its meaning in Translation rather than combining both into one field.
 - For genuine language-learning content, prioritize learning clarity: normally use
-  one phrase/translation pair per slide and never more than three short pairs. Keep
+  one phrase/translation pair per slide. A second pair is allowed only when both
+  phrases and translations are short, directly related, and intentionally grouped.
+  Never put three or more phrase pairs on one slide. Keep
   each pair structurally adjacent, preserve punctuation and diacritics exactly, and
   never turn several lesson categories into one dense vocabulary block.
 - Reserve Phrase/Translation teaching pairs for internal slides. On those slides,
@@ -1024,6 +1038,84 @@ Source content:
         raise ContentPackGenerationError(reason) from None
 
     return response.output_text
+
+
+def repair_carousel_structure(
+    carousel_idea,
+    *,
+    failure_reason,
+    semantic_domain,
+    openai_api_key=None,
+    openai_client=None,
+):
+    """Make one text-only request for CAROUSEL_IDEA structure, never artwork."""
+    if not openai_api_key or not openai_client:
+        raise CarouselStructureRepairError("provider_unavailable")
+    if not isinstance(carousel_idea, str) or not carousel_idea.strip():
+        raise CarouselStructureRepairError("invalid_repair_input")
+    allowed_reasons = {
+        "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
+        "closing_unit_overload", "visual_budget_exceeded",
+    }
+    if failure_reason not in allowed_reasons:
+        raise CarouselStructureRepairError("reason_not_repairable")
+    safe_domain = semantic_domain if isinstance(semantic_domain, str) else "general"
+    prompt = f"""
+Restructure the existing CAROUSEL_IDEA below. Return ONLY `Slide N:` blocks in the
+existing Title/Subtitle/Body/Phrase/Translation/CTA/Visual format. Do not return a
+full Content Pack, commentary, markdown fences, or hidden reasoning.
+
+Structural failure: {failure_reason}
+Safe campaign domain: {safe_domain[:200]}
+
+Authoritative contract:
+- 2 to 6 slides; do not pad.
+- Slide 1 is a campaign-level cover answering what the whole carousel is about. It
+  uses Title plus optional Subtitle/Body, no Phrase/Translation, and no CTA. Maximum
+  2 visible blocks and 140 characters.
+- Language teaching slides normally contain exactly one Phrase and its Translation.
+  Two pairs are allowed only when short, directly related, and intentionally grouped;
+  never three. Do not combine a phrase pair with CTA or long explanation.
+- Development slides have one job, at most 3 visible blocks and 280 characters.
+- Takeaway/closing slides contain no surplus phrase pairs, at most 3 visible blocks
+  and 180 characters, and use a restrained conclusion or source-supported action.
+- Preserve every fact. Preserve Phrase and Translation strings exactly, including
+  punctuation, capitalization, and Unicode. Do not correct or rewrite translations.
+- You may move or split existing material. Preserve every existing Phrase/Translation
+  pair; if they cannot fit cleanly within six slides, return `UNREPAIRABLE`. Do not
+  invent facts, claims, wording, phrases, translations, statistics, features, or offers.
+- If existing wording cannot form a supported campaign cover, return `UNREPAIRABLE`.
+
+Existing CAROUSEL_IDEA:
+{carousel_idea}
+"""
+    request_client = (
+        openai_client.with_options(
+            timeout=CONTENT_PACK_TIMEOUT_SECONDS,
+            max_retries=CONTENT_PACK_MAX_RETRIES,
+        )
+        if hasattr(openai_client, "with_options")
+        else openai_client
+    )
+    try:
+        response = request_client.responses.create(
+            model="gpt-4.1-mini",
+            input=prompt,
+            timeout=CONTENT_PACK_TIMEOUT_SECONDS,
+        )
+    except Exception as exc:
+        reason = _content_pack_provider_reason(exc)
+        logger.error(
+            "carousel_structure_repair_failed exception_class=%s reason=%s",
+            exc.__class__.__name__, reason,
+        )
+        raise CarouselStructureRepairError(reason) from None
+    output = getattr(response, "output_text", None)
+    if not isinstance(output, str) or not output.strip() or output.strip() == "UNREPAIRABLE":
+        raise CarouselStructureRepairError("invalid_repair_output")
+    if "INSTAGRAM_CAPTION:" in output or "IMAGE_PROMPT:" in output:
+        raise CarouselStructureRepairError("invalid_repair_output")
+    return output.strip()
 
 
 def extract_content_pack_section(text, section_name):
