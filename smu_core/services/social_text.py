@@ -666,8 +666,10 @@ def _fit_mixed_headline(
     raise SocialTextRenderError("text_does_not_fit")
 
 
-def _draw_mixed_headline(draw, block, emphasis, *, foreground, stroke_width, stroke_fill):
-    accent = (244, 211, 94, 255)
+def _draw_mixed_headline(
+    draw, block, emphasis, *, foreground, stroke_width, stroke_fill,
+    accent=(244, 211, 94, 255),
+):
     max_width = max(block["line_widths"], default=0)
     for index, (runs, line_width) in enumerate(
         zip(block["mixed_lines"], block["line_widths"])
@@ -976,8 +978,25 @@ def editorial_composition_geometry(
     }
 
 
-def _analyze_text_region(image, box):
+def _relative_luminance(colour):
+    channels = []
+    for value in colour[:3]:
+        channel = value / 255
+        channels.append(channel / 12.92 if channel <= 0.04045 else ((channel + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def _contrast_ratio(foreground, background_luminance):
+    foreground_luminance = _relative_luminance(foreground)
+    background = _relative_luminance((background_luminance,) * 3)
+    lighter, darker = max(foreground_luminance, background), min(foreground_luminance, background)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _analyze_text_region(image, box, campaign_palette=None):
     left, top, right, bottom = (round(value) for value in box)
+    left, top = max(0, left), max(0, top)
+    right, bottom = min(image.width, right), min(image.height, bottom)
     sample = image.crop((left, top, right, bottom)).convert("L")
     statistics = ImageStat.Stat(sample)
     mean = statistics.mean[0]
@@ -993,13 +1012,33 @@ def _analyze_text_region(image, box):
         previous = (y - 1) * 32
         transitions.extend(abs(pixels[row + x] - pixels[previous + x]) for x in range(32))
     local_variation = sum(transitions) / len(transitions)
-    foreground = (22, 26, 34, 255) if mean >= 150 else (255, 255, 255, 255)
+    subregion_luminances = []
+    for row in range(3):
+        for column in range(3):
+            cell = grid.crop((column * 32 // 3, row * 32 // 3, (column + 1) * 32 // 3, (row + 1) * 32 // 3))
+            subregion_luminances.append(ImageStat.Stat(cell).mean[0])
+    if campaign_palette in CAMPAIGN_PALETTE_COLOURS:
+        palette = CAMPAIGN_PALETTE_COLOURS[campaign_palette]
+        candidates = tuple(dict.fromkeys((palette[3], palette[0], palette[1], palette[2])))
+    else:
+        candidates = ((22, 26, 34, 255), (255, 255, 255, 255))
+    candidate_contrast = {
+        candidate: min(_contrast_ratio(candidate, luminance) for luminance in subregion_luminances)
+        for candidate in candidates
+    }
+    foreground = max(candidates, key=lambda candidate: candidate_contrast[candidate])
+    contrast = candidate_contrast[foreground]
+    busy = deviation >= 42 and local_variation >= 10
     return {
         "mean_luminance": mean,
         "luminance_deviation": deviation,
         "local_variation": local_variation,
         "foreground": foreground,
-        "busy": deviation >= 42 and local_variation >= 10,
+        "foreground_candidates": candidate_contrast,
+        "contrast_ratio": contrast,
+        "subregion_luminances": tuple(subregion_luminances),
+        "busy": busy,
+        "requires_scrim": contrast < 3.0 or (busy and contrast < 4.5),
     }
 
 
@@ -1189,6 +1228,7 @@ def _draw_role_composition(
     typography_presentation=None,
     editorial_composition=None,
     optical_lock=None,
+    campaign_palette=None,
     measure_only=False,
 ):
     design_layout = select_design_layout(layout_role, layout_variant)
@@ -1315,9 +1355,6 @@ def _draw_role_composition(
         )
         region_right = min(width - margin, round(styled_region_right))
     analysis_region = (region_left, region_top, region_right, region_bottom)
-    analysis = _analyze_text_region(source_image, analysis_region)
-    foreground = analysis["foreground"]
-    shadow = (0, 0, 0, 145) if foreground[0] > 128 else (255, 255, 255, 135)
     stroke_width = max(
         1,
         round(scale * (0.0025 if design_style == "viral_carousel" else 0.001)),
@@ -1490,7 +1527,29 @@ def _draw_role_composition(
                 "bounds": block["bounds"],
             }
         return result
-    if analysis["busy"] and typography_presentation == "overlay_fallback":
+    analysis = _analyze_text_region(source_image, typography_bounds, campaign_palette)
+    foreground = analysis["foreground"]
+    palette_colours = CAMPAIGN_PALETTE_COLOURS.get(
+        campaign_palette, CAMPAIGN_PALETTE_COLOURS["smu_classic"]
+    )
+    accent_candidates = palette_colours[1:4]
+    accent = max(
+        accent_candidates,
+        key=lambda candidate: min(
+            _contrast_ratio(candidate, luminance)
+            for luminance in analysis["subregion_luminances"]
+        ),
+    )
+    accent_contrast = min(
+        _contrast_ratio(accent, luminance)
+        for luminance in analysis["subregion_luminances"]
+    )
+    if accent_contrast < 3.0:
+        accent = foreground
+    shadow = (0, 0, 0, 145) if foreground[0] > 128 else (255, 255, 255, 135)
+    if analysis["requires_scrim"] or (
+        analysis["busy"] and typography_presentation == "overlay_fallback"
+    ):
         scrim_padding = max(12, round(scale * 0.024))
         scrim_top = max(margin, typography_bounds[1] - scrim_padding)
         scrim_bottom = min(height - margin, typography_bounds[3] + scrim_padding)
@@ -1509,7 +1568,7 @@ def _draw_role_composition(
         if block["kind"] == "title" and "mixed_lines" in block:
             _draw_mixed_headline(
                 draw, block, emphasis, foreground=foreground,
-                stroke_width=stroke_width, stroke_fill=shadow,
+                stroke_width=stroke_width, stroke_fill=shadow, accent=accent,
             )
         else:
             draw.multiline_text(
@@ -1675,6 +1734,7 @@ def preflight_viral_carousel_text(
         "typography_presentation": typography_presentation,
         "editorial_composition": editorial_composition,
         "optical_lock": optical_lock,
+        "campaign_palette": None,
         "measure_only": True,
     }
     used_layout = layout_variant
@@ -1896,6 +1956,7 @@ def render_social_text(
                 typography_presentation=typography_presentation,
                 editorial_composition=effective_composition,
                 optical_lock=optical_lock,
+                campaign_palette=campaign_palette,
             )
         except SocialTextRenderError as exc:
             if exc.reason != "text_does_not_fit":
@@ -1929,6 +1990,7 @@ def render_social_text(
                 typography_presentation=typography_presentation,
                 editorial_composition=effective_composition,
                 optical_lock=optical_lock,
+                campaign_palette=campaign_palette,
             )
         image = Image.alpha_composite(image, composition_layer)
         output = BytesIO()

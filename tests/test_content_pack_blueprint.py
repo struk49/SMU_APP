@@ -1654,6 +1654,54 @@ def test_successful_preflight_timing_log_is_safe(client, app, module, monkeypatc
     assert private_copy not in caplog.text
 
 
+def test_scene_variety_plan_is_bounded_deterministic_and_role_aware():
+    slides = [
+        {"title": "Polish at a Restaurant", "body": "Useful phrases", "visual": "restaurant interior", "layout_role": "info"},
+        {"title": "Co polecasz?", "body": "What do you recommend?", "visual": "ordering", "layout_role": "phrase"},
+        {"title": "Dania wegetariańskie", "body": "Vegetarian dishes", "visual": "food choice", "layout_role": "phrase"},
+        {"title": "Poproszę menu", "body": "The menu, please", "visual": "menu service", "layout_role": "phrase"},
+        {"title": "Poproszę rachunek", "body": "The bill, please", "visual": "payment", "layout_role": "phrase"},
+        {"title": "Save and practise", "body": None, "visual": "typography-only", "layout_role": "cta"},
+    ]
+    presentations = content_pack_routes._carousel_presentations(slides)
+    direction = content_pack_routes._campaign_art_direction(
+        "viral_carousel", slides, "photorealistic", "warm_sunset"
+    )
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+
+    first = content_pack_routes._scene_variety_plan(slides, presentations, grounding)
+    second = content_pack_routes._scene_variety_plan(slides, presentations, grounding)
+
+    assert first == second
+    assert first[0]["semantic_role"] == "campaign_cover"
+    assert first[0]["scene_mode"] == "establishing"
+    assert first[0]["shot_type"] == "wide"
+    assert first[-1]["semantic_role"] == "closing"
+    assert all(item["scene_mode"] in content_pack_routes.SCENE_MODES for item in first)
+    assert all(item["shot_type"] in content_pack_routes.SHOT_TYPES for item in first)
+    assert all(item["subject_category"] in content_pack_routes.SUBJECT_CATEGORIES for item in first)
+    assert all(
+        (item["scene_mode"], item["shot_type"], item["subject_category"])
+        != (previous["scene_mode"], previous["shot_type"], previous["subject_category"])
+        for previous, item in zip(first, first[1:])
+    )
+
+
+def test_scene_variety_is_request_local_across_unrelated_campaigns():
+    restaurant = [{"title": "Restaurant guide", "body": None, "visual": "dining room", "layout_role": "info"}]
+    technology = [{"title": "AI workflow", "body": None, "visual": "device workflow", "layout_role": "info"}]
+
+    def plan(slides):
+        presentations = content_pack_routes._carousel_presentations(slides)
+        direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
+        grounding = content_pack_routes._campaign_grounding(slides, direction)
+        return content_pack_routes._scene_variety_plan(slides, presentations, grounding)
+
+    assert plan(restaurant) == plan(restaurant)
+    assert plan(technology) == plan(technology)
+    assert plan(restaurant)[0] == plan(restaurant)[0]
+
+
 @pytest.mark.parametrize("slide_count", [7, 9])
 def test_carousel_normalizer_caps_oversized_pack_and_preserves_final_cta(
     slide_count,

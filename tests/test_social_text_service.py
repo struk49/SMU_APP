@@ -97,6 +97,32 @@ def test_width_cache_returns_exact_pil_measurement_and_distinguishes_fonts():
     assert len(cache) == 3
 
 
+@pytest.mark.parametrize("palette", ["warm_sunset", "monochrome", "cool_tech", "electric"])
+def test_palette_aware_contrast_selects_readable_foreground(palette):
+    dark = Image.new("RGB", (300, 300), (8, 10, 14))
+    light = Image.new("RGB", (300, 300), (246, 244, 238))
+
+    dark_result = social_text._analyze_text_region(dark, (40, 40, 260, 260), palette)
+    light_result = social_text._analyze_text_region(light, (40, 40, 260, 260), palette)
+
+    assert dark_result["contrast_ratio"] >= 3.0
+    assert light_result["contrast_ratio"] >= 3.0
+    assert dark_result["foreground"] != light_result["foreground"]
+
+
+def test_contrast_samples_actual_block_and_mixed_busy_region_requests_soft_scrim():
+    image = Image.new("RGB", (300, 200), "black")
+    ImageDraw.Draw(image).rectangle((150, 0, 299, 199), fill="white")
+
+    dark = social_text._analyze_text_region(image, (10, 20, 130, 180), "monochrome")
+    light = social_text._analyze_text_region(image, (170, 20, 290, 180), "monochrome")
+    mixed = social_text._analyze_text_region(image, (80, 20, 220, 180), "monochrome")
+
+    assert dark["foreground"] != light["foreground"]
+    assert mixed["requires_scrim"] is True
+    assert len(mixed["subregion_luminances"]) == 9
+
+
 def test_repeated_balanced_span_measurement_hits_pil_once(monkeypatch):
     draw = ImageDraw.Draw(Image.new("RGB", (800, 400)))
     font = social_text._load_font(48, "regular")

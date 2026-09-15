@@ -7,6 +7,21 @@ import app as smu_app
 from smu_core.services import content
 
 
+def test_phase_3_6_6_prompt_separates_campaign_cover_teaching_and_closing_roles():
+    client = FakeOpenAIClient()
+    content.generate_content_pack(
+        "A source-backed language lesson.",
+        openai_api_key="key",
+        openai_client=client,
+    )
+    prompt = " ".join(client.calls[0]["input"].split())
+
+    assert "semantic role `campaign_cover`" in prompt
+    assert "must not promote the first example, phrase pair" in prompt
+    assert "Reserve Phrase/Translation teaching pairs for internal slides" in prompt
+    assert "semantic role `closing`" in prompt
+
+
 class FakeYoutubeDL:
     info = {}
     options = None

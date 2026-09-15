@@ -1,0 +1,8 @@
+PHASE 3.6.6 CONTRAST REPORT
+threshold=3.0; busy-region assistance threshold=4.5
+fixture=dark mean=15.0 candidates=(255, 226, 181)=15.33,(65, 20, 35)=1.23,(245, 178, 66)=10.34,(234, 101, 89)=5.94 selected=(255, 226, 181) contrast=15.33 scrim_required=False
+fixture=light mean=242.0 candidates=(255, 226, 181)=1.12,(65, 20, 35)=13.90,(245, 178, 66)=1.66,(234, 101, 89)=2.88 selected=(65, 20, 35) contrast=13.90 scrim_required=False
+fixture=gradient mean=127.5 candidates=(255, 226, 181)=1.38,(65, 20, 35)=1.29,(245, 178, 66)=1.08,(234, 101, 89)=1.29 selected=(255, 226, 181) contrast=1.38 scrim_required=True
+fixture=busy mean=127.5 candidates=(255, 226, 181)=2.93,(65, 20, 35)=3.72,(245, 178, 66)=1.98,(234, 101, 89)=1.14 selected=(65, 20, 35) contrast=3.72 scrim_required=True
+fixture=mixed mean=127.5 candidates=(255, 226, 181)=1.25,(65, 20, 35)=1.35,(245, 178, 66)=1.85,(234, 101, 89)=1.45 selected=(245, 178, 66) contrast=1.85 scrim_required=True
+analysis_duration_ms=28.393

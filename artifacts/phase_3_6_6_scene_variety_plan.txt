@@ -1,0 +1,7 @@
+PHASE 3.6.6 SCENE VARIETY PLAN
+slide=1 role=campaign_cover purpose=introducing language-learning activity in a restaurant dining and service setting scene_mode=establishing shot=wide subject=environment composition=hero_bleed optical_lock=focal_lock
+slide=2 role=teaching purpose=introducing practical conversation in a restaurant scene_mode=interaction shot=medium subject=person_interaction composition=asymmetric_split optical_lock=centre_lock
+slide=3 role=teaching purpose=choosing and ordering food in a restaurant scene_mode=over_shoulder shot=over_shoulder subject=document_object composition=vertical_editorial optical_lock=baseline_lock
+slide=4 role=teaching purpose=introducing practical conversation in a restaurant scene_mode=object_focus shot=eye_level subject=focal_object composition=vertical_editorial optical_lock=baseline_lock
+slide=5 role=teaching purpose=requesting and paying the restaurant bill scene_mode=object_focus shot=close subject=document_object composition=vertical_editorial optical_lock=baseline_lock
+slide=6 role=closing purpose=closing the current campaign with a restrained practical next step scene_mode=environmental shot=eye_level subject=environment composition=quiet optical_lock=none

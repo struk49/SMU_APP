@@ -1,0 +1,30 @@
+PHASE 3.6.6 QUALITY REVIEW
+A. PASS
+B. PASS
+C. PASS
+D. PASS
+E. PASS
+F. PASS
+G. PASS
+H. PASS
+I. PASS
+J. PASS
+K. PASS
+L. PASS
+M. PASS
+N. PASS
+O. PASS
+P. PASS
+Q. PASS
+R. PASS
+S. PASS
+T. PASS
+U. PASS
+V. PASS
+W. PASS
+X. PASS
+Y. PASS
+Z. PASS
+phase_3_6_5_fixture_duration_ms=181.293
+contrast_fixture_duration_ms=28.393
+provider_calls=0

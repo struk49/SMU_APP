@@ -800,6 +800,10 @@ Hook selection:
   observation, problem, useful promise, supported contrast, meaningful question, or
   source-grounded curiosity gap. Allow longer only when meaning requires it.
 - The cover must express the strongest source-backed idea, not summarize the topic.
+  The first slide has the semantic role `campaign_cover`: it must answer "What is
+  this carousel about?" with a campaign/topic-level hook and optional compact benefit
+  or context. It must not promote the first example, phrase pair, or teaching detail
+  into the primary cover message unless the whole carousel is about that one example.
   Prefer genuine tension, contrast, transformation, challenge, surprising
   distinction, immediate relevance, or a supported promise. Normally use 2-6 words
   and never exceed about 8 words merely to explain the subject. Support is optional
@@ -863,6 +867,9 @@ Carousel strategy:
   one phrase/translation pair per slide and never more than three short pairs. Keep
   each pair structurally adjacent, preserve punctuation and diacritics exactly, and
   never turn several lesson categories into one dense vocabulary block.
+- Reserve Phrase/Translation teaching pairs for internal slides. On those slides,
+  Phrase is the primary message, Translation is secondary, and an optional Eyebrow
+  may briefly identify the situation without literally labelling the languages.
 - For every other category, including Product / SaaS, Educational, Tutorial / How-to,
   Build in Public, Story, Opinion, Announcement, List / Tips, and Community /
   Engagement, use Title, optional Body, optional CTA, and Visual. Never use Phrase
@@ -921,6 +928,9 @@ Carousel strategy:
   keep it exact, selective, source-grounded, and omit it where no phrase deserves accent.
 - Treat the cover and closing as visual anchors: the cover is the strongest hero beat;
   the closing is a distinct, spacious payoff rather than another ordinary info card.
+- The final slide, when used as a closing, has the semantic role `closing`: summarize,
+  encourage a relevant next action, or use a restrained save/share/practice CTA. Do
+  not introduce a new dense lesson or unused phrase pair on that closing slide.
 - Do not repeat the same node network, branch, document, phone, card stack, speech
   metaphor, person, device, or arrow on adjacent slides unless it is a genuine ordered
   process. Vary focal side and composition while preserving the shared campaign medium.

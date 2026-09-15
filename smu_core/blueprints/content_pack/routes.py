@@ -76,6 +76,18 @@ STRUCTURE_LAYOUTS = {
     "hero_left", "hero_center", "split_left", "split_right",
     "editorial_statement", "visual_focus", "closing",
 }
+SCENE_MODES = {
+    "establishing", "interaction", "over_shoulder", "detail", "object_focus",
+    "action", "environmental", "portrait", "symbolic",
+}
+SHOT_TYPES = {
+    "wide", "medium", "close", "macro_detail", "over_shoulder", "top_down",
+    "low_angle", "eye_level",
+}
+SUBJECT_CATEGORIES = {
+    "person_interaction", "document_object", "food_object", "device",
+    "environment", "hands_action", "abstract_symbol", "focal_object",
+}
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
     "negative space, without trying to illustrate every detail of the source.",
@@ -388,12 +400,72 @@ def _slide_grounding(slide, campaign_grounding, role):
         environment = f"a recognizable {campaign_grounding['semantic_domain']} environment"
     if role == "cover":
         purpose = f"introducing {campaign_grounding['campaign_subject']}"
+    elif role == "cta":
+        purpose = "closing the current campaign with a restrained practical next step"
+        subject = "one quiet domain-relevant environmental or object detail"
+        action = "the scene settles into a calm visual release with generous negative space"
     return {
         "slide_purpose": purpose,
         "scene_subject": subject,
         "scene_action": action,
         "scene_environment": environment,
     }
+
+
+def _scene_variety_plan(slides, presentations, campaign_grounding):
+    """Assign bounded, request-local storytelling treatments without another model."""
+    plan = []
+    fallback_modes = ("interaction", "detail", "action", "object_focus", "environmental")
+    fallback_shots = ("medium", "close", "over_shoulder", "top_down", "eye_level")
+    for index, (slide, presentation) in enumerate(zip(slides, presentations)):
+        role = presentation["role"]
+        grounding = _slide_grounding(slide, campaign_grounding, role)
+        purpose = grounding["slide_purpose"].lower()
+        action = grounding["scene_action"].lower()
+        slide_semantic = " ".join(
+            str(slide.get(field) or "") for field in ("title", "body", "visual")
+        ).lower()
+        semantic = f"{purpose} {action} {slide_semantic}"
+        essential = False
+        if role == "cover":
+            mode, shot, subject = "establishing", "wide", "environment"
+        elif role == "cta":
+            mode, shot, subject = "environmental", "eye_level", "environment"
+        elif any(term in semantic for term in ("bill", "payment", "receipt")):
+            mode, shot, subject, essential = "object_focus", "close", "document_object", True
+        elif "menu" in semantic:
+            mode, shot, subject = "over_shoulder", "over_shoulder", "document_object"
+        elif any(term in semantic for term in ("food", "meal", "dish", "diet", "vegetarian")):
+            mode, shot, subject = "detail", "top_down", "food_object"
+        elif any(term in semantic for term in ("speak", "conversation", "request", "order")):
+            mode, shot, subject = "interaction", "medium", "person_interaction"
+        elif "technology" in campaign_grounding["semantic_domain"]:
+            mode, shot, subject = "object_focus", "close", "device"
+        else:
+            mode = fallback_modes[index % len(fallback_modes)]
+            shot = fallback_shots[index % len(fallback_shots)]
+            subject = "abstract_symbol" if mode == "symbolic" else "focal_object"
+        if plan and not essential:
+            previous = plan[-1]
+            if (mode, shot, subject) == (
+                previous["scene_mode"], previous["shot_type"], previous["subject_category"]
+            ):
+                mode = fallback_modes[index % len(fallback_modes)]
+                shot = fallback_shots[(index + 1) % len(fallback_shots)]
+                if subject == previous["subject_category"]:
+                    subject = "hands_action" if subject == "person_interaction" else "focal_object"
+        plan.append({
+            "semantic_role": (
+                "campaign_cover" if role == "cover" else
+                "closing" if role == "cta" else "teaching"
+            ),
+            "semantic_purpose": grounding["slide_purpose"],
+            "scene_mode": mode,
+            "shot_type": shot,
+            "subject_category": subject,
+            "semantic_repetition_required": essential,
+        })
+    return plan
 
 
 class CarouselQualityError(ValueError):
@@ -547,7 +619,7 @@ def _campaign_art_direction(image_style, slides, design_style=None, palette=None
 
 def _scene_brief(
     visual, semantic_text, treatment, visual_weight, layout, metaphor_family,
-    campaign_grounding=None, slide_grounding=None,
+    campaign_grounding=None, slide_grounding=None, scene_plan=None,
 ):
     """Build a bounded, copy-safe scene specification for provider prompting."""
     normalized = " ".join(
@@ -606,6 +678,17 @@ def _scene_brief(
         else "wide conceptual editorial scene" if medium
         else "centred poster-like view"
     )
+    if scene_plan:
+        viewpoint = {
+            "wide": "wide establishing view",
+            "medium": "medium eye-level view",
+            "close": "close detail view",
+            "macro_detail": "macro detail view",
+            "over_shoulder": "over-the-shoulder view",
+            "top_down": "top-down view",
+            "low_angle": "restrained low-angle view",
+            "eye_level": "calm eye-level view",
+        }[scene_plan["shot_type"]]
     return {
         "scene_subject": slide_grounding["scene_subject"] if slide_grounding else subject,
         "scene_action": slide_grounding["scene_action"] if slide_grounding else action,
@@ -648,6 +731,11 @@ def _scene_brief(
             "use intentional breathing room inside the artwork zone without shrinking into an icon"
         ),
         "metaphor_family": metaphor_family or "focal_object",
+        **({
+            "scene_mode": scene_plan["scene_mode"],
+            "shot_type": scene_plan["shot_type"],
+            "subject_category": scene_plan["subject_category"],
+        } if scene_plan else {}),
     }
 
 
@@ -975,6 +1063,7 @@ def _build_slide_background_prompt(
     campaign_direction=None,
     campaign_grounding=None,
     slide_grounding=None,
+    scene_plan=None,
 ):
     if visual_treatment == "typography_only":
         return None
@@ -1026,7 +1115,7 @@ def _build_slide_background_prompt(
     campaign_direction = campaign_direction or _campaign_art_direction("", [])
     scene = _scene_brief(
         visual, semantic_text, visual_treatment or "illustration", visual_weight,
-        design_layout, metaphor_family, campaign_grounding, slide_grounding,
+        design_layout, metaphor_family, campaign_grounding, slide_grounding, scene_plan,
     )
     occupancy = {"heavy": "dominant", "medium": "substantial", "light": "restrained"}[
         visual_weight
@@ -1065,9 +1154,16 @@ def _build_slide_background_prompt(
 - style, palette, composition, and motif variety may change presentation only;
   they must never replace or weaken the current subject, environment, or action
 """
+    variety_section = "" if not scene_plan else (
+        "VISUAL STORYTELLING — scene mode: " + scene_plan["scene_mode"]
+        + "; shot: " + scene_plan["shot_type"]
+        + "; subject category: " + scene_plan["subject_category"]
+        + ". This may vary presentation only, never semantic grounding."
+    )
     return f"""
 Create one text-free artwork scene for a cohesive Instagram carousel.
 {grounding_section}
+{variety_section}
 
 1. CAMPAIGN STYLE LOCK
 - the normalized campaign visual world below controls the medium for every slide
@@ -1283,6 +1379,12 @@ def create_content_pack_carousel():
             image_style, slides, design_manager_style, colour_theme
         )
         campaign_grounding = _campaign_grounding(slides, campaign_direction)
+        scene_plan = _scene_variety_plan(slides, presentations, campaign_grounding)
+        logger.info(
+            "carousel_design_plan slide_count=%s scene_modes=%s",
+            len(slides),
+            ",".join(item["scene_mode"] for item in scene_plan),
+        )
         if image_style == "viral_carousel":
             preflight_started = perf_counter()
             _validate_viral_carousel_copy(slides, presentations)
@@ -1330,6 +1432,7 @@ def create_content_pack_carousel():
                 campaign_direction,
                 campaign_grounding,
                 slide_grounding,
+                scene_plan[index],
             )
             if background_prompt is None:
                 background_prompt = TYPOGRAPHY_ONLY_BACKGROUND
