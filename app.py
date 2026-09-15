@@ -831,11 +831,16 @@ def generate_content_pack(source_text, brand_context=""):
     )
 
 
-def repair_carousel_structure(carousel_idea, *, failure_reason, semantic_domain):
+def repair_carousel_structure(
+    carousel_idea, *, failure_reason, semantic_domain, slide_index=0,
+    story_role="unknown",
+):
     return content_service.repair_carousel_structure(
         carousel_idea,
         failure_reason=failure_reason,
         semantic_domain=semantic_domain,
+        slide_index=slide_index,
+        story_role=story_role,
         openai_api_key=OPENAI_API_KEY,
         openai_client=openai_client,
     )

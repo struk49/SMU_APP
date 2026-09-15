@@ -20,6 +20,14 @@ TIKTOK_SHORTLINK_HOSTS = {"vm.tiktok.com", "vt.tiktok.com"}
 TIKTOK_TRANSCRIPTION_MODEL = "gpt-4o-mini-transcribe"
 CONTENT_PACK_TIMEOUT_SECONDS = 35.0
 CONTENT_PACK_MAX_RETRIES = 0
+CAROUSEL_STRUCTURE_REPAIR_REASONS = frozenset({
+    "missing_campaign_cover",
+    "cover_is_teaching",
+    "teaching_unit_overload",
+    "closing_unit_overload",
+    "visual_budget_exceeded",
+    "multiple_primary_headings",
+})
 
 
 class ContentPackGenerationError(RuntimeError):
@@ -1049,6 +1057,8 @@ def repair_carousel_structure(
     *,
     failure_reason,
     semantic_domain,
+    slide_index=0,
+    story_role="unknown",
     openai_api_key=None,
     openai_client=None,
 ):
@@ -1057,20 +1067,21 @@ def repair_carousel_structure(
         raise CarouselStructureRepairError("provider_unavailable")
     if not isinstance(carousel_idea, str) or not carousel_idea.strip():
         raise CarouselStructureRepairError("invalid_repair_input")
-    allowed_reasons = {
-        "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
-        "closing_unit_overload", "visual_budget_exceeded",
-        "multiple_primary_headings",
-    }
-    if failure_reason not in allowed_reasons:
+    if failure_reason not in CAROUSEL_STRUCTURE_REPAIR_REASONS:
         raise CarouselStructureRepairError("reason_not_repairable")
     safe_domain = semantic_domain if isinstance(semantic_domain, str) else "general"
+    safe_slide_index = slide_index if isinstance(slide_index, int) and slide_index >= 0 else 0
+    safe_story_role = story_role if story_role in {
+        "campaign_cover", "teaching", "development", "takeaway", "closing",
+    } else "unknown"
     prompt = f"""
 Restructure the existing CAROUSEL_IDEA below. Return ONLY `Slide N:` blocks in the
 existing Title/Subtitle/Body/Phrase/Translation/CTA/Visual format. Do not return a
 full Content Pack, commentary, markdown fences, or hidden reasoning.
 
 Structural failure: {failure_reason}
+Affected slide index: {safe_slide_index}
+Affected story role: {safe_story_role}
 Safe campaign domain: {safe_domain[:200]}
 
 Authoritative contract:

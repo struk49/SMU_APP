@@ -12,6 +12,7 @@ from smu_core.models import Post
 from smu_core.services.access import subscription_required
 from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
 from smu_core.services.content import (
+    CAROUSEL_STRUCTURE_REPAIR_REASONS as REPAIRABLE_STORY_REASONS,
     CarouselStructureRepairError,
     ContentPackGenerationError,
 )
@@ -91,10 +92,6 @@ SHOT_TYPES = {
 SUBJECT_CATEGORIES = {
     "person_interaction", "document_object", "food_object", "device",
     "environment", "hands_action", "abstract_symbol", "focal_object",
-}
-REPAIRABLE_STORY_REASONS = {
-    "missing_campaign_cover", "cover_is_teaching", "teaching_unit_overload",
-    "closing_unit_overload", "visual_budget_exceeded", "multiple_primary_headings",
 }
 SLIDE_VISUAL_CONCEPTS = (
     "A clean introductory hero composition with one relevant focal subject and strong "
@@ -516,10 +513,6 @@ class CarouselStoryError(ValueError):
 
 
 def _story_reject(reason, *, slide_index=0, story_role="unknown"):
-    logger.warning(
-        "carousel_story_rejected reason=%s slide_index=%s story_role=%s",
-        reason, slide_index, story_role,
-    )
     raise CarouselStoryError(
         reason, slide_index=slide_index, story_role=story_role
     )
@@ -1521,7 +1514,7 @@ def create_content_pack_carousel():
         slides = _normalize_content_pack_carousel_slides(
             _parse_content_pack_carousel_slides(carousel_idea)
         )
-        logger.info(
+        logger.warning(
             "carousel_repair_trace trace_id=%s stage=initial_parse result=valid slide_count=%s",
             repair_trace,
             len(slides),
@@ -1544,27 +1537,29 @@ def create_content_pack_carousel():
                 slides, campaign_grounding,
                 enforce_visual_budget=image_style == "viral_carousel",
             )
-            logger.info(
+            logger.warning(
                 "carousel_repair_trace trace_id=%s stage=initial_validation "
                 "result=valid repair_attempted=false",
                 repair_trace,
             )
         except CarouselStoryError as initial_error:
-            logger.info(
+            logger.warning(
                 "carousel_repair_trace trace_id=%s stage=initial_validation "
-                "result=invalid reason=%s",
+                "result=invalid reason=%s slide_index=%s story_role=%s",
                 repair_trace,
                 initial_error.reason,
+                initial_error.slide_index,
+                initial_error.story_role,
             )
             if initial_error.reason not in REPAIRABLE_STORY_REASONS:
-                logger.info(
+                logger.warning(
                     "carousel_repair_trace trace_id=%s stage=repair_eligibility "
                     "result=ineligible reason=%s",
                     repair_trace,
                     initial_error.reason,
                 )
                 raise
-            logger.info(
+            logger.warning(
                 "carousel_repair_trace trace_id=%s stage=repair_eligibility "
                 "result=eligible reason=%s",
                 repair_trace,
@@ -1573,10 +1568,17 @@ def create_content_pack_carousel():
             original_slides = slides
             try:
                 try:
+                    logger.warning(
+                        "carousel_repair_trace trace_id=%s stage=repair_call "
+                        "result=started",
+                        repair_trace,
+                    )
                     repaired_idea = _content_pack_helper("repair_carousel_structure")(
                         carousel_idea,
                         failure_reason=initial_error.reason,
                         semantic_domain=campaign_grounding["semantic_domain"],
+                        slide_index=initial_error.slide_index,
+                        story_role=initial_error.story_role,
                     )
                 except CarouselStructureRepairError as repair_error:
                     repair_result = {
@@ -1584,7 +1586,7 @@ def create_content_pack_carousel():
                         "provider_timeout": "timeout",
                         "invalid_repair_output": "malformed",
                     }.get(repair_error.reason, "exception")
-                    logger.info(
+                    logger.warning(
                         "carousel_repair_trace trace_id=%s stage=repair_call "
                         "result=%s reason=%s",
                         repair_trace,
@@ -1593,13 +1595,13 @@ def create_content_pack_carousel():
                     )
                     raise
                 except Exception:
-                    logger.info(
+                    logger.warning(
                         "carousel_repair_trace trace_id=%s stage=repair_call "
                         "result=exception reason=unexpected_exception",
                         repair_trace,
                     )
                     raise
-                logger.info(
+                logger.warning(
                     "carousel_repair_trace trace_id=%s stage=repair_call result=completed",
                     repair_trace,
                 )
@@ -1607,7 +1609,7 @@ def create_content_pack_carousel():
                     bool(SLIDE_MARKER_RE.match(line.strip()))
                     for line in repaired_idea.splitlines()
                 ) < CONTENT_PACK_CAROUSEL_MIN_SLIDES:
-                    logger.info(
+                    logger.warning(
                         "carousel_repair_trace trace_id=%s stage=repair_parse "
                         "result=malformed reason=insufficient_slide_markers",
                         repair_trace,
@@ -1616,7 +1618,7 @@ def create_content_pack_carousel():
                 try:
                     repaired_parsed = _parse_content_pack_carousel_slides(repaired_idea)
                 except Exception:
-                    logger.info(
+                    logger.warning(
                         "carousel_repair_trace trace_id=%s stage=repair_parse "
                         "result=parse_failed reason=parser_exception",
                         repair_trace,
@@ -1625,14 +1627,14 @@ def create_content_pack_carousel():
                 if not CONTENT_PACK_CAROUSEL_MIN_SLIDES <= len(
                     repaired_parsed
                 ) <= CONTENT_PACK_CAROUSEL_MAX_SLIDES:
-                    logger.info(
+                    logger.warning(
                         "carousel_repair_trace trace_id=%s stage=repair_parse "
                         "result=malformed reason=slide_count slide_count=%s",
                         repair_trace,
                         len(repaired_parsed),
                     )
                     raise ValueError("invalid_repair_output")
-                logger.info(
+                logger.warning(
                     "carousel_repair_trace trace_id=%s stage=repair_parse "
                     "result=valid slide_count=%s",
                     repair_trace,
@@ -1648,7 +1650,7 @@ def create_content_pack_carousel():
                     for slide in repaired_slides
                 )
                 if not _repair_preserves_phrase_pairs(original_slides, repaired_slides):
-                    logger.info(
+                    logger.warning(
                         "carousel_repair_trace trace_id=%s stage=pair_preservation "
                         "result=fail original_pair_count=%s repaired_pair_count=%s",
                         repair_trace,
@@ -1656,7 +1658,7 @@ def create_content_pack_carousel():
                         repaired_pair_count,
                     )
                     raise ValueError("translation_changed")
-                logger.info(
+                logger.warning(
                     "carousel_repair_trace trace_id=%s stage=pair_preservation "
                     "result=pass original_pair_count=%s repaired_pair_count=%s",
                     repair_trace,
@@ -1675,16 +1677,18 @@ def create_content_pack_carousel():
                     enforce_visual_budget=image_style == "viral_carousel",
                 )
             except CarouselStoryError as repaired_error:
-                logger.info(
+                logger.warning(
                     "carousel_repair_trace trace_id=%s stage=repaired_validation "
-                    "result=invalid reason=%s",
+                    "result=invalid reason=%s slide_index=%s story_role=%s",
                     repair_trace,
                     repaired_error.reason,
+                    repaired_error.slide_index,
+                    repaired_error.story_role,
                 )
                 raise
             except Exception:
                 raise initial_error from None
-            logger.info(
+            logger.warning(
                 "carousel_repair_trace trace_id=%s stage=repaired_validation "
                 "result=valid slide_count=%s",
                 repair_trace,
@@ -1692,7 +1696,7 @@ def create_content_pack_carousel():
             )
         presentations = _carousel_presentations(slides)
         scene_plan = _scene_variety_plan(slides, presentations, campaign_grounding)
-        logger.info(
+        logger.warning(
             "carousel_design_plan slide_count=%s scene_modes=%s",
             len(slides),
             ",".join(item["scene_mode"] for item in scene_plan),
@@ -1799,7 +1803,7 @@ def create_content_pack_carousel():
             db.session.add(post)
 
         db.session.commit()
-        logger.info(
+        logger.warning(
             "carousel_repair_trace trace_id=%s stage=request_outcome "
             "result=created slide_count=%s",
             repair_trace,
@@ -1820,11 +1824,17 @@ def create_content_pack_carousel():
 
     except CarouselStoryError as exc:
         db.session.rollback()
-        logger.info(
+        logger.warning(
             "carousel_repair_trace trace_id=%s stage=request_outcome "
             "result=rejected reason=%s",
             repair_trace,
             exc.reason,
+        )
+        logger.warning(
+            "carousel_story_rejected reason=%s slide_index=%s story_role=%s",
+            exc.reason,
+            exc.slide_index,
+            exc.story_role,
         )
         if exc.reason == "visual_budget_exceeded":
             flash(

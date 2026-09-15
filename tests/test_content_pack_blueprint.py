@@ -290,8 +290,85 @@ def test_production_shaped_multiple_headings_get_exactly_one_repair(
         "stage=repair_eligibility result=eligible "
         "reason=multiple_primary_headings"
     ) in caplog.text
+    assert "stage=repair_call result=started" in caplog.text
     assert f"stage=repaired_validation result=valid slide_count={slide_count}" in caplog.text
     assert f"slide_index={expected_index} story_role={expected_role}" in caplog.text
+    assert "Dziękuję" not in caplog.text
+
+
+def test_real_app_wiring_executes_one_external_repair_call_and_creates_rows(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="real-repair-wiring@example.com")
+    login(client, user)
+    repaired = (
+        "Slide 1:\nTitle: Polish at a Restaurant\n"
+        "Subtitle: Useful phrases for dining confidently\n"
+        "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 3:\nCTA: Save this guide"
+    )
+
+    class MockOpenAIClient:
+        def __init__(self):
+            self.responses = self
+            self.options = []
+            self.calls = []
+
+        def with_options(self, **kwargs):
+            self.options.append(kwargs)
+            return self
+
+        def create(self, **kwargs):
+            self.calls.append(kwargs)
+            return type("Response", (), {"output_text": repaired})()
+
+    openai_client = MockOpenAIClient()
+    monkeypatch.setattr(module, "OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setattr(module, "openai_client", openai_client)
+    monkeypatch.setattr(
+        module, "generate_openai_image",
+        lambda *args, **kwargs: pytest.fail("artwork must not run in the web route"),
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits", lambda *args, **kwargs: True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    initial = (
+        "Slide 1:\nTitle: Polish at a Restaurant\n"
+        "Title: Useful phrases for dining confidently\n"
+        "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 3:\nCTA: Save this guide"
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+    caplog.set_level(logging.WARNING, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+    )
+
+    posts = module.Post.query.order_by(module.Post.sort_order).all()
+    assert response.status_code == 302
+    assert "/post/" in response.headers["Location"]
+    assert len(openai_client.calls) == 1
+    assert openai_client.options == [{
+        "timeout": 35.0,
+        "max_retries": 0,
+    }]
+    assert openai_client.calls[0]["model"] == "gpt-4.1-mini"
+    assert len(posts) == 3
+    assert "stage=repair_call result=started" in caplog.text
+    assert "stage=repair_call result=completed" in caplog.text
+    assert "stage=pair_preservation result=pass" in caplog.text
+    assert "stage=repaired_validation result=valid slide_count=3" in caplog.text
+    assert "stage=request_outcome result=created slide_count=3" in caplog.text
+    assert "carousel_story_rejected" not in caplog.text
     assert "Dziękuję" not in caplog.text
 
 

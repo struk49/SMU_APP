@@ -166,6 +166,8 @@ def test_app_wrappers_delegate_with_existing_late_bound_dependencies(monkeypatch
         "carousel_idea": "Slide 1: draft",
         "failure_reason": "cover_is_teaching",
         "semantic_domain": "language",
+        "slide_index": 0,
+        "story_role": "unknown",
         "openai_api_key": smu_app.OPENAI_API_KEY,
         "openai_client": smu_app.openai_client,
     }
@@ -204,6 +206,8 @@ def test_multiple_primary_heading_repair_prompt_uses_supported_fields_only():
         "Slide 2:\nCTA: Existing action",
         failure_reason="multiple_primary_headings",
         semantic_domain="general",
+        slide_index=1,
+        story_role="campaign_cover",
         openai_api_key="key",
         openai_client=client,
     )
@@ -213,6 +217,8 @@ def test_multiple_primary_heading_repair_prompt_uses_supported_fields_only():
     assert "exactly one `Title:` per slide" in prompt
     assert "never emit `Headline:`" in prompt
     assert "Subtitle, Body, or separate slide" in prompt
+    assert "Affected slide index: 1" in prompt
+    assert "Affected story role: campaign_cover" in prompt
 
 
 def test_structure_repair_rejects_nonrepairable_reason_without_provider_call():
