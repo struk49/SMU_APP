@@ -168,6 +168,9 @@ def test_app_wrappers_delegate_with_existing_late_bound_dependencies(monkeypatch
         "semantic_domain": "language",
         "slide_index": 0,
         "story_role": "unknown",
+        "original_slide_count": 0,
+        "minimum_slide_count": 2,
+        "maximum_slide_count": 6,
         "openai_api_key": smu_app.OPENAI_API_KEY,
         "openai_client": smu_app.openai_client,
     }
@@ -208,6 +211,9 @@ def test_multiple_primary_heading_repair_prompt_uses_supported_fields_only():
         semantic_domain="general",
         slide_index=1,
         story_role="campaign_cover",
+        original_slide_count=2,
+        minimum_slide_count=2,
+        maximum_slide_count=2,
         openai_api_key="key",
         openai_client=client,
     )
@@ -219,6 +225,9 @@ def test_multiple_primary_heading_repair_prompt_uses_supported_fields_only():
     assert "Subtitle, Body, or separate slide" in prompt
     assert "Affected slide index: 1" in prompt
     assert "Affected story role: campaign_cover" in prompt
+    assert "Original slide count: 2" in prompt
+    assert "Required output slide count: 2 to 2" in prompt
+    assert "preserve the exact slide count" in prompt
 
 
 def test_structure_repair_rejects_nonrepairable_reason_without_provider_call():

@@ -833,7 +833,8 @@ def generate_content_pack(source_text, brand_context=""):
 
 def repair_carousel_structure(
     carousel_idea, *, failure_reason, semantic_domain, slide_index=0,
-    story_role="unknown",
+    story_role="unknown", original_slide_count=0, minimum_slide_count=2,
+    maximum_slide_count=6,
 ):
     return content_service.repair_carousel_structure(
         carousel_idea,
@@ -841,6 +842,9 @@ def repair_carousel_structure(
         semantic_domain=semantic_domain,
         slide_index=slide_index,
         story_role=story_role,
+        original_slide_count=original_slide_count,
+        minimum_slide_count=minimum_slide_count,
+        maximum_slide_count=maximum_slide_count,
         openai_api_key=OPENAI_API_KEY,
         openai_client=openai_client,
     )

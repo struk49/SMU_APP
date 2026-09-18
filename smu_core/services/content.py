@@ -1059,6 +1059,9 @@ def repair_carousel_structure(
     semantic_domain,
     slide_index=0,
     story_role="unknown",
+    original_slide_count=0,
+    minimum_slide_count=2,
+    maximum_slide_count=6,
     openai_api_key=None,
     openai_client=None,
 ):
@@ -1074,6 +1077,9 @@ def repair_carousel_structure(
     safe_story_role = story_role if story_role in {
         "campaign_cover", "teaching", "development", "takeaway", "closing",
     } else "unknown"
+    safe_original_count = original_slide_count if isinstance(original_slide_count, int) else 0
+    safe_minimum_count = minimum_slide_count if isinstance(minimum_slide_count, int) else 2
+    safe_maximum_count = maximum_slide_count if isinstance(maximum_slide_count, int) else 6
     prompt = f"""
 Restructure the existing CAROUSEL_IDEA below. Return ONLY `Slide N:` blocks in the
 existing Title/Subtitle/Body/Phrase/Translation/CTA/Visual format. Do not return a
@@ -1083,9 +1089,12 @@ Structural failure: {failure_reason}
 Affected slide index: {safe_slide_index}
 Affected story role: {safe_story_role}
 Safe campaign domain: {safe_domain[:200]}
+Original slide count: {safe_original_count}
+Required output slide count: {safe_minimum_count} to {safe_maximum_count}
 
 Authoritative contract:
-- 2 to 6 slides; do not pad.
+- Return between {safe_minimum_count} and {safe_maximum_count} slides. Never exceed
+  six, pad, truncate, or silently drop material.
 - Slide 1 is a campaign-level cover answering what the whole carousel is about. It
   uses Title plus optional Subtitle/Body, no Phrase/Translation, and no CTA. Maximum
   2 visible blocks and 140 characters.
@@ -1097,7 +1106,9 @@ Authoritative contract:
   `Headline:`, and never repeat a primary heading. For
   `multiple_primary_headings`, retain one existing primary heading and move existing
   genuinely supporting wording into an allowed Subtitle, Body, or separate slide;
-  do not rewrite it or invent a hierarchy unsupported by the existing content.
+  do not rewrite it or invent a hierarchy unsupported by the existing content. For
+  this reason the minimum and maximum are equal: preserve the exact slide count and
+  do not create or remove slides.
 - Takeaway/closing slides contain no surplus phrase pairs, at most 3 visible blocks
   and 180 characters, and use a restrained conclusion or source-supported action.
 - Preserve every fact. Preserve Phrase and Translation strings exactly, including

@@ -598,7 +598,11 @@ def test_invalid_repair_outputs_fail_cleanly_before_credits_or_rows(
     assert reserve_calls == []
     assert module.Post.query.count() == 0
     assert "stage=repair_call result=completed" in caplog.text
-    assert "stage=repair_parse result=" in caplog.text or "stage=repaired_validation result=invalid" in caplog.text
+    assert (
+        "stage=repair_parse result=" in caplog.text
+        or "stage=repair_cardinality result=fail" in caplog.text
+        or "stage=repaired_validation result=invalid" in caplog.text
+    )
     assert "Dziękuję" not in caplog.text
 
 
@@ -913,6 +917,234 @@ def test_phrase_pair_multiset_preserves_reordering_duplicates_and_unicode():
     assert not content_pack_routes._repair_preserves_phrase_pairs(
         [first, duplicate, menu], [menu, first]
     )
+
+
+def test_exact_explicit_phrase_recovery_preserves_unicode_and_multiplicity():
+    source = """Slide 1:
+Polish: Czy są dania wegetariańskie?
+English: Are there vegetarian dishes?
+Slide 2:
+Polish: Poproszę rachunek.
+English: The bill, please.
+Slide 3:
+Polish: Czy mogę prosić menu?
+English: May I have the menu?
+Slide 4:
+Polish: Dziękuję.
+English: Thank you.
+Slide 5:
+Polish: Dziękuję.
+English: Thank you."""
+    parsed = content_pack_routes._parse_content_pack_carousel_slides(source)
+    assert sum(len(slide.get("phrase_pairs", ())) for slide in parsed) == 0
+
+    recovered, count = content_pack_routes._recover_exact_phrase_pairs(source, parsed)
+
+    assert count == 5
+    assert [slide["phrase_pairs"][0] for slide in recovered] == [
+        ("Czy są dania wegetariańskie?", "Are there vegetarian dishes?"),
+        ("Poproszę rachunek.", "The bill, please."),
+        ("Czy mogę prosić menu?", "May I have the menu?"),
+        ("Dziękuję.", "Thank you."),
+        ("Dziękuję.", "Thank you."),
+    ]
+    assert content_pack_routes._repair_preserves_phrase_pairs(
+        recovered, list(reversed(recovered))
+    )
+
+
+@pytest.mark.parametrize(
+    "changed_pair",
+    [
+        ("Dziękuję", "Thank you."),
+        ("dziękuję.", "Thank you."),
+        ("Dziękuję.", "Thanks."),
+        ("Nowa fraza", "New phrase"),
+    ],
+)
+def test_recovered_pair_preservation_rejects_edits_and_invention(changed_pair):
+    original = [story_slide(
+        "Dziękuję.", "Thank you.", role="phrase",
+        pairs=(("Dziękuję.", "Thank you."),),
+    )]
+    changed = [story_slide(
+        changed_pair[0], changed_pair[1], role="phrase", pairs=(changed_pair,),
+    )]
+
+    assert not content_pack_routes._repair_preserves_phrase_pairs(original, changed)
+
+
+def test_zero_pair_source_recovery_allows_exact_repair_through_credit_path(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="phrase-recovery-route@example.com")
+    login(client, user)
+    repair_calls, reserve_calls = [], []
+    initial = """Slide 1:
+Polish: Czy są dania wegetariańskie?
+English: Are there vegetarian dishes?
+Slide 2:
+Polish: Poproszę rachunek.
+English: The bill, please.
+Slide 3:
+Polish: Czy mogę prosić menu?
+English: May I have the menu?
+Slide 4:
+Polish: Dziękuję.
+English: Thank you."""
+    repaired = """Slide 1:
+Title: Everyday Polish Conversation
+Subtitle: Four useful phrases
+Slide 2:
+Phrase: Czy są dania wegetariańskie?
+Translation: Are there vegetarian dishes?
+Slide 3:
+Phrase: Poproszę rachunek.
+Translation: The bill, please.
+Slide 4:
+Phrase: Czy mogę prosić menu?
+Translation: May I have the menu?
+Slide 5:
+Phrase: Dziękuję.
+Translation: Thank you.
+Slide 6:
+CTA: Save these phrases"""
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append((args, kwargs)) or repaired,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda user, count, commit=False: reserve_calls.append((count, commit)) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+    caplog.set_level(logging.WARNING, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+    )
+
+    assert response.status_code == 302
+    assert len(repair_calls) == 1
+    assert reserve_calls == [(6, False)]
+    assert module.Post.query.count() == 6
+    assert "phrase_recovery_count=4" in caplog.text
+    assert "stage=pair_preservation result=pass original_pair_count=4 repaired_pair_count=4" in caplog.text
+    assert "Czy są dania" not in caplog.text
+
+
+def test_zero_pair_source_recovery_rejects_invented_repair_pair_before_credits(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="phrase-recovery-invented@example.com")
+    login(client, user)
+    reserve_calls = []
+    initial = (
+        "Slide 1:\nPolish: Dziękuję.\nEnglish: Thank you.\n"
+        "Slide 2:\nCTA: Save this phrase"
+    )
+    invented = (
+        "Slide 1:\nTitle: Everyday Polish\nSubtitle: Useful phrases\n"
+        "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
+        "Slide 3:\nPhrase: Proszę.\nTranslation: Please.\n"
+        "Slide 4:\nCTA: Save these phrases"
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure", lambda *args, **kwargs: invented,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "clean carousel" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+@pytest.mark.parametrize("count", [2, 5, 6])
+def test_multiple_heading_repair_cardinality_requires_exact_count(count):
+    assert content_pack_routes._repair_cardinality_bounds(
+        "multiple_primary_headings", count
+    ) == (count, count)
+
+
+def test_repair_reason_cardinality_expansion_is_bounded():
+    assert content_pack_routes._repair_cardinality_bounds(
+        "cover_is_teaching", 2
+    ) == (2, 4)
+    assert content_pack_routes._repair_cardinality_bounds(
+        "closing_unit_overload", 5
+    ) == (5, 6)
+    assert content_pack_routes._repair_cardinality_bounds(
+        "teaching_unit_overload", 4
+    ) == (4, 6)
+
+
+def test_five_slide_multiple_heading_repair_cannot_expand_to_seven(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="repair-cardinality@example.com")
+    login(client, user)
+    reserve_calls = []
+    repair_calls = []
+    initial = (
+        "Slide 1:\nTitle: Polish Essentials\nSubtitle: Everyday conversation\n"
+        "Slide 2:\nTitle: Greetings\n"
+        "Slide 3:\nTitle: Politeness\n"
+        "Slide 4:\nTitle: Useful questions\n"
+        "Slide 5:\nTitle: Speak with confidence\nTitle: Keep practising"
+    )
+    seven = "\n".join(
+        f"Slide {index}:\nTitle: Existing wording {index}" for index in range(1, 8)
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append(1) or seven,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+    caplog.set_level(logging.WARNING, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "clean carousel" in response.get_data(as_text=True)
+    assert "stage=repair_cardinality result=fail" in caplog.text
+    assert "repair_original_slide_count=5" in caplog.text
+    assert "repair_output_slide_count=7" in caplog.text
+    assert repair_calls == [1]
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
 
 
 @contextmanager
@@ -1448,6 +1680,27 @@ Title: Expressing affection
 Visual: Two partners sharing an affectionate moment"""
 
 
+EVERYDAY_POLISH_CAROUSEL = """Slide 1:
+Title: Polish Essentials for Real Conversation
+Subtitle: Everyday phrases for practical confidence
+Visual: A broad language-learning campaign
+Slide 2:
+Title: Greetings to Know
+Visual: Two people greeting in a public space
+Slide 3:
+Title: Politeness Matters
+Visual: A courteous everyday social interaction
+Slide 4:
+Title: Useful Questions
+Visual: Asking for directions on a street
+Slide 5:
+Title: Dining & Travel Phrases
+Visual: Ordering food from a restaurant menu
+Slide 6:
+Title: Speak Polish with Confidence
+Visual: A calm typography-only closing"""
+
+
 def grounded_prompts(carousel, style="photorealistic", palette="warm_sunset"):
     slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
     presentations = content_pack_routes._carousel_presentations(slides)
@@ -1491,6 +1744,93 @@ def test_campaign_order_does_not_change_provider_prompts():
 
     assert restaurant_first == restaurant_second
     assert love_first == love_second
+
+
+def test_everyday_polish_campaign_keeps_restaurant_at_slide_scope():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        EVERYDAY_POLISH_CAROUSEL
+    )
+    presentations = content_pack_routes._carousel_presentations(slides)
+    direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+    plan = content_pack_routes._scene_variety_plan(slides, presentations, grounding)
+    slide_groundings = [
+        content_pack_routes._slide_grounding(slide, grounding, presentation["role"])
+        for slide, presentation in zip(slides, presentations)
+    ]
+
+    assert "language_learning" in grounding["semantic_domain"]
+    assert "everyday_conversation" in grounding["semantic_domain"]
+    assert "restaurant" not in grounding["semantic_domain"]
+    assert [item["environment_category"] for item in slide_groundings] == [
+        "neutral", "public_space", "neutral", "street", "restaurant", "neutral",
+    ]
+    assert [item["environment_category"] for item in plan] == [
+        "neutral", "public_space", "neutral", "street", "restaurant", "neutral",
+    ]
+
+
+def test_restaurant_and_everyday_campaigns_are_order_independent():
+    def grounding_for(value):
+        slides = content_pack_routes._parse_content_pack_carousel_slides(value)
+        direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
+        return content_pack_routes._campaign_grounding(slides, direction)
+
+    restaurant_first = grounding_for(RESTAURANT_CAROUSEL)
+    everyday_second = grounding_for(EVERYDAY_POLISH_CAROUSEL)
+    everyday_first = grounding_for(EVERYDAY_POLISH_CAROUSEL)
+    restaurant_second = grounding_for(RESTAURANT_CAROUSEL)
+
+    assert restaurant_first == restaurant_second
+    assert everyday_first == everyday_second
+    assert "restaurant" in restaurant_second["semantic_domain"]
+    assert "restaurant" not in everyday_second["semantic_domain"]
+
+
+@pytest.mark.parametrize(
+    ("carousel", "expected_domain", "forbidden_domain"),
+    [
+        (
+            "Slide 1:\nTitle: A Better Software Workflow\n"
+            "Slide 2:\nTitle: Focused automation\n"
+            "Slide 3:\nTitle: Restaurant customer example\n"
+            "Slide 4:\nCTA: Review the workflow",
+            "technology",
+            "restaurant",
+        ),
+        (
+            "Slide 1:\nTitle: Sustainable Fitness Training\n"
+            "Slide 2:\nTitle: Build a workout routine\n"
+            "Slide 3:\nTitle: Exercise outdoors\n"
+            "Slide 4:\nCTA: Keep training",
+            "fitness",
+            "restaurant",
+        ),
+    ],
+)
+def test_non_language_campaign_scope_resists_incidental_slide_domain(
+    carousel, expected_domain, forbidden_domain
+):
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+    direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+
+    assert expected_domain in grounding["semantic_domain"]
+    assert forbidden_domain not in grounding["semantic_domain"]
+
+
+def test_genuine_restaurant_campaign_can_repeat_essential_environment():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        RESTAURANT_CAROUSEL
+    )
+    presentations = content_pack_routes._carousel_presentations(slides)
+    direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+    plan = content_pack_routes._scene_variety_plan(slides, presentations, grounding)
+
+    assert grounding["semantic_domain"] == "restaurant + language_learning"
+    assert {item["environment_category"] for item in plan} == {"restaurant"}
+    assert len({item["scene_mode"] for item in plan}) > 1
 
 
 def test_restaurant_prompts_are_current_domain_grounded_without_prior_tokens():

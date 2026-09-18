@@ -290,6 +290,77 @@ def _normalize_content_pack_carousel_slides(slides):
     return [slides[0], *retained_content, slides[final_cta_index]]
 
 
+EXPLICIT_PAIR_FIELD_RE = re.compile(
+    r"^(Polish|Target Language|English|Translation)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
+
+
+def _recover_exact_phrase_pairs(carousel_idea, slides):
+    """Recover only explicitly labelled adjacent source pairs without translation."""
+    blocks, current = [], None
+    for line in carousel_idea.splitlines():
+        if SLIDE_MARKER_RE.match(line.strip()):
+            if current is not None:
+                blocks.append(current)
+            current = []
+        elif current is not None and line.strip():
+            current.append(line.strip())
+    if current is not None:
+        blocks.append(current)
+    if len(blocks) != len(slides):
+        return slides, 0
+
+    recovered, recovery_count = [], 0
+    for slide, block in zip(slides, blocks):
+        updated = dict(slide)
+        if updated.get("phrase_pairs"):
+            recovered.append(updated)
+            continue
+        fields = []
+        for line in block:
+            match = EXPLICIT_PAIR_FIELD_RE.match(line)
+            title_match = re.match(r"^Title\s*:\s*(.*)$", line, re.IGNORECASE)
+            fields.append(
+                (match.group(1).lower(), match.group(2)) if match
+                else ("title", title_match.group(1)) if title_match
+                else ("unsupported", "")
+            )
+        pair = None
+        for left, right in zip(fields, fields[1:]):
+            if left[0] in {"polish", "target language"} and right[0] in {
+                "english", "translation",
+            }:
+                pair = (left[1], right[1])
+                break
+            if left[0] == "title" and right[0] == "translation":
+                pair = (left[1], right[1])
+                break
+        if pair and pair[0] and pair[1]:
+            updated.update({
+                "title": pair[0],
+                "body": pair[1],
+                "layout_role": "phrase",
+                "phrase_pairs": (pair,),
+            })
+            recovery_count += 1
+        recovered.append(updated)
+    return recovered, recovery_count
+
+
+def _repair_cardinality_bounds(reason, original_slide_count):
+    original = max(CONTENT_PACK_CAROUSEL_MIN_SLIDES, original_slide_count)
+    policies = {
+        "multiple_primary_headings": (original, original),
+        "missing_campaign_cover": (original, min(CONTENT_PACK_CAROUSEL_MAX_SLIDES, original + 2)),
+        "cover_is_teaching": (original, min(CONTENT_PACK_CAROUSEL_MAX_SLIDES, original + 2)),
+        "teaching_unit_overload": (original, CONTENT_PACK_CAROUSEL_MAX_SLIDES),
+        "closing_unit_overload": (original, min(CONTENT_PACK_CAROUSEL_MAX_SLIDES, original + 1)),
+        "visual_budget_exceeded": (original, CONTENT_PACK_CAROUSEL_MAX_SLIDES),
+    }
+    return policies[reason]
+
+
 def _normalized_copy(value):
     return " ".join(re.findall(r"[\w']+", (value or "").lower(), re.UNICODE))
 
@@ -298,30 +369,59 @@ def _copy_word_count(value):
     return len(COPY_WORD_RE.findall(value or ""))
 
 
-def _campaign_semantic_domains(slides):
-    """Derive fresh, bounded domains from only the current carousel."""
-    corpus = " ".join(
-        str(slide.get(key) or "")
-        for slide in slides
-        for key in ("title", "body", "visual")
-    ).lower()
-    domain_terms = (
-        ("restaurant", ("restaurant", "table", "menu", "waiter", "server", "food", "drink", "water", "bill", "check", "dining", "order")),
-        ("travel", ("travel", "airport", "hotel", "train", "journey", "trip", "ticket", "station")),
-        ("language_learning", ("polish", "phrase", "translation", "vocabulary", "language", "speak", "conversation")),
-        ("workplace", ("workplace", "office", "colleague", "meeting", "manager", "career")),
-        ("healthcare", ("health", "doctor", "clinic", "hospital", "patient", "medical")),
-        ("relationships", ("love", "romance", "relationship", "couple", "affection", "partner")),
-        ("business", ("business", "customer", "sales", "marketing", "founder", "strategy")),
-        ("technology", ("technology", "software", "platform", "app", "digital", "ai")),
-        ("education", ("teach", "learn", "lesson", "student", "study", "education")),
-        ("lifestyle", ("lifestyle", "home", "fashion", "wellness", "routine")),
-    )
-    def contains(term):
-        return re.search(rf"\b{re.escape(term)}\w*\b", corpus, re.UNICODE) is not None
+SEMANTIC_DOMAIN_TERMS = (
+    ("restaurant", ("restaurant", "menu", "waiter", "server", "food", "drink", "water", "bill", "dining", "order")),
+    ("travel", ("travel", "airport", "hotel", "train", "journey", "trip", "ticket", "station")),
+    ("language_learning", ("polish", "phrase", "translation", "vocabulary", "language", "speak", "conversation")),
+    ("everyday_conversation", ("everyday", "greeting", "politeness", "useful question", "real conversation")),
+    ("workplace", ("workplace", "office", "colleague", "meeting", "manager", "career")),
+    ("healthcare", ("health", "doctor", "clinic", "hospital", "patient", "medical")),
+    ("relationships", ("love", "romance", "relationship", "couple", "affection", "partner")),
+    ("business", ("business", "customer", "sales", "marketing", "founder", "strategy")),
+    ("technology", ("technology", "software", "platform", "app", "digital", "ai")),
+    ("education", ("teach", "learn", "lesson", "student", "study", "education")),
+    ("fitness", ("fitness", "exercise", "workout", "training", "gym", "running")),
+    ("property", ("property", "home", "house", "estate", "mortgage", "rent")),
+    ("finance", ("finance", "money", "budget", "saving", "investment", "bank")),
+    ("cooking", ("cooking", "recipe", "kitchen", "ingredient", "bake")),
+    ("beauty", ("beauty", "skincare", "cosmetic", "makeup", "salon")),
+    ("lifestyle", ("lifestyle", "fashion", "wellness", "routine")),
+)
 
+
+def _semantic_domains_for_text(value):
+    normalized = str(value or "").lower()
+    return tuple(
+        domain
+        for domain, terms in SEMANTIC_DOMAIN_TERMS
+        if any(
+            re.search(rf"\b{re.escape(term)}\w*\b", normalized, re.UNICODE)
+            for term in terms
+        )
+    )
+
+
+def _campaign_semantic_domains(slides):
+    """Prefer current cover and repeated slide evidence over incidental details."""
+    if not slides:
+        return ("general",)
+    cover_corpus = " ".join(
+        str(slides[0].get(key) or "") for key in ("title", "body", "visual")
+    )
+    cover_domains = _semantic_domains_for_text(cover_corpus)
+    slide_domains = [set(_semantic_domains_for_text(" ".join(
+        str(slide.get(key) or "")
+        for key in ("title", "body", "visual")
+    ))) for slide in slides]
+    repeated_domains = {
+        domain
+        for domain, _ in SEMANTIC_DOMAIN_TERMS
+        if sum(domain in evidence for evidence in slide_domains) >= 2
+    }
     domains = tuple(
-        domain for domain, terms in domain_terms if any(contains(term) for term in terms)
+        domain
+        for domain, _ in SEMANTIC_DOMAIN_TERMS
+        if domain in cover_domains or domain in repeated_domains
     )
     if any(slide.get("phrase_pairs") for slide in slides) and "language_learning" not in domains:
         domains = (*domains, "language_learning")
@@ -368,8 +468,12 @@ def _slide_grounding(slide, campaign_grounding, role):
     normalized = " ".join(
         str(slide.get(key) or "") for key in ("title", "body", "visual")
     ).lower()
-    domains = set(campaign_grounding["semantic_domain"].split(" + "))
-    if "restaurant" in domains:
+    campaign_domains = set(campaign_grounding["semantic_domain"].split(" + "))
+    slide_domains = set(_semantic_domains_for_text(normalized))
+    restaurant_scope = "restaurant" in slide_domains or (
+        "restaurant" in campaign_domains and "everyday_conversation" not in campaign_domains
+    )
+    if restaurant_scope:
         if any(term in normalized for term in ("bill", "check", "pay", "payment")):
             purpose = "requesting and paying the restaurant bill"
             subject = "a diner and restaurant server completing payment at the table"
@@ -395,27 +499,64 @@ def _slide_grounding(slide, campaign_grounding, role):
             subject = "a diner and restaurant staff member in a clear service interaction"
             action = "the people engage in a practical restaurant conversation"
             environment = "a recognizable restaurant with dining tables, tableware, and service activity"
-    elif "relationships" in domains:
+        environment_category = "restaurant"
+    elif "relationships" in slide_domains or "relationships" in campaign_domains:
         purpose = "supporting personal connection through an appropriate human interaction"
         subject = "two people sharing a warm but natural personal interaction"
         action = "the people communicate affection or appreciation through expression and gesture"
         environment = "an everyday social setting appropriate to the current relationship context"
+        environment_category = "public_space"
+    elif any(term in normalized for term in ("greeting", "hello", "meet", "introduc")):
+        purpose = "practising an everyday greeting in a natural social interaction"
+        subject = "two people greeting each other naturally"
+        action = "the people begin a friendly everyday conversation"
+        environment = "an open public space suitable for a casual greeting"
+        environment_category = "public_space"
+    elif any(term in normalized for term in ("direction", "where", "question", "ask")):
+        purpose = "asking a useful everyday question"
+        subject = "two people exchanging practical information"
+        action = "one person asks for help while the other responds with a clear gesture"
+        environment = "a readable street or public-space setting"
+        environment_category = "street"
+    elif "technology" in slide_domains or "technology" in campaign_domains:
+        purpose = "explaining the current technology topic through a concrete interaction"
+        subject = "a person interacting with one clear digital tool"
+        action = "the tool supports one focused task without showing readable interface text"
+        environment = "a clean digital workspace with restrained contextual objects"
+        environment_category = "digital"
+    elif "fitness" in slide_domains or "fitness" in campaign_domains:
+        purpose = "supporting the current fitness idea through physical activity"
+        subject = "a person performing one clear exercise movement"
+        action = "the movement demonstrates the current practical fitness point"
+        environment = "an appropriate gym or outdoor training setting"
+        environment_category = "outdoors"
+    elif "property" in slide_domains or "property" in campaign_domains:
+        purpose = "supporting the current property idea with a concrete home context"
+        subject = "a person considering one clear home or property detail"
+        action = "the person evaluates the space through one practical action"
+        environment = "a believable home or property setting"
+        environment_category = "home"
     else:
         purpose = "supporting the current slide within the current semantic domain"
         subject = f"a concrete subject belonging to the current {campaign_grounding['semantic_domain']} domain"
         action = "the subject performs one clear action that supports the current slide meaning"
         environment = f"a recognizable {campaign_grounding['semantic_domain']} environment"
+        environment_category = "neutral"
     if role == "cover":
         purpose = f"introducing {campaign_grounding['campaign_subject']}"
     elif role == "cta":
         purpose = "closing the current campaign with a restrained practical next step"
         subject = "one quiet domain-relevant environmental or object detail"
         action = "the scene settles into a calm visual release with generous negative space"
+        if not restaurant_scope:
+            environment = "a calm neutral campaign setting with generous negative space"
+            environment_category = "neutral"
     return {
         "slide_purpose": purpose,
         "scene_subject": subject,
         "scene_action": action,
         "scene_environment": environment,
+        "environment_category": environment_category,
     }
 
 
@@ -470,6 +611,7 @@ def _scene_variety_plan(slides, presentations, campaign_grounding):
             "scene_mode": mode,
             "shot_type": shot,
             "subject_category": subject,
+            "environment_category": grounding["environment_category"],
             "semantic_repetition_required": essential,
         })
     return plan
@@ -1514,10 +1656,15 @@ def create_content_pack_carousel():
         slides = _normalize_content_pack_carousel_slides(
             _parse_content_pack_carousel_slides(carousel_idea)
         )
+        slides, phrase_recovery_count = _recover_exact_phrase_pairs(
+            carousel_idea, slides
+        )
         logger.warning(
-            "carousel_repair_trace trace_id=%s stage=initial_parse result=valid slide_count=%s",
+            "carousel_repair_trace trace_id=%s stage=initial_parse result=valid "
+            "slide_count=%s phrase_recovery_count=%s semantic_reset=true",
             repair_trace,
             len(slides),
+            phrase_recovery_count,
         )
 
         if len(slides) < CONTENT_PACK_CAROUSEL_MIN_SLIDES:
@@ -1532,6 +1679,12 @@ def create_content_pack_carousel():
             image_style, slides, design_manager_style, colour_theme
         )
         campaign_grounding = _campaign_grounding(slides, campaign_direction)
+        logger.warning(
+            "carousel_repair_trace trace_id=%s stage=campaign_grounding "
+            "result=ready campaign_domain=%s semantic_reset=true",
+            repair_trace,
+            campaign_grounding["semantic_domain"],
+        )
         try:
             slides = _validate_carousel_story(
                 slides, campaign_grounding,
@@ -1566,6 +1719,9 @@ def create_content_pack_carousel():
                 initial_error.reason,
             )
             original_slides = slides
+            repair_min_slides, repair_max_slides = _repair_cardinality_bounds(
+                initial_error.reason, len(original_slides)
+            )
             try:
                 try:
                     logger.warning(
@@ -1579,6 +1735,9 @@ def create_content_pack_carousel():
                         semantic_domain=campaign_grounding["semantic_domain"],
                         slide_index=initial_error.slide_index,
                         story_role=initial_error.story_role,
+                        original_slide_count=len(original_slides),
+                        minimum_slide_count=repair_min_slides,
+                        maximum_slide_count=repair_max_slides,
                     )
                 except CarouselStructureRepairError as repair_error:
                     repair_result = {
@@ -1624,16 +1783,23 @@ def create_content_pack_carousel():
                         repair_trace,
                     )
                     raise
-                if not CONTENT_PACK_CAROUSEL_MIN_SLIDES <= len(
+                cardinality_valid = repair_min_slides <= len(
                     repaired_parsed
-                ) <= CONTENT_PACK_CAROUSEL_MAX_SLIDES:
-                    logger.warning(
-                        "carousel_repair_trace trace_id=%s stage=repair_parse "
-                        "result=malformed reason=slide_count slide_count=%s",
-                        repair_trace,
-                        len(repaired_parsed),
-                    )
-                    raise ValueError("invalid_repair_output")
+                ) <= min(repair_max_slides, CONTENT_PACK_CAROUSEL_MAX_SLIDES)
+                logger.warning(
+                    "carousel_repair_trace trace_id=%s stage=repair_cardinality "
+                    "result=%s repair_original_slide_count=%s "
+                    "repair_output_slide_count=%s minimum_slide_count=%s "
+                    "maximum_slide_count=%s",
+                    repair_trace,
+                    "pass" if cardinality_valid else "fail",
+                    len(original_slides),
+                    len(repaired_parsed),
+                    repair_min_slides,
+                    repair_max_slides,
+                )
+                if not cardinality_valid:
+                    raise ValueError("repair_cardinality_invalid")
                 logger.warning(
                     "carousel_repair_trace trace_id=%s stage=repair_parse "
                     "result=valid slide_count=%s",
@@ -1641,6 +1807,16 @@ def create_content_pack_carousel():
                     len(repaired_parsed),
                 )
                 repaired_slides = _normalize_content_pack_carousel_slides(repaired_parsed)
+                repaired_slides, repaired_recovery_count = _recover_exact_phrase_pairs(
+                    repaired_idea, repaired_slides
+                )
+                if repaired_recovery_count:
+                    logger.warning(
+                        "carousel_repair_trace trace_id=%s stage=phrase_recovery "
+                        "result=completed phrase_recovery_count=%s",
+                        repair_trace,
+                        repaired_recovery_count,
+                    )
                 original_pair_count = sum(
                     len(tuple(slide.get("phrase_pairs") or ()))
                     for slide in original_slides
@@ -1697,9 +1873,10 @@ def create_content_pack_carousel():
         presentations = _carousel_presentations(slides)
         scene_plan = _scene_variety_plan(slides, presentations, campaign_grounding)
         logger.warning(
-            "carousel_design_plan slide_count=%s scene_modes=%s",
+            "carousel_design_plan slide_count=%s scene_modes=%s environment_plan=%s",
             len(slides),
             ",".join(item["scene_mode"] for item in scene_plan),
+            ",".join(item["environment_category"] for item in scene_plan),
         )
         if image_style == "viral_carousel":
             preflight_started = perf_counter()
