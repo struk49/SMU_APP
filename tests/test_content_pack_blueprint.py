@@ -191,6 +191,67 @@ def test_duplicate_titles_have_specific_repairable_story_reason(
     assert "\n" in slides[expected_index - 1]["title"]
 
 
+def test_deterministic_duplicate_heading_repair_preserves_exact_visible_text():
+    original = [
+        story_slide("Everyday Polish", "Useful conversation"),
+        story_slide("Zażółć gęślą jaźń\nDziękuję."),
+    ]
+
+    repaired, decline_reason = (
+        content_pack_routes._deterministically_repair_multiple_primary_headings(
+            original, slide_index=2
+        )
+    )
+
+    assert decline_reason is None
+    assert repaired[1]["title"] == "Zażółć gęślą jaźń"
+    assert repaired[1]["body"] == "Dziękuję."
+    assert len(repaired) == len(original)
+    assert content_pack_routes._visible_text_counter(original) == (
+        content_pack_routes._visible_text_counter(repaired)
+    )
+
+
+@pytest.mark.parametrize(
+    "mutated",
+    ["Dziekuje.", "dziękuję.", "Dziękuję!", "Dziękuję. Dziękuję."],
+)
+def test_visible_text_preservation_detects_unicode_case_punctuation_and_multiplicity(
+    mutated,
+):
+    original = [story_slide("Speak clearly\nDziękuję.")]
+    changed = [story_slide("Speak clearly", mutated)]
+
+    assert content_pack_routes._visible_text_counter(original) != (
+        content_pack_routes._visible_text_counter(changed)
+    )
+
+
+def test_deterministic_duplicate_heading_repair_declines_occupied_secondary_field():
+    original = [story_slide("Speak Polish\nWith confidence", "Existing support")]
+
+    repaired, decline_reason = (
+        content_pack_routes._deterministically_repair_multiple_primary_headings(
+            original, slide_index=1
+        )
+    )
+
+    assert repaired is None
+    assert decline_reason == "secondary_field_occupied"
+
+
+def test_deterministic_preservation_retains_duplicate_visible_string_multiplicity():
+    original = [story_slide("Dziękuję.\nDziękuję.")]
+    repaired, decline_reason = (
+        content_pack_routes._deterministically_repair_multiple_primary_headings(
+            original, slide_index=1
+        )
+    )
+
+    assert decline_reason is None
+    assert content_pack_routes._visible_text_counter(repaired)["Dziękuję."] == 2
+
+
 def test_ambiguous_incomplete_pair_remains_nonrepairable_story_structure_invalid():
     slides = [
         story_slide("Polish Restaurant Phrases", "A dining guide"),
@@ -249,7 +310,7 @@ def test_unsupported_headline_label_is_not_silently_accepted_as_a_field():
         ),
     ],
 )
-def test_production_shaped_multiple_headings_get_exactly_one_repair(
+def test_production_shaped_multiple_headings_use_deterministic_repair(
     initial, repaired, expected_index, expected_role, slide_count,
     client, app, module, monkeypatch, caplog,
 ):
@@ -278,8 +339,7 @@ def test_production_shaped_multiple_headings_get_exactly_one_repair(
     )
 
     assert response.status_code == 302
-    assert len(repair_calls) == 1
-    assert repair_calls[0][1]["failure_reason"] == "multiple_primary_headings"
+    assert repair_calls == []
     assert reserve_calls == [(slide_count, False)]
     assert module.Post.query.count() == 0
     assert (
@@ -290,13 +350,75 @@ def test_production_shaped_multiple_headings_get_exactly_one_repair(
         "stage=repair_eligibility result=eligible "
         "reason=multiple_primary_headings"
     ) in caplog.text
-    assert "stage=repair_call result=started" in caplog.text
+    assert "stage=deterministic_repair result=started" in caplog.text
+    assert (
+        "stage=deterministic_repair result=success "
+        "reason=multiple_primary_headings"
+    ) in caplog.text
+    assert "stage=deterministic_content_preservation result=pass" in caplog.text
+    assert "stage=repair_call" not in caplog.text
     assert f"stage=repaired_validation result=valid slide_count={slide_count}" in caplog.text
     assert f"slide_index={expected_index} story_role={expected_role}" in caplog.text
     assert "Dziękuję" not in caplog.text
 
 
-def test_real_app_wiring_executes_one_external_repair_call_and_creates_rows(
+def test_everyday_conversation_takeaway_repairs_locally_before_credits_and_rows(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="deterministic-takeaway@example.com")
+    login(client, user)
+    repair_calls, reserve_calls = [], []
+    set_content_pack_helper(
+        app, monkeypatch, "repair_carousel_structure",
+        lambda *args, **kwargs: repair_calls.append(1),
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda user, count, commit=False: reserve_calls.append((count, commit)) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    initial = (
+        "Slide 1:\nTitle: Everyday Polish Conversation\n"
+        "Subtitle: Useful phrases for daily life\n"
+        "Slide 2:\nTitle: Start with a greeting\n"
+        "Slide 3:\nTitle: Ask a simple question\n"
+        "Slide 4:\nTitle: Speak Polish\nTitle: With confidence"
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        initial,
+    )
+    caplog.set_level(logging.WARNING, logger=content_pack_routes.__name__)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": "viral_carousel"},
+    )
+
+    assert response.status_code == 302
+    assert repair_calls == []
+    assert reserve_calls == [(4, False)]
+    assert module.Post.query.count() == 4
+    assert "campaign_domain=language_learning + everyday_conversation" in caplog.text
+    assert (
+        "reason=multiple_primary_headings slide_index=4 story_role=takeaway"
+    ) in caplog.text
+    assert "stage=deterministic_repair result=success" in caplog.text
+    assert (
+        "stage=deterministic_repair_cardinality result=pass "
+        "original_slide_count=4 repaired_slide_count=4"
+    ) in caplog.text
+    assert "stage=deterministic_content_preservation result=pass" in caplog.text
+    assert "stage=deterministic_repaired_validation result=valid slide_count=4" in caplog.text
+    assert "stage=repair_call" not in caplog.text
+    assert "Speak Polish" not in caplog.text
+    assert "With confidence" not in caplog.text
+
+
+def test_real_app_wiring_uses_one_external_fallback_after_deterministic_decline(
     client, app, module, monkeypatch, caplog
 ):
     user = create_user(module, email="real-repair-wiring@example.com")
@@ -304,8 +426,10 @@ def test_real_app_wiring_executes_one_external_repair_call_and_creates_rows(
     repaired = (
         "Slide 1:\nTitle: Polish at a Restaurant\n"
         "Subtitle: Useful phrases for dining confidently\n"
+        "Body: Existing campaign support\n"
         "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
-        "Slide 3:\nCTA: Save this guide"
+        "Slide 3:\nTitle: Practise in everyday conversation\n"
+        "Slide 4:\nCTA: Save this guide"
     )
 
     class MockOpenAIClient:
@@ -339,8 +463,10 @@ def test_real_app_wiring_executes_one_external_repair_call_and_creates_rows(
     initial = (
         "Slide 1:\nTitle: Polish at a Restaurant\n"
         "Title: Useful phrases for dining confidently\n"
+        "Body: Existing campaign support\n"
         "Slide 2:\nPhrase: Dziękuję.\nTranslation: Thank you.\n"
-        "Slide 3:\nCTA: Save this guide"
+        "Slide 3:\nTitle: Practise in everyday conversation\n"
+        "Slide 4:\nCTA: Save this guide"
     )
     content_pack = CONTENT_PACK_RESULT.replace(
         "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
@@ -362,12 +488,14 @@ def test_real_app_wiring_executes_one_external_repair_call_and_creates_rows(
         "max_retries": 0,
     }]
     assert openai_client.calls[0]["model"] == "gpt-4.1-mini"
-    assert len(posts) == 3
+    assert len(posts) == 4
+    assert "stage=deterministic_repair result=declined" in caplog.text
+    assert "decline_reason=secondary_field_occupied" in caplog.text
     assert "stage=repair_call result=started" in caplog.text
     assert "stage=repair_call result=completed" in caplog.text
     assert "stage=pair_preservation result=pass" in caplog.text
-    assert "stage=repaired_validation result=valid slide_count=3" in caplog.text
-    assert "stage=request_outcome result=created slide_count=3" in caplog.text
+    assert "stage=repaired_validation result=valid slide_count=4" in caplog.text
+    assert "stage=request_outcome result=created slide_count=4" in caplog.text
     assert "carousel_story_rejected" not in caplog.text
     assert "Dziękuję" not in caplog.text
 
@@ -1112,7 +1240,8 @@ def test_five_slide_multiple_heading_repair_cannot_expand_to_seven(
         "Slide 2:\nTitle: Greetings\n"
         "Slide 3:\nTitle: Politeness\n"
         "Slide 4:\nTitle: Useful questions\n"
-        "Slide 5:\nTitle: Speak with confidence\nTitle: Keep practising"
+        "Slide 5:\nTitle: Speak with confidence\nTitle: Keep practising\n"
+        "Body: Existing final support"
     )
     seven = "\n".join(
         f"Slide {index}:\nTitle: Existing wording {index}" for index in range(1, 8)

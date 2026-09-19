@@ -908,7 +908,9 @@ Carousel strategy:
 - Emit exactly one `Title:` field per slide. Never repeat `Title:`, never emit
   `Headline:`, and never place multiple independent headings on one slide. Put
   genuinely supporting wording in one allowed `Subtitle:` or `Body:` field while
-  preserving one semantic job per slide.
+  preserving one semantic job per slide. Takeaway and closing slides must not become
+  collections of headings. Valid shape: `Title: One clear heading` followed by at
+  most one `Subtitle:` or `Body:` support field; never a second `Title:`.
 - Visual describes only a simple, relevant, text-free scene or composition: a
   concise semantic scene, object, action, or visual metaphor for that slide's
   specific meaning. Translate abstract ideas into

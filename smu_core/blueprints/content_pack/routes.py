@@ -654,6 +654,10 @@ class CarouselStoryError(ValueError):
         super().__init__(self.reason)
 
 
+class _DeterministicRepairComplete(Exception):
+    """Internal control flow after a validated zero-provider repair."""
+
+
 def _story_reject(reason, *, slide_index=0, story_role="unknown"):
     raise CarouselStoryError(
         reason, slide_index=slide_index, story_role=story_role
@@ -777,6 +781,46 @@ def _repair_preserves_phrase_pairs(original_slides, repaired_slides):
         )
 
     return pairs(original_slides) == pairs(repaired_slides)
+
+
+def _visible_text_counter(slides):
+    """Count exact rendered strings while allowing lossless field movement."""
+    return Counter(
+        line.strip()
+        for slide in slides
+        for field in ("title", "body", "cta", "eyebrow")
+        for line in str(slide.get(field) or "").splitlines()
+        if line.strip()
+    )
+
+
+def _deterministically_repair_multiple_primary_headings(slides, *, slide_index):
+    """Move one preserved duplicate heading into an empty secondary field."""
+    target_index = slide_index - 1
+    if not 0 <= target_index < len(slides):
+        return None, "invalid_slide_index"
+
+    original = slides[target_index]
+    if original.get("phrase_pairs"):
+        return None, "phrase_slide"
+    headings = tuple(
+        line.strip()
+        for line in str(original.get("title") or "").splitlines()
+        if line.strip()
+    )
+    if len(headings) != 2:
+        return None, "ambiguous_heading_count"
+    if str(original.get("body") or "").strip():
+        return None, "secondary_field_occupied"
+
+    repaired = [dict(slide) for slide in slides]
+    repaired[target_index]["title"] = headings[0]
+    repaired[target_index]["body"] = headings[1]
+    if _visible_text_counter(slides) != _visible_text_counter(repaired):
+        return None, "content_preservation_failed"
+    if not _repair_preserves_phrase_pairs(slides, repaired):
+        return None, "pair_preservation_failed"
+    return repaired, None
 
 
 def _reject_carousel_copy(
@@ -1722,8 +1766,93 @@ def create_content_pack_carousel():
             repair_min_slides, repair_max_slides = _repair_cardinality_bounds(
                 initial_error.reason, len(original_slides)
             )
+            deterministic_repaired = False
+            if initial_error.reason == "multiple_primary_headings":
+                logger.warning(
+                    "carousel_repair_trace trace_id=%s "
+                    "stage=deterministic_repair result=started",
+                    repair_trace,
+                )
+                deterministic_slides, decline_reason = (
+                    _deterministically_repair_multiple_primary_headings(
+                        original_slides,
+                        slide_index=initial_error.slide_index,
+                    )
+                )
+                if deterministic_slides is None:
+                    logger.warning(
+                        "carousel_repair_trace trace_id=%s "
+                        "stage=deterministic_repair result=declined "
+                        "decline_reason=%s",
+                        repair_trace,
+                        decline_reason,
+                    )
+                else:
+                    cardinality_valid = len(deterministic_slides) == len(original_slides)
+                    logger.warning(
+                        "carousel_repair_trace trace_id=%s "
+                        "stage=deterministic_repair_cardinality result=%s "
+                        "original_slide_count=%s repaired_slide_count=%s",
+                        repair_trace,
+                        "pass" if cardinality_valid else "fail",
+                        len(original_slides),
+                        len(deterministic_slides),
+                    )
+                    content_preserved = (
+                        _visible_text_counter(original_slides)
+                        == _visible_text_counter(deterministic_slides)
+                        and _repair_preserves_phrase_pairs(
+                            original_slides, deterministic_slides
+                        )
+                    )
+                    logger.warning(
+                        "carousel_repair_trace trace_id=%s "
+                        "stage=deterministic_content_preservation result=%s",
+                        repair_trace,
+                        "pass" if content_preserved else "fail",
+                    )
+                    if cardinality_valid and content_preserved:
+                        try:
+                            deterministic_direction = _campaign_art_direction(
+                                image_style, deterministic_slides,
+                                design_manager_style, colour_theme,
+                            )
+                            deterministic_grounding = _campaign_grounding(
+                                deterministic_slides, deterministic_direction
+                            )
+                            slides = _validate_carousel_story(
+                                deterministic_slides, deterministic_grounding,
+                                enforce_visual_budget=image_style == "viral_carousel",
+                            )
+                        except CarouselStoryError as deterministic_error:
+                            logger.warning(
+                                "carousel_repair_trace trace_id=%s "
+                                "stage=deterministic_repaired_validation "
+                                "result=invalid reason=%s",
+                                repair_trace,
+                                deterministic_error.reason,
+                            )
+                        else:
+                            campaign_direction = deterministic_direction
+                            campaign_grounding = deterministic_grounding
+                            deterministic_repaired = True
+                            logger.warning(
+                                "carousel_repair_trace trace_id=%s "
+                                "stage=deterministic_repair result=success "
+                                "reason=multiple_primary_headings",
+                                repair_trace,
+                            )
+                            logger.warning(
+                                "carousel_repair_trace trace_id=%s "
+                                "stage=deterministic_repaired_validation "
+                                "result=valid slide_count=%s",
+                                repair_trace,
+                                len(slides),
+                            )
             try:
                 try:
+                    if deterministic_repaired:
+                        raise _DeterministicRepairComplete()
                     logger.warning(
                         "carousel_repair_trace trace_id=%s stage=repair_call "
                         "result=started",
@@ -1739,6 +1868,8 @@ def create_content_pack_carousel():
                         minimum_slide_count=repair_min_slides,
                         maximum_slide_count=repair_max_slides,
                     )
+                except _DeterministicRepairComplete:
+                    raise
                 except CarouselStructureRepairError as repair_error:
                     repair_result = {
                         "provider_unavailable": "provider_unavailable",
@@ -1852,6 +1983,8 @@ def create_content_pack_carousel():
                     repaired_slides, campaign_grounding,
                     enforce_visual_budget=image_style == "viral_carousel",
                 )
+            except _DeterministicRepairComplete:
+                pass
             except CarouselStoryError as repaired_error:
                 logger.warning(
                     "carousel_repair_trace trace_id=%s stage=repaired_validation "
