@@ -2624,6 +2624,180 @@ def test_content_pack_carousel_parser_preserves_unlabelled_text():
     ]
 
 
+@pytest.mark.parametrize(
+    ("marker", "expected_title"),
+    [
+        ("Slide 1:", "Exact title"),
+        ("Slide 1: Inline title", "Inline title"),
+        ("**Slide 1:**", "Exact title"),
+        ("### Slide 1:", "Exact title"),
+        ("__Slide 1:__", "Exact title"),
+        ("Slide 1", "Exact title"),
+        ("1. Slide 1:", "Exact title"),
+        ("**Slide 1: Inline **word** wording**", "Inline **word** wording"),
+    ],
+)
+def test_carousel_parser_accepts_narrow_slide_marker_variants(
+    marker, expected_title
+):
+    suffix = "\nTitle: Exact title" if expected_title == "Exact title" else ""
+
+    slides = content_pack_routes._parse_content_pack_carousel_slides(marker + suffix)
+
+    assert len(slides) == 1
+    assert slides[0]["title"] == expected_title
+
+
+def test_carousel_parser_accepts_mixed_markers_and_preserves_order_and_copy():
+    carousel = """Slide 1: First — unchanged
+**Slide 2:**
+Title: Druga ścieżka?
+### Slide 3:
+Title: Third **literal** wording
+__Slide 4: Fourth: punctuation stays__
+5. Slide 5:
+Title: Fifth
+Slide 6
+Title: Sixth"""
+
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+
+    assert [slide["title"] for slide in slides] == [
+        "First — unchanged",
+        "Druga ścieżka?",
+        "Third **literal** wording",
+        "Fourth: punctuation stays",
+        "Fifth",
+        "Sixth",
+    ]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "1. First ordinary list item",
+        "Notes about Slide 1: are prose",
+        "Use Slide 2: as an example",
+        "Slide one:",
+        "Slide 1 is useful",
+        "2. Slide 1:",
+        "**Slide 1:",
+        "## Slide 1:",
+        "Slide 1 — not an allowed marker",
+    ],
+)
+def test_slide_marker_helper_rejects_numbered_lists_and_prose(line):
+    assert content_pack_routes._match_slide_marker(line) is None
+
+
+def test_numbered_list_and_slide_prose_remain_copy_not_boundaries():
+    carousel = """Title: Three reminders
+1. First ordinary list item
+2. Notes about Slide 1: remain ordinary prose
+Body: Keep both numbered lines together."""
+
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+
+    assert len(slides) == 1
+    assert slides[0]["title"] == (
+        "Three reminders\n1. First ordinary list item\n"
+        "2. Notes about Slide 1: remain ordinary prose"
+    )
+    assert slides[0]["body"] == "Keep both numbered lines together."
+
+
+def test_markdown_markers_enable_exact_phrase_recovery_without_changing_pairs():
+    carousel = """**Slide 1:**
+Title: Everyday Polish
+### Slide 2:
+Polish: Cześć, jak się masz?
+English: Hi, how are you?
+__Slide 3:__
+Polish: Cześć, jak się masz?
+English: Hi, how are you?
+4. Slide 4:
+CTA: Save these phrases"""
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+
+    recovered, count = content_pack_routes._recover_exact_phrase_pairs(
+        carousel, slides
+    )
+
+    assert len(recovered) == 4
+    assert count == 2
+    assert recovered[1]["phrase_pairs"] == (
+        ("Cześć, jak się masz?", "Hi, how are you?"),
+    )
+    assert recovered[2]["phrase_pairs"] == recovered[1]["phrase_pairs"]
+
+
+def test_full_content_pack_form_accepts_mixed_slide_markers(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="mixed-markers@example.com")
+    login(client, user)
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    carousel = """**Slide 1:**
+Title: Strong campaign cover
+### Slide 2: First clear point
+__Slide 3: Second clear point__
+4. Slide 4:
+CTA: Save this guide"""
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        carousel,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack, "image_style": ""},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+
+    assert response.status_code == 302
+    assert len(posts) == 4
+    assert [post.sort_order for post in posts] == [0, 1, 2, 3]
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+    assert [payload["overlay"]["title"] for payload in payloads] == [
+        "Strong campaign cover",
+        "First clear point",
+        "Second clear point",
+        "Save this guide",
+    ]
+
+
+def test_genuine_one_slide_markdown_payload_still_fails_before_credits_and_rows(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="one-markdown-slide@example.com")
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        "**Slide 1:**\nTitle: Only one real slide",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "SMU couldn&#39;t create enough carousel slides" in response.get_data(
+        as_text=True
+    )
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
 def test_content_pack_carousel_parser_promotes_cta_only_copy_to_required_title():
     assert content_pack_routes._parse_content_pack_carousel_slides(
         "Slide 6:\nCTA: Learn more Polish with Polish with Me"

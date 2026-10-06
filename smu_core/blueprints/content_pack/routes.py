@@ -30,7 +30,10 @@ from smu_core.services.social_text import (
 content_pack_bp = Blueprint("content_pack", __name__)
 logger = logging.getLogger(__name__)
 
-SLIDE_MARKER_RE = re.compile(r"^Slide\s+\d+\s*:\s*(.*)$", re.IGNORECASE)
+SLIDE_MARKER_RE = re.compile(
+    r"^Slide\s+(?P<slide_number>\d+)(?::\s*(?P<inline_title>.*))?$",
+    re.IGNORECASE,
+)
 SLIDE_FIELD_RE = re.compile(
     r"^(Title|Subtitle|Phrase|Translation|Body|Tip|CTA|Visual|Visual Weight|Eyebrow|Emphasis)\s*:\s*(.*)$",
     re.IGNORECASE,
@@ -168,6 +171,42 @@ def _append_slide_value(slide, field, value):
     slide[field] = f"{existing}\n{value}" if existing else value
 
 
+def _match_slide_marker(line):
+    """Return a narrow structural marker match without changing customer copy."""
+    candidate = line.strip()
+    list_number = None
+    decorated = False
+
+    numbered = re.fullmatch(r"(\d+)\.\s+(.*)", candidate)
+    if numbered:
+        list_number = int(numbered.group(1))
+        candidate = numbered.group(2)
+        decorated = True
+    else:
+        heading = re.fullmatch(r"###\s+(.*)", candidate)
+        if heading:
+            candidate = heading.group(1)
+            decorated = True
+        elif candidate.startswith(("**", "__")):
+            wrapper = candidate[:2]
+            if len(candidate) <= 4 or not candidate.endswith(wrapper):
+                return None
+            candidate = candidate[2:-2].strip()
+            decorated = True
+
+    match = SLIDE_MARKER_RE.fullmatch(candidate)
+    if match is None:
+        return None
+
+    slide_number = int(match.group("slide_number"))
+    inline_title = match.group("inline_title")
+    if inline_title is None and decorated:
+        return None
+    if list_number is not None and list_number != slide_number:
+        return None
+    return slide_number, inline_title or ""
+
+
 def _parse_slide_block(lines):
     slide = {
         "title": None,
@@ -261,7 +300,7 @@ def _parse_slide_block(lines):
 
 def _parse_content_pack_carousel_slides(carousel_idea):
     lines = carousel_idea.splitlines()
-    has_slide_markers = any(SLIDE_MARKER_RE.match(line.strip()) for line in lines)
+    has_slide_markers = any(_match_slide_marker(line) is not None for line in lines)
 
     if not has_slide_markers:
         if any(SLIDE_FIELD_RE.match(line.strip()) for line in lines):
@@ -283,13 +322,13 @@ def _parse_content_pack_carousel_slides(carousel_idea):
     blocks = []
     current_block = None
     for line in lines:
-        marker_match = SLIDE_MARKER_RE.match(line.strip())
-        if marker_match:
+        marker = _match_slide_marker(line)
+        if marker is not None:
             if current_block is not None:
                 blocks.append(current_block)
             current_block = []
-            if marker_match.group(1):
-                current_block.append(marker_match.group(1))
+            if marker[1]:
+                current_block.append(marker[1])
         elif current_block is not None:
             current_block.append(line)
     if current_block is not None:
@@ -331,7 +370,7 @@ def _recover_exact_phrase_pairs(carousel_idea, slides):
     """Recover only explicitly labelled adjacent source pairs without translation."""
     blocks, current = [], None
     for line in carousel_idea.splitlines():
-        if SLIDE_MARKER_RE.match(line.strip()):
+        if _match_slide_marker(line) is not None:
             if current is not None:
                 blocks.append(current)
             current = []
