@@ -10,7 +10,10 @@ from flask_login import current_user, login_required
 from smu_core.extensions import db
 from smu_core.models import Post
 from smu_core.services.access import subscription_required
-from smu_core.services.carousel_generation import build_content_pack_overlay_prompt
+from smu_core.services.carousel_generation import (
+    OVERLAY_RENDER_STYLES,
+    build_content_pack_overlay_prompt,
+)
 from smu_core.services.content import (
     CAROUSEL_STRUCTURE_REPAIR_REASONS as REPAIRABLE_STORY_REASONS,
     CarouselStructureRepairError,
@@ -177,6 +180,10 @@ def _parse_slide_block(lines):
     active_field = None
     phrase_pairs = []
     active_phrase_pair = None
+    explicit_titles = []
+    explicit_eyebrow = False
+    explicit_body = False
+    active_label = None
 
     for line in lines:
         if not line.strip():
@@ -185,9 +192,12 @@ def _parse_slide_block(lines):
         if field_match:
             label, value = field_match.groups()
             label = label.lower()
+            active_label = label
             if label in {"title", "phrase"}:
                 active_field = "title"
-                if label == "phrase":
+                if label == "title":
+                    explicit_titles.append(value)
+                else:
                     slide["layout_role"] = "phrase"
                     active_phrase_pair = {"phrase": value, "translation": None}
                     phrase_pairs.append(active_phrase_pair)
@@ -195,12 +205,15 @@ def _parse_slide_block(lines):
                 active_field = "body"
                 if label == "translation" and active_phrase_pair is not None:
                     active_phrase_pair["translation"] = value
+                else:
+                    explicit_body = True
             elif label == "visual":
                 active_field = "visual"
             elif label == "visual weight":
                 active_field = "visual_weight"
             elif label == "eyebrow":
                 active_field = "eyebrow"
+                explicit_eyebrow = True
             elif label == "emphasis":
                 active_field = "emphasis"
             else:
@@ -209,7 +222,25 @@ def _parse_slide_block(lines):
                     slide["layout_role"] = "cta"
             _append_slide_value(slide, active_field, value)
         else:
-            _append_slide_value(slide, active_field or "title", line.strip())
+            value = line.strip()
+            _append_slide_value(slide, active_field or "title", value)
+            if active_label == "title" and explicit_titles:
+                explicit_titles[-1] = f"{explicit_titles[-1]}\n{value}"
+            elif active_label == "phrase" and active_phrase_pair is not None:
+                active_phrase_pair["phrase"] = f"{active_phrase_pair['phrase']}\n{value}"
+            elif active_label == "translation" and active_phrase_pair is not None:
+                active_phrase_pair["translation"] = (
+                    f"{active_phrase_pair['translation']}\n{value}"
+                )
+
+    if len(explicit_titles) == 1 and len(phrase_pairs) == 1:
+        pair = phrase_pairs[0]
+        if explicit_eyebrow or explicit_body:
+            slide["phrase_hierarchy_collision"] = True
+        else:
+            slide["eyebrow"] = explicit_titles[0]
+            slide["title"] = pair["phrase"]
+            slide["body"] = pair["translation"]
 
     # The renderer requires a title. Preserve copy from a body-only or CTA-only
     # slide by promoting that exact value rather than emitting an invalid payload.
@@ -733,6 +764,13 @@ def _validate_carousel_story(
         else:
             story_role = "development"
         slide["story_role"] = story_role
+
+        if slide.pop("phrase_hierarchy_collision", False):
+            _story_reject(
+                "story_structure_invalid",
+                slide_index=index + 1,
+                story_role=story_role,
+            )
 
         if any(not phrase or not translation for phrase, translation in phrase_pairs):
             _story_reject("story_structure_invalid", slide_index=index + 1, story_role=story_role)
@@ -2065,6 +2103,9 @@ def create_content_pack_carousel():
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,
                 slide["title"],
+                render_style=(
+                    image_style if image_style in OVERLAY_RENDER_STYLES else None
+                ),
                 body=slide["body"],
                 cta=slide["cta"],
                 brand=slide["brand"],

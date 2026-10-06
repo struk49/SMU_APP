@@ -781,6 +781,49 @@ def test_worker_derives_existing_design_style_without_v1_change(
     assert "design_style" not in carousel_generation.parse_overlay_prompt(post.prompt)
 
 
+@pytest.mark.parametrize("render_style", sorted(carousel_generation.OVERLAY_RENDER_STYLES))
+def test_explicit_render_style_round_trips_and_worker_prefers_it(
+    app, module, render_style
+):
+    user = create_user(module, email=f"explicit-{render_style}@example.com")
+    post = make_pending(module, user, group_id=f"explicit-{render_style}")
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background\nStyle: realistic social media image",
+        "Exact title",
+        render_style=render_style,
+        layout_role="info",
+    )
+    module.db.session.commit()
+    calls = []
+
+    run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert carousel_generation.parse_overlay_prompt(post.prompt)["render_style"] == render_style
+    assert calls[0]["overlay"]["design_style"] == render_style
+
+
+@pytest.mark.parametrize("render_style", ["", "unknown", 1, False, [], {}])
+def test_overlay_rejects_invalid_explicit_render_style(render_style):
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background", "Title", render_style=render_style
+        )
+
+
+def test_parser_rejects_invalid_explicit_render_style():
+    malformed = (
+        'SMU_OVERLAY_V1:{"version":1,"kind":"content_pack_carousel",'
+        '"render_style":"unknown","background_prompt":"Text-free background",'
+        '"overlay":{"title":"Title","body":null,"cta":null,"brand":null}}'
+    )
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.parse_overlay_prompt(malformed)
+
+
 @pytest.mark.parametrize(
     "layout_role", ["content", "COVER", "", 1, False, [], {}]
 )

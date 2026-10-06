@@ -2321,6 +2321,48 @@ Translation: Have a nice day!"""
     assert slides[0]["body"] == "Good morning\nHow are you?\nHave a nice day!"
 
 
+def test_single_phrase_pair_uses_explicit_field_provenance_without_rewriting_copy():
+    heading = "Keep the conversation going"
+    phrase = "Czy możesz mi pomóc — proszę?"
+    translation = "Can you help me — please?"
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        f"Slide 1:\nTitle: {heading}\nPhrase: {phrase}\nTranslation: {translation}"
+    )
+
+    assert slides == [{
+        "title": phrase,
+        "body": translation,
+        "cta": None,
+        "brand": None,
+        "visual": None,
+        "layout_role": "phrase",
+        "eyebrow": heading,
+        "phrase_pairs": ((phrase, translation),),
+    }]
+
+
+def test_single_phrase_pair_with_occupied_hierarchy_preserves_text_and_is_rejected():
+    teaching = content_pack_routes._parse_content_pack_carousel_slides(
+        """Slide 1:
+Title: Keep the conversation going
+Eyebrow: LESSON 3
+Phrase: Jak się masz?
+Translation: How are you?"""
+    )[0]
+
+    assert teaching["title"] == "Keep the conversation going\nJak się masz?"
+    assert teaching["body"] == "How are you?"
+    assert teaching["eyebrow"] == "LESSON 3"
+    assert teaching["phrase_pairs"] == (("Jak się masz?", "How are you?"),)
+    with pytest.raises(content_pack_routes.CarouselStoryError) as raised:
+        story_validate([
+            story_slide("Everyday Polish", "Four useful phrases"),
+            teaching,
+            story_slide("Save and practise", role="cta"),
+        ])
+    assert raised.value.reason == "story_structure_invalid"
+
+
 @pytest.mark.parametrize(
     ("concept", "required"),
     [

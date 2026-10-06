@@ -95,6 +95,7 @@ DESIGN_STYLE_MARKERS = {
     "Style: professional corporate social media design": "corporate",
     "Style: charming 3D animated film look": "pixar",
 }
+OVERLAY_RENDER_STYLES = set(DESIGN_STYLE_MARKERS.values())
 
 
 class OverlayPayloadError(ValueError):
@@ -168,6 +169,7 @@ def build_content_pack_overlay_prompt(
     background_prompt,
     title,
     *,
+    render_style=None,
     body=None,
     cta=None,
     brand=None,
@@ -200,6 +202,13 @@ def build_content_pack_overlay_prompt(
         or not _valid_optional_overlay_text(cta, MAX_OVERLAY_CTA_LENGTH)
         or not _valid_optional_overlay_text(brand, MAX_OVERLAY_BRAND_LENGTH)
         or not isinstance(credits_reserved, bool)
+        or (
+            render_style is not None
+            and (
+                not isinstance(render_style, str)
+                or render_style not in OVERLAY_RENDER_STYLES
+            )
+        )
         or not _valid_typography(typography, title)
         or (
             visual_treatment is not None
@@ -288,6 +297,8 @@ def build_content_pack_overlay_prompt(
     }
     if credits_reserved:
         payload["credits_reserved"] = True
+    if render_style is not None:
+        payload["render_style"] = render_style
     if layout_role is not None:
         payload["layout_role"] = layout_role
     if layout_variant is not None:
@@ -348,6 +359,7 @@ def parse_overlay_prompt(prompt):
 
     expected_keys = {"version", "kind", "background_prompt", "overlay"}
     allowed_keys = expected_keys | {
+        "render_style",
         "credits_reserved",
         "layout_role",
         "layout_variant",
@@ -367,6 +379,13 @@ def parse_overlay_prompt(prompt):
         not isinstance(payload, dict)
         or not expected_keys.issubset(payload)
         or not set(payload).issubset(allowed_keys)
+        or (
+            "render_style" in payload
+            and (
+                not isinstance(payload["render_style"], str)
+                or payload["render_style"] not in OVERLAY_RENDER_STYLES
+            )
+        )
         or (
             "credits_reserved" in payload
             and not isinstance(payload["credits_reserved"], bool)
@@ -576,11 +595,13 @@ def generate_pending_carousel_images(
                     overlay["layout_role"] = overlay_payload["layout_role"]
                     if "layout_variant" in overlay_payload:
                         overlay["layout_variant"] = overlay_payload["layout_variant"]
+                design_style = overlay_payload.get("render_style")
+                if design_style is None:
                     design_style = _design_style_from_background_prompt(
                         overlay_payload["background_prompt"]
                     )
-                    if design_style:
-                        overlay["design_style"] = design_style
+                if design_style:
+                    overlay["design_style"] = design_style
                 if "typography" in overlay_payload:
                     overlay.update(overlay_payload["typography"])
                 if "visual_treatment" in overlay_payload:

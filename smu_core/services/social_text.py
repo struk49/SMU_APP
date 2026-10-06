@@ -1419,7 +1419,12 @@ def _draw_role_composition(
         if not value:
             continue
         if kind == "title" and design_style == "viral_carousel":
-            font_scale *= VIRAL_DESIGN_TOKENS["visual_weight_scale"][visual_weight]
+            weight_scale = (
+                1.0
+                if layout_role == "phrase" and visual_weight == "light"
+                else VIRAL_DESIGN_TOKENS["visual_weight_scale"][visual_weight]
+            )
+            font_scale *= weight_scale
             font_scale *= presentation_scale
             word_count = len(re.findall(r"\b[\w']+\b", value, re.UNICODE))
             if word_count <= 4:

@@ -1441,6 +1441,40 @@ def test_viral_mobile_readability_floors_are_enforced_for_phrase_copy():
     assert result["support_font_size"] >= social_text.VIRAL_READABILITY_MINIMUMS["translation"]
 
 
+def test_phrase_headline_size_is_consistent_for_light_and_medium_artwork_rhythm(
+    monkeypatch,
+):
+    title_sizes = []
+    original = social_text._prepare_composition_block
+
+    def capture(draw, text, box, **kwargs):
+        if text == "Czy możesz mi pomóc?":
+            title_sizes.append(kwargs["start_size"])
+        return original(draw, text, box, **kwargs)
+
+    monkeypatch.setattr(social_text, "_prepare_composition_block", capture)
+    common = {
+        "title": "Czy możesz mi pomóc?",
+        "body": "Can you help me?",
+        "layout_role": "phrase",
+        "layout_variant": "split_left",
+        "visual_treatment": "illustration",
+        "editorial_composition": "asymmetric_split",
+    }
+
+    social_text.preflight_viral_carousel_text(**common, visual_weight="light")
+    social_text.preflight_viral_carousel_text(**common, visual_weight="medium")
+    social_text.preflight_viral_carousel_text(
+        **{**common, "layout_role": "info"}, visual_weight="light"
+    )
+    social_text.preflight_viral_carousel_text(
+        **{**common, "layout_role": "info"}, visual_weight="medium"
+    )
+
+    assert title_sizes[0] == title_sizes[1]
+    assert title_sizes[2] < title_sizes[3]
+
+
 def test_viral_renderer_fails_instead_of_shrinking_below_readability_floor():
     result = social_text.preflight_viral_carousel_text(
         title="Bardzo długa fraza " * 8,
