@@ -840,6 +840,23 @@ Carousel strategy:
 - Use 2 to 6 `Slide N:` structural blocks and only as many as the source can support
   without filler. Prefer 4-6 for a normally substantive source, but never pad weak
   material. The `Slide N:` markers are parser metadata, not customer-visible copy.
+- Put every `Slide N:` marker on its own line and put each visible text value on a
+  separate labelled line beneath it. Never place customer-facing copy after the
+  marker and never emit a compact dash-joined summary such as
+  `Slide N: Heading — Phrase — Translation`.
+- Follow this structure for genuine language-learning carousels (the wording below
+  illustrates field placement only; replace it with exact source-supported copy):
+  `Slide 1:`
+  `Title: Campaign-level cover heading`
+  `Subtitle: Compact campaign context`
+  `Slide 2:`
+  `Title: Short situation heading`
+  `Phrase: Exact target-language phrase`
+  `Translation: Exact supplied translation`
+  Cover slides use Title and Subtitle. A single-pair teaching slide uses Title,
+  Phrase, and Translation as three separate labelled lines. Preserve every supplied
+  phrase and translation exactly, including Unicode, punctuation, capitalization,
+  and pair multiplicity.
 - Design every carousel for mobile reading. Prefer fewer words, generous spacing,
   and one immediately understandable lesson per slide over content volume.
 - Never compress several examples into paragraph-like artwork copy. Use another

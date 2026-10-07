@@ -207,7 +207,7 @@ def _match_slide_marker(line):
     return slide_number, inline_title or ""
 
 
-def _parse_slide_block(lines):
+def _parse_slide_block(lines, *, marked_block=False, inline_marker_copy=False):
     slide = {
         "title": None,
         "body": None,
@@ -223,12 +223,14 @@ def _parse_slide_block(lines):
     explicit_eyebrow = False
     explicit_body = False
     active_label = None
+    has_explicit_field = False
 
     for line in lines:
         if not line.strip():
             continue
         field_match = SLIDE_FIELD_RE.match(line.strip())
         if field_match:
+            has_explicit_field = True
             label, value = field_match.groups()
             label = label.lower()
             active_label = label
@@ -294,6 +296,8 @@ def _parse_slide_block(lines):
         slide["phrase_pairs"] = tuple(
             (pair["phrase"], pair["translation"]) for pair in phrase_pairs
         )
+    if marked_block and (inline_marker_copy or not has_explicit_field):
+        slide["_unstructured_source"] = True
 
     return slide if any(slide[field] for field in ("title", "body", "cta")) else None
 
@@ -321,20 +325,32 @@ def _parse_content_pack_carousel_slides(carousel_idea):
 
     blocks = []
     current_block = None
+    current_inline_marker_copy = False
     for line in lines:
         marker = _match_slide_marker(line)
         if marker is not None:
             if current_block is not None:
-                blocks.append(current_block)
+                blocks.append((current_block, current_inline_marker_copy))
             current_block = []
+            current_inline_marker_copy = bool(marker[1])
             if marker[1]:
                 current_block.append(marker[1])
         elif current_block is not None:
             current_block.append(line)
     if current_block is not None:
-        blocks.append(current_block)
+        blocks.append((current_block, current_inline_marker_copy))
 
-    return [slide for block in blocks if (slide := _parse_slide_block(block))]
+    return [
+        slide
+        for block, inline_marker_copy in blocks
+        if (
+            slide := _parse_slide_block(
+                block,
+                marked_block=True,
+                inline_marker_copy=inline_marker_copy,
+            )
+        )
+    ]
 
 
 def _normalize_content_pack_carousel_slides(slides):
@@ -413,6 +429,7 @@ def _recover_exact_phrase_pairs(carousel_idea, slides):
                 "layout_role": "phrase",
                 "phrase_pairs": (pair,),
             })
+            updated.pop("_unstructured_source", None)
             recovery_count += 1
         recovered.append(updated)
     return recovered, recovery_count
@@ -772,6 +789,14 @@ def _validate_carousel_story(
         _story_reject("story_structure_invalid")
     domains = set(campaign_grounding["semantic_domain"].split(" + "))
     language_learning = "language_learning" in domains
+    if language_learning:
+        for index, slide in enumerate(slides):
+            if slide.get("_unstructured_source"):
+                _story_reject(
+                    "story_structure_invalid",
+                    slide_index=index + 1,
+                    story_role="campaign_cover" if index == 0 else "unknown",
+                )
     if not _is_campaign_cover(slides[0], campaign_grounding):
         later_cover = next(
             (
@@ -790,6 +815,7 @@ def _validate_carousel_story(
     normalized = []
     for index, original in enumerate(slides):
         slide = dict(original)
+        slide.pop("_unstructured_source", None)
         phrase_pairs = tuple(slide.get("phrase_pairs") or ())
         is_final = index == len(slides) - 1
         if index == 0:

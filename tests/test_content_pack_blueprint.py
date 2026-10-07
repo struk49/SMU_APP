@@ -51,6 +51,27 @@ HASHTAGS:
 #one #two
 """
 
+LIVE_COMPACT_LANGUAGE_CAROUSEL = """Slide 1: Speak Polish with confidence — Three phrases for everyday conversations
+Slide 2: Start a conversation — Cześć, jak się masz? — Hi, how are you?
+Slide 3: Keep the conversation going — Co lubisz robić? — What do you like doing?
+Slide 4: Ask for a little help — Czy możesz powtórzyć? — Can you repeat that?"""
+
+STRUCTURED_LANGUAGE_CAROUSEL = """Slide 1:
+Title: Speak Polish with confidence
+Subtitle: Three phrases for everyday conversations
+Slide 2:
+Title: Start a conversation
+Phrase: Cześć, jak się masz?
+Translation: Hi, how are you?
+Slide 3:
+Title: Keep the conversation going
+Phrase: Co lubisz robić?
+Translation: What do you like doing?
+Slide 4:
+Title: Ask for a little help
+Phrase: Czy możesz powtórzyć?
+Translation: Can you repeat that?"""
+
 
 def story_validate(slides):
     direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
@@ -1770,6 +1791,7 @@ Slide 5: Często tu przychodzisz?"""
             "brand": None,
             "visual": None,
             "layout_role": "info",
+            "_unstructured_source": True,
         },
         {
             "title": "Często tu przychodzisz?",
@@ -1778,6 +1800,7 @@ Slide 5: Często tu przychodzisz?"""
             "brand": None,
             "visual": None,
             "layout_role": "info",
+            "_unstructured_source": True,
         },
     ]
 
@@ -2796,6 +2819,124 @@ def test_genuine_one_slide_markdown_payload_still_fails_before_credits_and_rows(
     )
     assert reserve_calls == []
     assert module.Post.query.count() == 0
+
+
+def test_live_compact_language_output_is_rejected_before_credits_rows_and_artwork(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="compact-language@example.com")
+    login(client, user)
+    reserve_calls = []
+    placeholder_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: placeholder_calls.append(1) or "https://cdn.test/placeholder.jpg",
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        LIVE_COMPACT_LANGUAGE_CAROUSEL,
+    )
+
+    parsed = content_pack_routes._parse_content_pack_carousel_slides(
+        LIVE_COMPACT_LANGUAGE_CAROUSEL
+    )
+    assert [slide["title"] for slide in parsed] == [
+        "Speak Polish with confidence — Three phrases for everyday conversations",
+        "Start a conversation — Cześć, jak się masz? — Hi, how are you?",
+        "Keep the conversation going — Co lubisz robić? — What do you like doing?",
+        "Ask for a little help — Czy możesz powtórzyć? — Can you repeat that?",
+    ]
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "clean carousel" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert placeholder_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_structured_language_pack_preserves_copy_and_renderer_payload(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="structured-language@example.com")
+    login(client, user)
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        STRUCTURED_LANGUAGE_CAROUSEL,
+    )
+
+    parsed = content_pack_routes._parse_content_pack_carousel_slides(
+        STRUCTURED_LANGUAGE_CAROUSEL
+    )
+    assert [tuple(slide.get("phrase_pairs") or ()) for slide in parsed] == [
+        (),
+        (("Cześć, jak się masz?", "Hi, how are you?"),),
+        (("Co lubisz robić?", "What do you like doing?"),),
+        (("Czy możesz powtórzyć?", "Can you repeat that?"),),
+    ]
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": content_pack},
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+
+    assert response.status_code == 302
+    assert len(posts) == 4
+    assert [payload["overlay"]["title"] for payload in payloads] == [
+        "Speak Polish with confidence",
+        "Cześć, jak się masz?",
+        "Co lubisz robić?",
+        "Czy możesz powtórzyć?",
+    ]
+    assert [payload["overlay"]["body"] for payload in payloads] == [
+        "Three phrases for everyday conversations",
+        "Hi, how are you?",
+        "What do you like doing?",
+        "Can you repeat that?",
+    ]
+    assert [payload.get("typography", {}).get("eyebrow") for payload in payloads] == [
+        None,
+        "Start a conversation",
+        "Keep the conversation going",
+        "Ask for a little help",
+    ]
+
+
+def test_non_language_inline_carousel_remains_legacy_compatible():
+    carousel = """Slide 1: A practical planning guide
+Slide 2: Define the goal — before choosing the channel
+Slide 3: Keep the next action visible"""
+    slides = content_pack_routes._parse_content_pack_carousel_slides(carousel)
+    direction = content_pack_routes._campaign_art_direction("", slides)
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+
+    validated = content_pack_routes._validate_carousel_story(slides, grounding)
+
+    assert [slide["title"] for slide in validated] == [
+        "A practical planning guide",
+        "Define the goal — before choosing the channel",
+        "Keep the next action visible",
+    ]
+    assert all("_unstructured_source" not in slide for slide in validated)
 
 
 def test_content_pack_carousel_parser_promotes_cta_only_copy_to_required_title():

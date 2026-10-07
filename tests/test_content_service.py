@@ -663,6 +663,13 @@ def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
     assert "Visual describes only a simple, relevant, text-free scene" in prompt
     assert "Never put exact overlay copy in Visual" in prompt
     assert "do not use emoji, decorative symbols, or icon glyphs" in prompt
+    assert "Put every `Slide N:` marker on its own line" in prompt
+    assert "Never place customer-facing copy after the marker" in normalized_prompt
+    assert "Slide N: Heading — Phrase — Translation" in prompt
+    assert "`Title: Campaign-level cover heading`" in prompt
+    assert "`Subtitle: Compact campaign context`" in prompt
+    assert "`Phrase: Exact target-language phrase`" in prompt
+    assert "`Translation: Exact supplied translation`" in prompt
 
 
 def test_content_pack_prompt_classifies_source_without_exposing_classification():
