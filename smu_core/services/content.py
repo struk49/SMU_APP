@@ -28,6 +28,31 @@ CAROUSEL_STRUCTURE_REPAIR_REASONS = frozenset({
     "visual_budget_exceeded",
     "multiple_primary_headings",
 })
+EXPLICIT_CAROUSEL_COUNT_RE = re.compile(
+    r"(?:\bexactly\s+(?P<exact>[a-z]+|\d+)\s+slides?\b|"
+    r"\b(?P<compound>[a-z]+|\d+)\s*-\s*slide\b)",
+    re.IGNORECASE,
+)
+REQUEST_SLIDE_MARKER_RE = re.compile(
+    r"^Slide\s+\d+\s*(?:[\u2014\u2013-]\s*[^\r\n]+)?\s*$",
+    re.IGNORECASE,
+)
+REQUEST_PAIR_FIELD_RE = re.compile(
+    r"^(Polish phrase|Phrase|English translation|Translation)\s*:\s*(.*)$",
+    re.IGNORECASE,
+)
+NUMBER_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+}
 
 
 class ContentPackGenerationError(RuntimeError):
@@ -44,6 +69,100 @@ class CarouselStructureRepairError(RuntimeError):
     def __init__(self, reason):
         self.reason = reason
         super().__init__(reason)
+
+
+class CarouselRequestIntentError(ValueError):
+    """Safe rejection for contradictory or malformed explicit carousel intent."""
+
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(reason)
+
+
+def _requested_integer(value):
+    normalized = str(value or "").strip().lower()
+    if normalized.isdigit():
+        return int(normalized)
+    return NUMBER_WORDS.get(normalized)
+
+
+def extract_explicit_carousel_intent(source_text):
+    """Extract only explicit slide counts and structurally labelled phrase pairs."""
+    source = str(source_text or "")
+    counts = set()
+    for match in EXPLICIT_CAROUSEL_COUNT_RE.finditer(source):
+        count = _requested_integer(match.group("exact") or match.group("compound"))
+        if count is None:
+            raise CarouselRequestIntentError("unsupported_slide_count")
+        counts.add(count)
+    if len(counts) > 1:
+        raise CarouselRequestIntentError("conflicting_slide_counts")
+    if counts and not 2 <= next(iter(counts)) <= 6:
+        raise CarouselRequestIntentError("unsupported_slide_count")
+
+    saw_pair_label = False
+    current = None
+    blocks = []
+    for raw_line in source.splitlines():
+        line = raw_line.strip()
+        if REQUEST_SLIDE_MARKER_RE.fullmatch(line):
+            if current is not None:
+                blocks.append(current)
+            current = {}
+            continue
+        pair_match = REQUEST_PAIR_FIELD_RE.fullmatch(line)
+        if pair_match is None:
+            continue
+        saw_pair_label = True
+        if current is None:
+            raise CarouselRequestIntentError("malformed_phrase_pair_intent")
+        label, value = pair_match.groups()
+        key = (
+            "phrase"
+            if label.lower() in {"polish phrase", "phrase"}
+            else "translation"
+        )
+        if key in current or not value:
+            raise CarouselRequestIntentError("malformed_phrase_pair_intent")
+        current[key] = value
+    if current is not None:
+        blocks.append(current)
+
+    pairs = []
+    if saw_pair_label:
+        for block in blocks:
+            if not block:
+                continue
+            if set(block) != {"phrase", "translation"}:
+                raise CarouselRequestIntentError("malformed_phrase_pair_intent")
+            pairs.append((block["phrase"], block["translation"]))
+        if not pairs:
+            raise CarouselRequestIntentError("malformed_phrase_pair_intent")
+
+    intent = {}
+    if counts:
+        intent["required_slide_count"] = next(iter(counts))
+    if pairs:
+        intent["required_phrase_pairs"] = pairs
+    return intent or None
+
+
+def _format_carousel_request_intent(intent):
+    if not intent:
+        return "No additional explicit carousel count or phrase-pair contract was supplied."
+    lines = ["Authoritative explicit carousel request:"]
+    count = intent.get("required_slide_count")
+    if count is not None:
+        lines.append(f"- Return exactly {count} slides. This overrides default length guidance.")
+        lines.append("- Do not append a closing slide or CTA beyond that exact count.")
+    pairs = tuple(intent.get("required_phrase_pairs") or ())
+    if pairs:
+        lines.append(f"- Preserve exactly {len(pairs)} supplied Polish/English pairs in order.")
+        for index, (phrase, translation) in enumerate(pairs, start=1):
+            lines.append(f"- Pair {index} Phrase: {phrase}")
+            lines.append(f"- Pair {index} Translation: {translation}")
+        lines.append("- Emit each pair only through separate Phrase: and Translation: fields.")
+    return "\n".join(lines)
 
 
 def _content_pack_provider_reason(error):
@@ -715,6 +834,7 @@ def generate_content_pack(
     source_text,
     brand_context="",
     *,
+    carousel_intent=None,
     openai_api_key=None,
     openai_client=None,
 ):
@@ -726,6 +846,8 @@ You are a thoughtful social media content strategist and writer.
 
 Brand Brief:
 {brand_context}
+
+{_format_carousel_request_intent(carousel_intent)}
 
 Understand the source before writing. Silently identify its primary topic, central
 message, strongest supported hook, useful facts or details, practical takeaways,
@@ -866,6 +988,9 @@ Carousel strategy:
 - Give the carousel a deliberate progression: hook/cover, development through
   genuinely distinct ideas, then a useful takeaway, result, conclusion, or CTA when
   justified. Do not require every stage, but ensure each slide adds new meaning.
+- Explicit user requirements override default carousel rhythm, closing, and CTA
+  guidance. When an exact slide count is supplied, fit the complete story inside it;
+  never append an extra closing, takeaway, or CTA slide.
 - Do not add numbers to Title, Subtitle, Body, Phrase, Translation, Tip, or CTA merely
   because the content is a carousel. Preserve or introduce customer-visible numbering
   only for genuine steps, rankings, defined lists, chronological sequences, or

@@ -543,6 +543,95 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
         )
 
 
+EXPLICIT_FOUR_SLIDE_REQUEST = """Create a four-slide educational Instagram carousel for Polish with Me about everyday Polish conversation for beginners.
+
+Slide 1 — Cover
+Title: Speak Polish with confidence
+Subtitle: Three phrases for everyday conversations
+
+Slide 2 — Teaching
+Title: Start a conversation
+Polish phrase: Cześć, jak się masz?
+English translation: Hi, how are you?
+
+Slide 3 — Teaching
+Title: Keep the conversation going
+Polish phrase: Co lubisz robić?
+English translation: What do you like doing?
+
+Slide 4 — Takeaway
+Title: Ask for a little help
+Polish phrase: Czy możesz powtórzyć?
+English translation: Can you repeat that?
+
+Requirements:
+- Exactly four slides in this order.
+- Add no extra phrases, headings, pronunciation guides or calls to action."""
+
+
+def test_explicit_carousel_intent_extracts_only_count_and_structural_pairs():
+    intent = content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
+
+    assert intent == {
+        "required_slide_count": 4,
+        "required_phrase_pairs": [
+            ("Cześć, jak się masz?", "Hi, how are you?"),
+            ("Co lubisz robić?", "What do you like doing?"),
+            ("Czy możesz powtórzyć?", "Can you repeat that?"),
+        ],
+    }
+    assert content.extract_explicit_carousel_intent(
+        "Teach these three phrases in a useful carousel."
+    ) is None
+
+
+def test_explicit_carousel_intent_accepts_revised_phrase_translation_labels():
+    revised_prompt = EXPLICIT_FOUR_SLIDE_REQUEST.replace(
+        "Polish phrase:", "Phrase:"
+    ).replace("English translation:", "Translation:")
+
+    assert content.extract_explicit_carousel_intent(revised_prompt) == (
+        content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
+    )
+
+
+def test_explicit_carousel_intent_rejects_conflicts_and_malformed_pairs():
+    with pytest.raises(content.CarouselRequestIntentError) as conflict:
+        content.extract_explicit_carousel_intent(
+            "Create a four-slide carousel. Requirements: Exactly five slides."
+        )
+    assert conflict.value.reason == "conflicting_slide_counts"
+
+    with pytest.raises(content.CarouselRequestIntentError) as unsupported:
+        content.extract_explicit_carousel_intent("Create exactly eleven slides.")
+    assert unsupported.value.reason == "unsupported_slide_count"
+
+    with pytest.raises(content.CarouselRequestIntentError) as malformed:
+        content.extract_explicit_carousel_intent(
+            "Slide 1 — Teaching\nPolish phrase: Dziękuję."
+        )
+    assert malformed.value.reason == "malformed_phrase_pair_intent"
+
+
+def test_explicit_carousel_intent_is_authoritative_in_generation_prompt():
+    client = FakeOpenAIClient()
+    intent = content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
+
+    content.generate_content_pack(
+        EXPLICIT_FOUR_SLIDE_REQUEST,
+        carousel_intent=intent,
+        openai_api_key="key",
+        openai_client=client,
+    )
+
+    prompt = client.calls[0]["input"]
+    assert "Return exactly 4 slides" in prompt
+    assert "Do not append a closing slide or CTA beyond that exact count" in prompt
+    assert "Pair 1 Phrase: Cześć, jak się masz?" in prompt
+    assert "Pair 3 Translation: Can you repeat that?" in prompt
+    assert "Explicit user requirements override default carousel rhythm" in prompt
+
+
 class FailingContentPackClient:
     def __init__(self, error):
         self.error = error

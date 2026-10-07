@@ -4,7 +4,7 @@ import logging
 import re
 
 import pytest
-from flask import template_rendered, url_for
+from flask import session, template_rendered, url_for
 
 import app as smu_app
 from conftest import create_user, login
@@ -72,11 +72,87 @@ Title: Ask for a little help
 Phrase: Czy możesz powtórzyć?
 Translation: Can you repeat that?"""
 
+EXPLICIT_FOUR_SLIDE_SOURCE = """Create a four-slide educational Instagram carousel for Polish with Me about everyday Polish conversation for beginners.
+
+Slide 1 — Cover
+Title: Speak Polish with confidence
+Subtitle: Three phrases for everyday conversations
+
+Slide 2 — Teaching
+Title: Start a conversation
+Polish phrase: Cześć, jak się masz?
+English translation: Hi, how are you?
+
+Slide 3 — Teaching
+Title: Keep the conversation going
+Polish phrase: Co lubisz robić?
+English translation: What do you like doing?
+
+Slide 4 — Takeaway
+Title: Ask for a little help
+Polish phrase: Czy możesz powtórzyć?
+English translation: Can you repeat that?
+
+Requirements:
+- Exactly four slides in this order.
+- Exactly one primary heading per slide.
+- Preserve every supplied Polish phrase and English translation exactly, including Polish characters and punctuation.
+- Show each Polish phrase together with its English translation.
+- Slide numbers, story roles and field labels are instructions only; never display them in the images.
+- Add no extra phrases, headings, pronunciation guides or calls to action."""
+
+POST_361_CAROUSEL = """Slide 1:
+Title: Speak Polish with confidence
+Subtitle: Three phrases for everyday conversations
+Visual: welcoming open door with warm light inside
+Visual Weight: heavy
+Slide 2:
+Title: Start a conversation
+Body: Cześć, jak się masz?
+Subtitle: Hi, how are you?
+Visual: two people smiling, greeting each other outdoors
+Visual Weight: medium
+Slide 3:
+Title: Keep the conversation going
+Body: Co lubisz robić?
+Subtitle: What do you like doing?
+Visual: casual coffee chat setting with relaxed posture
+Visual Weight: medium
+Slide 4:
+Title: Ask for a little help
+Body: Czy możesz powtórzyć?
+Subtitle: Can you repeat that?
+Visual: person listening attentively, hand raised politely
+Visual Weight: medium
+Slide 5:
+Title: Start speaking today
+Body: Use these phrases to build your Polish skills one conversation at a time.
+Visual: typography-only impactful message
+Visual Weight: light
+Role: closing"""
+
 
 def story_validate(slides):
     direction = content_pack_routes._campaign_art_direction("viral_carousel", slides)
     grounding = content_pack_routes._campaign_grounding(slides, direction)
     return content_pack_routes._validate_carousel_story(slides, grounding)
+
+
+def register_intent_for_client(client, app, user_id, intent):
+    with client.session_transaction() as client_session:
+        existing_registry = dict(
+            client_session.get(content_pack_routes.CONTENT_PACK_INTENT_REGISTRY_KEY)
+            or {}
+        )
+    with app.test_request_context():
+        session[content_pack_routes.CONTENT_PACK_INTENT_REGISTRY_KEY] = (
+            existing_registry
+        )
+        token = content_pack_routes._register_carousel_request_intent(intent, user_id)
+        registry = dict(session[content_pack_routes.CONTENT_PACK_INTENT_REGISTRY_KEY])
+    with client.session_transaction() as client_session:
+        client_session[content_pack_routes.CONTENT_PACK_INTENT_REGISTRY_KEY] = registry
+    return token
 
 
 def story_slide(title, body=None, *, role="info", pairs=(), cta=None, visual=None):
@@ -1517,6 +1593,78 @@ def test_content_pack_post_uses_current_user_brand_context(client, app, module, 
     assert templates[0][1]["content_pack_result"] == CONTENT_PACK_RESULT
 
 
+def test_explicit_carousel_intent_is_signed_and_passed_to_generation(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="explicit-intent@example.com")
+    login(client, user)
+    calls = {}
+
+    def fake_generate(source_text, brand_context, *, carousel_intent=None):
+        calls["source_text"] = source_text
+        calls["intent"] = carousel_intent
+        return CONTENT_PACK_RESULT
+
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(app, monkeypatch, "generate_content_pack", fake_generate)
+
+    with captured_templates(app) as templates:
+        response = client.post(
+            "/content-pack",
+            data={"source_type": "text", "source_input": EXPLICIT_FOUR_SLIDE_SOURCE},
+        )
+
+    context = templates[0][1]
+    assert response.status_code == 200
+    assert calls["source_text"] == EXPLICIT_FOUR_SLIDE_SOURCE
+    assert calls["intent"]["required_slide_count"] == 4
+    assert calls["intent"]["required_phrase_pairs"][0] == (
+        "Cześć, jak się masz?", "Hi, how are you?"
+    )
+    assert context["carousel_intent_token"]
+    with app.app_context():
+        payload = content_pack_routes._intent_serializer().loads(
+            context["carousel_intent_token"]
+        )
+    assert payload["user_id"] == user.id
+    assert payload["intent"]["required_slide_count"] == 4
+    assert len(payload["intent"]["required_phrase_pairs"]) == 3
+    with client.session_transaction() as client_session:
+        assert payload["pack_id"] in client_session[
+            content_pack_routes.CONTENT_PACK_INTENT_REGISTRY_KEY
+        ]
+
+
+def test_conflicting_explicit_counts_fail_before_content_pack_credit_or_generation(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="conflicting-intent@example.com")
+    login(client, user)
+    reserve_calls = []
+    generation_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_content_pack_credits",
+        lambda current_user: reserve_calls.append(1) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "generate_content_pack",
+        lambda *args, **kwargs: generation_calls.append(1),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={
+            "source_type": "text",
+            "source_input": "Create a four-slide carousel. Exactly five slides.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "conflicting explicit slide counts" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert generation_calls == []
+
+
 def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(
     client, app, module, monkeypatch
 ):
@@ -2937,6 +3085,373 @@ Slide 3: Keep the next action visible"""
         "Keep the next action visible",
     ]
     assert all("_unstructured_source" not in slide for slide in validated)
+
+
+def test_post_361_output_fails_explicit_count_before_credits_rows_and_artwork(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="post-361-count@example.com")
+    login(client, user)
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        POST_361_CAROUSEL,
+    )
+    intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    token = register_intent_for_client(client, app, user.id, intent)
+    reserve_calls = []
+    placeholder_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: placeholder_calls.append(1) or "https://cdn.test/placeholder.jpg",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": content_pack,
+            "carousel_intent_token": token,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "created 5 slides" in response.get_data(as_text=True)
+    assert "requires exactly 4" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert placeholder_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_body_subtitle_pairs_fail_exact_pair_intent_before_credits_and_rows(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="post-361-pairs@example.com")
+    login(client, user)
+    four_slide_output = POST_361_CAROUSEL.split("Slide 5:", 1)[0].rstrip()
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        four_slide_output,
+    )
+    intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    token = register_intent_for_client(client, app, user.id, intent)
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": content_pack,
+            "carousel_intent_token": token,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "did not preserve the exact requested Polish phrases" in response.get_data(
+        as_text=True
+    )
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_correct_explicit_intent_preserves_unicode_multiplicity_cover_and_takeaway(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="intent-success@example.com")
+    login(client, user)
+    carousel = STRUCTURED_LANGUAGE_CAROUSEL + """
+Slide 5:
+Title: Practise in everyday conversations
+Body: Build confidence one conversation at a time."""
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        carousel,
+    )
+    base_intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    intent = {**base_intent, "required_slide_count": 5}
+    token = register_intent_for_client(client, app, user.id, intent)
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits", lambda *args, **kwargs: True
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": content_pack,
+            "carousel_intent_token": token,
+        },
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [carousel_generation.parse_overlay_prompt(post.prompt) for post in posts]
+
+    assert response.status_code == 302
+    assert len(posts) == 5
+    assert [payload["overlay"]["title"] for payload in payloads[1:4]] == [
+        "Cześć, jak się masz?",
+        "Co lubisz robić?",
+        "Czy możesz powtórzyć?",
+    ]
+    assert payloads[0]["overlay"]["title"] == "Speak Polish with confidence"
+    assert payloads[-1]["overlay"]["title"] == "Practise in everyday conversations"
+
+
+def test_explicit_phrase_pair_multiset_preserves_duplicate_multiplicity():
+    pair = ("Dziękuję.", "Thank you.")
+    slides = [
+        {"phrase_pairs": (pair,)},
+        {"phrase_pairs": ()},
+    ]
+    with pytest.raises(content_pack_routes.CarouselRequestIntentMismatch) as raised:
+        content_pack_routes._enforce_carousel_request_intent(
+            slides,
+            {"required_phrase_pairs": (pair, pair)},
+        )
+    assert raised.value.reason == "phrase_pair_mismatch"
+    assert raised.value.expected == 2
+    assert raised.value.actual == 1
+
+
+@pytest.mark.parametrize("failure", ["tampered", "wrong_user"])
+def test_signed_carousel_intent_rejects_tampering_and_wrong_user(
+    failure, client, app, module, monkeypatch
+):
+    user = create_user(module, email=f"intent-{failure}@example.com")
+    login(client, user)
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        STRUCTURED_LANGUAGE_CAROUSEL,
+    )
+    intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    token = register_intent_for_client(
+        client,
+        app,
+        user.id + (1 if failure == "wrong_user" else 0),
+        intent,
+    )
+    if failure == "tampered":
+        token = token[:-1] + ("a" if token[-1] != "a" else "b")
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": content_pack,
+            "carousel_intent_token": token,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "couldn&#39;t verify this Content Pack" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_signed_intent_allows_supported_content_pack_textarea_edits(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="intent-edit@example.com")
+    login(client, user)
+    content_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        STRUCTURED_LANGUAGE_CAROUSEL,
+    )
+    edited_pack = content_pack.replace(
+        "Instagram caption", "Edited Instagram caption"
+    )
+    intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    token = register_intent_for_client(client, app, user.id, intent)
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits", lambda *args, **kwargs: True
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": edited_pack,
+            "carousel_intent_token": token,
+        },
+    )
+
+    assert response.status_code == 302
+    assert module.Post.query.count() == 4
+
+
+def test_cross_request_token_cannot_bypass_its_original_requirements(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="intent-cross-request@example.com")
+    login(client, user)
+    intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    token = register_intent_for_client(client, app, user.id, intent)
+    five_slide_pack = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        POST_361_CAROUSEL,
+    )
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": five_slide_pack,
+            "carousel_intent_token": token,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "created 5 slides" in response.get_data(as_text=True)
+    assert "requires exactly 4" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_omitting_registered_pack_token_cannot_bypass_intent(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="intent-missing-token@example.com")
+    login(client, user)
+    intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    register_intent_for_client(client, app, user.id, intent)
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": CONTENT_PACK_RESULT},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "couldn&#39;t verify this Content Pack" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+
+def test_tokenless_legacy_flow_remains_supported_without_registered_packs(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="intent-legacy@example.com")
+    login(client, user)
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits", lambda *args, **kwargs: True
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={"content_pack_result": CONTENT_PACK_RESULT},
+    )
+
+    assert response.status_code == 302
+    assert module.Post.query.count() == 3
+
+
+def test_multiple_content_pack_tabs_keep_independent_registered_intents(
+    client, app, module
+):
+    user = create_user(module, email="intent-tabs@example.com")
+    login(client, user)
+    four_slide_intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    five_slide_intent = {**four_slide_intent, "required_slide_count": 5}
+
+    first_token = register_intent_for_client(
+        client, app, user.id, four_slide_intent
+    )
+    second_token = register_intent_for_client(
+        client, app, user.id, five_slide_intent
+    )
+
+    with client.session_transaction() as client_session:
+        registry = client_session[
+            content_pack_routes.CONTENT_PACK_INTENT_REGISTRY_KEY
+        ]
+    with app.test_request_context():
+        session[content_pack_routes.CONTENT_PACK_INTENT_REGISTRY_KEY] = registry
+        assert content_pack_routes._load_carousel_request_intent(
+            first_token, user.id
+        )["required_slide_count"] == 4
+        assert content_pack_routes._load_carousel_request_intent(
+            second_token, user.id
+        )["required_slide_count"] == 5
+
+
+def test_expired_intent_token_is_rejected_before_credits(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="intent-expired@example.com")
+    login(client, user)
+    intent = content_pack_routes.extract_explicit_carousel_intent(
+        EXPLICIT_FOUR_SLIDE_SOURCE
+    )
+    token = register_intent_for_client(client, app, user.id, intent)
+    monkeypatch.setattr(
+        content_pack_routes, "CONTENT_PACK_INTENT_MAX_AGE_SECONDS", -1
+    )
+    reserve_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": CONTENT_PACK_RESULT,
+            "carousel_intent_token": token,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "couldn&#39;t verify this Content Pack" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
 
 
 def test_content_pack_carousel_parser_promotes_cta_only_copy_to_required_title():

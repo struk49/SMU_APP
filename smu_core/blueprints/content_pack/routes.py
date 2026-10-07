@@ -6,6 +6,7 @@ from collections import Counter
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from smu_core.extensions import db
 from smu_core.models import Post
@@ -16,8 +17,10 @@ from smu_core.services.carousel_generation import (
 )
 from smu_core.services.content import (
     CAROUSEL_STRUCTURE_REPAIR_REASONS as REPAIRABLE_STORY_REASONS,
+    CarouselRequestIntentError,
     CarouselStructureRepairError,
     ContentPackGenerationError,
+    extract_explicit_carousel_intent,
 )
 from smu_core.services.social_text import (
     preflight_viral_carousel_text,
@@ -41,6 +44,10 @@ SLIDE_FIELD_RE = re.compile(
 BODY_FIELD_NAMES = {"subtitle", "translation", "body", "tip"}
 CONTENT_PACK_CAROUSEL_MIN_SLIDES = 2
 CONTENT_PACK_CAROUSEL_MAX_SLIDES = 6
+CONTENT_PACK_INTENT_MAX_AGE_SECONDS = 86400
+CONTENT_PACK_INTENT_SALT = "smu-content-pack-carousel-intent-v1"
+CONTENT_PACK_INTENT_REGISTRY_KEY = "content_pack_intent_registry"
+CONTENT_PACK_INTENT_REGISTRY_LIMIT = 8
 GENERIC_CLOSING_HEADLINES = {"takeaway", "summary", "final thought", "conclusion"}
 COPY_WORD_RE = re.compile(r"\b[\w']+(?:[-‐‑–][\w']+)*\b", re.UNICODE)
 VISUAL_WEIGHTS = {"heavy", "medium", "light"}
@@ -1694,11 +1701,123 @@ def _content_pack_helper(name):
     return helper
 
 
+class CarouselRequestIntentMismatch(ValueError):
+    """Safe local rejection before credits, rows, or artwork work begins."""
+
+    def __init__(self, reason, *, expected=None, actual=None):
+        self.reason = reason
+        self.expected = expected
+        self.actual = actual
+        super().__init__(reason)
+
+
+def _intent_serializer():
+    return URLSafeTimedSerializer(
+        current_app.config["SECRET_KEY"],
+        salt=CONTENT_PACK_INTENT_SALT,
+    )
+
+
+def _register_carousel_request_intent(intent, user_id):
+    pack_id = uuid.uuid4().hex
+    registry = dict(session.get(CONTENT_PACK_INTENT_REGISTRY_KEY) or {})
+    registry[pack_id] = {"user_id": int(user_id)}
+    while len(registry) > CONTENT_PACK_INTENT_REGISTRY_LIMIT:
+        registry.pop(next(iter(registry)))
+    session[CONTENT_PACK_INTENT_REGISTRY_KEY] = registry
+    session.modified = True
+    return _intent_serializer().dumps({
+        "version": 1,
+        "user_id": int(user_id),
+        "pack_id": pack_id,
+        "intent": intent or {},
+    })
+
+
+def _load_carousel_request_intent(token, user_id):
+    if not token:
+        if session.get(CONTENT_PACK_INTENT_REGISTRY_KEY):
+            raise CarouselRequestIntentMismatch("unverifiable_intent")
+        return None
+    try:
+        payload = _intent_serializer().loads(
+            token,
+            max_age=CONTENT_PACK_INTENT_MAX_AGE_SECONDS,
+        )
+    except (BadSignature, SignatureExpired):
+        raise CarouselRequestIntentMismatch("unverifiable_intent") from None
+    if (
+        not isinstance(payload, dict)
+        or payload.get("version") != 1
+        or payload.get("user_id") != int(user_id)
+        or not isinstance(payload.get("pack_id"), str)
+        or not isinstance(payload.get("intent"), dict)
+    ):
+        raise CarouselRequestIntentMismatch("unverifiable_intent")
+    registry = session.get(CONTENT_PACK_INTENT_REGISTRY_KEY) or {}
+    registration = registry.get(payload["pack_id"])
+    if (
+        not isinstance(registration, dict)
+        or registration.get("user_id") != int(user_id)
+    ):
+        raise CarouselRequestIntentMismatch("unverifiable_intent")
+    intent = payload["intent"]
+    count = intent.get("required_slide_count")
+    pairs = intent.get("required_phrase_pairs")
+    if count is not None and (not isinstance(count, int) or not 2 <= count <= 6):
+        raise CarouselRequestIntentMismatch("unverifiable_intent")
+    if pairs is not None and (
+        not isinstance(pairs, (list, tuple))
+        or not pairs
+        or any(
+            not isinstance(pair, (list, tuple))
+            or len(pair) != 2
+            or not all(isinstance(value, str) and value for value in pair)
+            for pair in pairs
+        )
+    ):
+        raise CarouselRequestIntentMismatch("unverifiable_intent")
+    return {
+        **({"required_slide_count": count} if count is not None else {}),
+        **(
+            {"required_phrase_pairs": tuple(tuple(pair) for pair in pairs)}
+            if pairs is not None
+            else {}
+        ),
+    }
+
+
+def _enforce_carousel_request_intent(slides, intent):
+    if not intent:
+        return
+    expected_count = intent.get("required_slide_count")
+    if expected_count is not None and len(slides) != expected_count:
+        raise CarouselRequestIntentMismatch(
+            "slide_count_mismatch",
+            expected=expected_count,
+            actual=len(slides),
+        )
+    expected_pairs = Counter(tuple(pair) for pair in intent.get("required_phrase_pairs", ()))
+    if expected_pairs:
+        actual_pairs = Counter(
+            tuple(pair)
+            for slide in slides
+            for pair in tuple(slide.get("phrase_pairs") or ())
+        )
+        if actual_pairs != expected_pairs:
+            raise CarouselRequestIntentMismatch(
+                "phrase_pair_mismatch",
+                expected=sum(expected_pairs.values()),
+                actual=sum(actual_pairs.values()),
+            )
+
+
 @login_required
 @subscription_required
 def content_pack():
     source_text = ""
     content_pack_result = None
+    carousel_intent_token = None
     session["content_pack_started"] = True
 
     if request.method == "POST":
@@ -1711,6 +1830,7 @@ def content_pack():
             return redirect(url_for("content_pack"))
 
         try:
+            request_intent = extract_explicit_carousel_intent(source_input)
             user = current_user._get_current_object()
             if not _content_pack_helper("reserve_content_pack_credits")(user):
                 summary = _content_pack_helper("get_usage_summary")(user)
@@ -1733,11 +1853,38 @@ def content_pack():
                 source_text = source_input
 
             brand_context = _content_pack_helper("build_brand_context")(current_user.id)
-            content_pack_result = _content_pack_helper("generate_content_pack")(
-                source_text,
-                brand_context,
+            generate_content_pack = _content_pack_helper("generate_content_pack")
+            if request_intent:
+                content_pack_result = generate_content_pack(
+                    source_text,
+                    brand_context,
+                    carousel_intent=request_intent,
+                )
+            else:
+                content_pack_result = generate_content_pack(
+                    source_text,
+                    brand_context,
+                )
+            carousel_intent_token = _register_carousel_request_intent(
+                request_intent,
+                current_user.id,
             )
 
+        except CarouselRequestIntentError as exc:
+            message = {
+                "conflicting_slide_counts": (
+                    "Your carousel request contains conflicting explicit slide counts. "
+                    "Please specify one exact count."
+                ),
+                "unsupported_slide_count": (
+                    "Your explicit carousel slide count must be between 2 and 6."
+                ),
+                "malformed_phrase_pair_intent": (
+                    "Each supplied Polish phrase must have one English translation "
+                    "inside the same labelled slide."
+                ),
+            }.get(exc.reason, "Your explicit carousel requirements could not be verified.")
+            flash(message, "danger")
         except ContentPackGenerationError:
             if reserved_content_pack_credit:
                 _content_pack_helper("release_content_pack_credits")(
@@ -1759,6 +1906,7 @@ def content_pack():
         "content_pack.html",
         source_text=source_text,
         content_pack_result=content_pack_result,
+        carousel_intent_token=carousel_intent_token,
     )
 
 
@@ -1767,6 +1915,7 @@ def content_pack():
 def create_content_pack_carousel():
     repair_trace = uuid.uuid4().hex[:10]
     content_pack_result = request.form.get("content_pack_result", "").strip()
+    intent_token = request.form.get("carousel_intent_token", "").strip()
     image_style = request.form.get("image_style", "").strip()
     design_manager_style = request.form.get("design_manager_style")
     colour_theme = request.form.get("colour_theme")
@@ -1779,6 +1928,19 @@ def create_content_pack_carousel():
 
     if not content_pack_result:
         flash("No content pack found.", "danger")
+        return redirect(url_for("content_pack"))
+
+    try:
+        request_intent = _load_carousel_request_intent(
+            intent_token,
+            current_user.id,
+        )
+    except CarouselRequestIntentMismatch:
+        flash(
+            "We couldn't verify this Content Pack's carousel requirements. "
+            "Please generate the Content Pack again.",
+            "danger",
+        )
         return redirect(url_for("content_pack"))
 
     extract_content_pack_section = _content_pack_helper("extract_content_pack_section")
@@ -1806,6 +1968,7 @@ def create_content_pack_carousel():
         slides, phrase_recovery_count = _recover_exact_phrase_pairs(
             carousel_idea, slides
         )
+        _enforce_carousel_request_intent(slides, request_intent)
         logger.warning(
             "carousel_repair_trace trace_id=%s stage=initial_parse result=valid "
             "slide_count=%s phrase_recovery_count=%s semantic_reset=true",
@@ -2238,6 +2401,27 @@ def create_content_pack_carousel():
         )
         return redirect(url_for("view_post", post_id=first_post.id))
 
+    except CarouselRequestIntentMismatch as exc:
+        db.session.rollback()
+        logger.warning(
+            "carousel_request_intent_rejected reason=%s expected_count=%s actual_count=%s",
+            exc.reason,
+            exc.expected,
+            exc.actual,
+        )
+        if exc.reason == "slide_count_mismatch":
+            flash(
+                f"This Content Pack created {exc.actual} slides, but your request "
+                f"requires exactly {exc.expected}. Please generate it again.",
+                "danger",
+            )
+        else:
+            flash(
+                "This Content Pack did not preserve the exact requested Polish "
+                "phrases and English translations. Please generate it again.",
+                "danger",
+            )
+        return redirect(url_for("content_pack"))
     except CarouselStoryError as exc:
         db.session.rollback()
         logger.warning(
