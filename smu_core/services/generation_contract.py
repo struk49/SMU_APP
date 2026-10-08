@@ -22,17 +22,53 @@ CAPABILITY_REGISTRY = MappingProxyType({
         "uploaded_media": {"available": True, "surfaces": ("create_post",)},
     },
     "artwork_styles": {
-        style: {"available": True, "surfaces": ("content_pack", "create_post", "tiktok")}
-        for style in ("auto", "realistic", "viral_carousel", "luxury", "minimal", "corporate", "pixar")
+        "auto": {
+            "available": True,
+            "surfaces": ("content_pack", "create_post", "tiktok"),
+            "content_pack_selectable": True,
+        },
+        **{
+            style: {
+                "available": True,
+                "surfaces": ("content_pack",),
+                "content_pack_selectable": True,
+            }
+            for style in (
+                "editorial_illustration", "minimal_premium", "photorealistic",
+                "three_d_clay", "bold_graphic", "collage_magazine",
+            )
+        },
+        **{
+            style: {
+                "available": True,
+                "surfaces": ("content_pack", "create_post", "tiktok"),
+                "content_pack_selectable": False,
+            }
+            for style in (
+                "realistic", "viral_carousel", "luxury", "minimal",
+                "corporate", "pixar",
+            )
+        },
     },
     "compositions": {
-        "auto": {"available": True, "surfaces": ("content_pack", "create_post", "tiktok")},
-        "editorial_illustration": {"available": True, "surfaces": ("content_pack",)},
-        "minimal_premium": {"available": True, "surfaces": ("content_pack",)},
-        "photorealistic": {"available": True, "surfaces": ("content_pack",)},
-        "three_d_clay": {"available": True, "surfaces": ("content_pack",)},
-        "bold_graphic": {"available": True, "surfaces": ("content_pack",)},
-        "collage_magazine": {"available": True, "surfaces": ("content_pack",)},
+        composition: {"available": True, "surfaces": ("content_pack",)}
+        for composition in (
+            "auto", "hero_bleed", "editorial_overlap", "asymmetric_split",
+            "negative_space", "poster", "vertical_editorial", "quiet",
+        )
+    },
+    "palettes": {
+        "auto": {
+            "available": True,
+            "surfaces": ("content_pack", "create_post", "tiktok"),
+        },
+        **{
+            palette: {"available": True, "surfaces": ("content_pack",)}
+            for palette in (
+                "smu_classic", "monochrome", "warm_sunset", "cool_tech",
+                "earth_and_cream", "electric", "soft_pastel",
+            )
+        },
     },
     "image_operations": {
         "generate_new": {"available": True, "surfaces": ("content_pack", "create_post", "tiktok")},
@@ -43,6 +79,16 @@ CAPABILITY_REGISTRY = MappingProxyType({
         "restyle_uploaded": {"available": False, "surfaces": ()},
         "remove_or_replace_background": {"available": False, "surfaces": ()},
     },
+})
+
+LEGACY_CONTENT_PACK_IMAGE_STYLE_MAP = MappingProxyType({
+    "": None,
+    "realistic": "realistic",
+    "viral_carousel": "viral_carousel",
+    "luxury": "luxury",
+    "minimal": "minimal",
+    "corporate": "corporate",
+    "pixar": "pixar",
 })
 
 
@@ -112,6 +158,16 @@ class GenerationOutput:
     structured_data: Mapping[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True)
+class ResolvedVisualCapabilities:
+    template_id: str
+    artwork_style_id: str
+    composition_id: str
+    palette_id: str
+    image_operation: str
+    legacy_render_style: str | None = None
+
+
 def capability(category, capability_id):
     category_values = CAPABILITY_REGISTRY.get(category)
     if not category_values or capability_id not in category_values:
@@ -152,12 +208,77 @@ def validate_artwork_request(request):
     _validate_capability("templates", visual.template_id, request.surface)
     _validate_capability("artwork_styles", visual.artwork_style, request.surface)
     _validate_capability("compositions", visual.composition, request.surface)
+    _validate_capability("palettes", visual.palette, request.surface)
     _validate_capability("image_operations", request.asset_use.mode, request.surface)
     if request.asset_use.mode == "use_uploaded_unchanged" and not request.asset_use.asset_ids:
         raise GenerationContractError("missing_uploaded_asset")
     if request.asset_use.mode == "generate_new" and request.asset_use.asset_ids:
         raise GenerationContractError("unexpected_uploaded_asset")
     return request
+
+
+def validate_content_pack_selections(image_style, artwork_style, palette):
+    normalized_image_style = str(image_style or "").strip().lower()
+    if normalized_image_style not in LEGACY_CONTENT_PACK_IMAGE_STYLE_MAP:
+        raise GenerationContractError("unsupported_artwork_style_selection")
+    if artwork_style is not None:
+        _validate_capability(
+            "artwork_styles", str(artwork_style).strip().lower(), "content_pack"
+        )
+    if palette is not None:
+        _validate_capability("palettes", str(palette).strip().lower(), "content_pack")
+    return normalized_image_style
+
+
+def resolve_visual_capabilities(
+    *, template_id, artwork_style_id, composition_id, palette_id,
+    image_operation, legacy_render_style=None, surface="content_pack",
+):
+    _validate_capability("templates", template_id, surface)
+    _validate_capability("artwork_styles", artwork_style_id, surface)
+    _validate_capability("compositions", composition_id, surface)
+    _validate_capability("palettes", palette_id, surface)
+    _validate_capability("image_operations", image_operation, surface)
+    if surface == "content_pack" and (
+        template_id != "content_pack_structured"
+        or image_operation != "generate_new"
+        or artwork_style_id == "auto"
+        or composition_id == "auto"
+        or palette_id == "auto"
+    ):
+        raise GenerationContractError("unsupported_capability_combination")
+    if legacy_render_style is not None and (
+        legacy_render_style not in LEGACY_CONTENT_PACK_IMAGE_STYLE_MAP
+        or not LEGACY_CONTENT_PACK_IMAGE_STYLE_MAP[legacy_render_style]
+    ):
+        raise GenerationContractError("unsupported_artwork_style_selection")
+    return ResolvedVisualCapabilities(
+        template_id=template_id,
+        artwork_style_id=artwork_style_id,
+        composition_id=composition_id,
+        palette_id=palette_id,
+        image_operation=image_operation,
+        legacy_render_style=legacy_render_style,
+    )
+
+
+def coerce_resolved_visual_capabilities(value, *, surface="content_pack"):
+    if isinstance(value, ResolvedVisualCapabilities):
+        return resolve_visual_capabilities(
+            template_id=value.template_id,
+            artwork_style_id=value.artwork_style_id,
+            composition_id=value.composition_id,
+            palette_id=value.palette_id,
+            image_operation=value.image_operation,
+            legacy_render_style=value.legacy_render_style,
+            surface=surface,
+        )
+    if not isinstance(value, Mapping) or set(value) != {
+        "template_id", "artwork_style_id", "composition_id", "palette_id",
+        "image_operation", "legacy_render_style",
+    }:
+        raise GenerationContractError("invalid_resolved_capabilities")
+    return resolve_visual_capabilities(surface=surface, **value)
 
 
 def validate_generation_output(output, request):

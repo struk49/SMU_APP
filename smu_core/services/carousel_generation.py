@@ -3,12 +3,18 @@
 import json
 import logging
 
+from smu_core.services.generation_contract import (
+    GenerationContractError,
+    coerce_resolved_visual_capabilities,
+)
+
 
 logger = logging.getLogger(__name__)
 
 CAROUSEL_GENERATION_BATCH_SIZE = 5
 OVERLAY_PAYLOAD_PREFIX = "SMU_OVERLAY_V1:"
-OVERLAY_PAYLOAD_VERSION = 1
+LEGACY_OVERLAY_PAYLOAD_VERSION = 1
+NORMALIZED_OVERLAY_PAYLOAD_VERSION = 2
 MAX_OVERLAY_PAYLOAD_BYTES = 8192
 MAX_BACKGROUND_PROMPT_LENGTH = 6200
 MAX_OVERLAY_TITLE_LENGTH = 180
@@ -86,6 +92,8 @@ SAFE_GENERATION_FAILURE_REASONS = {
     "unsupported_visual_weight",
     "unsupported_furniture_variant",
     "unsupported_editorial_composition",
+    "unsupported_generation_capabilities",
+    "generation_capability_mismatch",
 }
 DESIGN_STYLE_MARKERS = {
     "Style: realistic social media image": "realistic",
@@ -187,6 +195,7 @@ def build_content_pack_overlay_prompt(
     campaign_style=None,
     campaign_palette=None,
     campaign_grounding=None,
+    resolved_capabilities=None,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
@@ -284,8 +293,28 @@ def build_content_pack_overlay_prompt(
     ):
         raise OverlayPayloadError()
 
+    normalized_capabilities = None
+    if resolved_capabilities is not None:
+        try:
+            normalized_capabilities = coerce_resolved_visual_capabilities(
+                resolved_capabilities
+            )
+        except GenerationContractError as exc:
+            raise OverlayPayloadError() from exc
+        if (
+            normalized_capabilities.composition_id != editorial_composition
+            or normalized_capabilities.artwork_style_id != campaign_style
+            or normalized_capabilities.palette_id != campaign_palette
+            or normalized_capabilities.legacy_render_style != render_style
+        ):
+            raise OverlayPayloadError()
+
     payload = {
-        "version": OVERLAY_PAYLOAD_VERSION,
+        "version": (
+            NORMALIZED_OVERLAY_PAYLOAD_VERSION
+            if normalized_capabilities is not None
+            else LEGACY_OVERLAY_PAYLOAD_VERSION
+        ),
         "kind": "content_pack_carousel",
         "background_prompt": background_prompt,
         "overlay": {
@@ -328,6 +357,15 @@ def build_content_pack_overlay_prompt(
         payload["campaign_palette"] = campaign_palette
     if campaign_grounding is not None:
         payload["campaign_grounding"] = dict(campaign_grounding)
+    if normalized_capabilities is not None:
+        payload["resolved_capabilities"] = {
+            "template_id": normalized_capabilities.template_id,
+            "artwork_style_id": normalized_capabilities.artwork_style_id,
+            "composition_id": normalized_capabilities.composition_id,
+            "palette_id": normalized_capabilities.palette_id,
+            "image_operation": normalized_capabilities.image_operation,
+            "legacy_render_style": normalized_capabilities.legacy_render_style,
+        }
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -374,6 +412,7 @@ def parse_overlay_prompt(prompt):
         "campaign_style",
         "campaign_palette",
         "campaign_grounding",
+        "resolved_capabilities",
     }
     if (
         not isinstance(payload, dict)
@@ -476,10 +515,36 @@ def parse_overlay_prompt(prompt):
         )
     ):
         raise OverlayPayloadError()
-    if payload["version"] != OVERLAY_PAYLOAD_VERSION:
+    if payload["version"] not in {
+        LEGACY_OVERLAY_PAYLOAD_VERSION,
+        NORMALIZED_OVERLAY_PAYLOAD_VERSION,
+    }:
         raise OverlayPayloadError()
     if payload["kind"] != "content_pack_carousel":
         raise OverlayPayloadError()
+    if (
+        payload["version"] == NORMALIZED_OVERLAY_PAYLOAD_VERSION
+    ) != ("resolved_capabilities" in payload):
+        raise OverlayPayloadError()
+
+    if "resolved_capabilities" in payload:
+        try:
+            normalized_capabilities = coerce_resolved_visual_capabilities(
+                payload["resolved_capabilities"]
+            )
+        except GenerationContractError as exc:
+            raise OverlayPayloadError() from exc
+        if (
+            normalized_capabilities.composition_id
+            != payload.get("editorial_composition")
+            or normalized_capabilities.artwork_style_id
+            != payload.get("campaign_style")
+            or normalized_capabilities.palette_id
+            != payload.get("campaign_palette")
+            or normalized_capabilities.legacy_render_style
+            != payload.get("render_style")
+        ):
+            raise OverlayPayloadError()
 
     background_prompt = payload["background_prompt"]
     overlay = payload["overlay"]
@@ -624,6 +689,10 @@ def generate_pending_carousel_images(
                     overlay["campaign_style"] = overlay_payload["campaign_style"]
                 if "campaign_palette" in overlay_payload:
                     overlay["campaign_palette"] = overlay_payload["campaign_palette"]
+                if "resolved_capabilities" in overlay_payload:
+                    overlay["resolved_capabilities"] = dict(
+                        overlay_payload["resolved_capabilities"]
+                    )
                 image_url = image_generator(
                     overlay_payload["background_prompt"],
                     overlay=overlay,

@@ -5,6 +5,7 @@ import pytest
 from PIL import Image, ImageDraw, ImageFont
 
 from smu_core.services import media, social_text
+from smu_core.services.generation_contract import resolve_visual_capabilities
 
 
 LICENSE_PATH = social_text.FONT_PATH.with_name("OFL.txt")
@@ -1398,6 +1399,57 @@ def test_preflight_uses_real_layout_and_matches_renderer(role, layout, treatment
     assert result["headline_font_size"] >= round(1024 * 0.052)
     assert result["support_font_size"] >= round(1024 * 0.030)
     assert rendered.startswith(b"\x89PNG")
+
+
+def test_preflight_and_renderer_use_the_same_resolved_geometry_and_palette(
+    monkeypatch,
+):
+    calls = []
+    original = social_text._draw_role_composition
+
+    def capture(*args, **kwargs):
+        calls.append(
+            (
+                kwargs["design_style"],
+                kwargs["editorial_composition"],
+                kwargs["campaign_palette"],
+            )
+        )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(social_text, "_draw_role_composition", capture)
+    resolved = resolve_visual_capabilities(
+        template_id="content_pack_structured",
+        artwork_style_id="minimal_premium",
+        composition_id="asymmetric_split",
+        palette_id="monochrome",
+        image_operation="generate_new",
+        legacy_render_style="viral_carousel",
+    )
+    arguments = {
+        "title": "One exact useful idea",
+        "body": "Concise support stays readable.",
+        "layout_role": "info",
+        "layout_variant": "split_left",
+        "design_style": "viral_carousel",
+        "visual_treatment": "illustration",
+        "editorial_composition": "asymmetric_split",
+        "resolved_capabilities": resolved,
+    }
+
+    result = social_text.preflight_viral_carousel_text(**arguments)
+    rendered = social_text.render_social_text(
+        source_bytes(size=(1024, 1024)),
+        campaign_style="minimal_premium",
+        campaign_palette="monochrome",
+        **arguments,
+    )
+
+    assert result["fits"] is True
+    assert rendered.startswith(b"\x89PNG")
+    assert calls[0] == calls[1] == (
+        "viral_carousel", "asymmetric_split", "monochrome"
+    )
 
 
 def test_preflight_production_cases_report_measured_results():

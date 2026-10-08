@@ -12,6 +12,9 @@ from smu_core.services.generation_contract import (
     VisualSettings,
     build_content_pack_request,
     capability,
+    coerce_resolved_visual_capabilities,
+    resolve_visual_capabilities,
+    validate_content_pack_selections,
     validate_artwork_request,
     validate_generation_output,
     validate_text_generation_request,
@@ -65,7 +68,7 @@ def test_transcript_is_source_material_and_never_authoritative_instructions():
 def test_capability_registry_records_supported_and_unavailable_operations():
     assert CAPABILITY_REGISTRY.keys() == {
         "formats", "templates", "artwork_styles", "compositions",
-        "image_operations",
+        "palettes", "image_operations",
     }
     assert capability("image_operations", "generate_new")["available"] is True
     assert capability("image_operations", "use_uploaded_unchanged") == {
@@ -74,6 +77,67 @@ def test_capability_registry_records_supported_and_unavailable_operations():
     }
     assert capability("image_operations", "use_uploaded_as_reference")["available"] is False
     assert capability("image_operations", "restyle_uploaded")["available"] is False
+    assert "create_post" in capability("artwork_styles", "auto")["surfaces"]
+    assert "tiktok" in capability("palettes", "auto")["surfaces"]
+
+
+def test_content_pack_visual_capabilities_resolve_to_stable_separate_ids():
+    resolved = resolve_visual_capabilities(
+        template_id="content_pack_structured",
+        artwork_style_id="editorial_illustration",
+        composition_id="asymmetric_split",
+        palette_id="warm_sunset",
+        image_operation="generate_new",
+        legacy_render_style="viral_carousel",
+    )
+
+    assert resolved.template_id == "content_pack_structured"
+    assert resolved.artwork_style_id == "editorial_illustration"
+    assert resolved.composition_id == "asymmetric_split"
+    assert resolved.palette_id == "warm_sunset"
+    assert resolved.image_operation == "generate_new"
+    assert coerce_resolved_visual_capabilities(resolved) == resolved
+
+
+@pytest.mark.parametrize(
+    ("values", "reason"),
+    [
+        ({"artwork_style_id": "auto"}, "unsupported_capability_combination"),
+        ({"composition_id": "auto"}, "unsupported_capability_combination"),
+        ({"palette_id": "auto"}, "unsupported_capability_combination"),
+        ({"template_id": "provider_canvas"}, "capability_unavailable_for_surface"),
+        ({"image_operation": "restyle_uploaded"}, "unsupported_capability"),
+    ],
+)
+def test_content_pack_visual_capabilities_reject_unsupported_combinations(
+    values, reason
+):
+    request = {
+        "template_id": "content_pack_structured",
+        "artwork_style_id": "editorial_illustration",
+        "composition_id": "asymmetric_split",
+        "palette_id": "warm_sunset",
+        "image_operation": "generate_new",
+        "legacy_render_style": "viral_carousel",
+    }
+    request.update(values)
+
+    with pytest.raises(GenerationContractError) as raised:
+        resolve_visual_capabilities(**request)
+    assert raised.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        ("unknown", None, None),
+        ("", "unknown", None),
+        ("", None, "unknown"),
+    ],
+)
+def test_explicit_unsupported_content_pack_selections_are_rejected(selection):
+    with pytest.raises(GenerationContractError):
+        validate_content_pack_selections(*selection)
 
 
 def test_text_and_artwork_validation_have_separate_boundaries():

@@ -22,7 +22,13 @@ from smu_core.services.content import (
     ContentPackGenerationError,
     extract_explicit_carousel_intent,
 )
-from smu_core.services.generation_contract import build_content_pack_request
+from smu_core.services.generation_contract import (
+    CAPABILITY_REGISTRY,
+    GenerationContractError,
+    build_content_pack_request,
+    resolve_visual_capabilities,
+    validate_content_pack_selections,
+)
 from smu_core.services.social_text import (
     preflight_viral_carousel_text,
     select_editorial_composition,
@@ -61,13 +67,11 @@ CAMPAIGN_ART_STYLES = {
     "pixar": "3D animated film look with conceptual dimensional illustration",
 }
 DESIGN_MANAGER_STYLES = {
-    "auto", "editorial_illustration", "minimal_premium", "photorealistic",
-    "three_d_clay", "bold_graphic", "collage_magazine",
+    style_id
+    for style_id, record in CAPABILITY_REGISTRY["artwork_styles"].items()
+    if record.get("content_pack_selectable")
 }
-DESIGN_MANAGER_PALETTES = {
-    "auto", "smu_classic", "monochrome", "warm_sunset", "cool_tech",
-    "earth_and_cream", "electric", "soft_pastel",
-}
+DESIGN_MANAGER_PALETTES = set(CAPABILITY_REGISTRY["palettes"])
 STYLE_GRAMMARS = {
     "editorial_illustration": ("contemporary editorial illustration", "layered editorial depth", "controlled paper grain", "expressive simplified silhouettes"),
     "minimal_premium": ("premium minimalist product-editorial art", "precise restrained depth", "refined matte surfaces", "geometric forms with generous negative space"),
@@ -1326,7 +1330,9 @@ def _carousel_presentations(slides):
     return presentations
 
 
-def _validate_viral_carousel_copy(slides, presentations=None):
+def _validate_viral_carousel_copy(
+    slides, presentations=None, resolved_capabilities=None
+):
     """Reject structurally poor artwork copy without rewriting approved wording."""
     presentations = presentations or _carousel_presentations(slides)
     seen_headlines = set()
@@ -1400,6 +1406,11 @@ def _validate_viral_carousel_copy(slides, presentations=None):
             typography_presentation=presentation["typography_presentation"],
             editorial_composition=presentation["editorial_composition"],
             optical_lock=presentation["optical_lock"],
+            resolved_capabilities=(
+                resolved_capabilities[index]
+                if resolved_capabilities is not None
+                else None
+            ),
         )
         if not result["fits"]:
             support_failure = bool(body) and not result["support_fits"]
@@ -1946,10 +1957,16 @@ def create_content_pack_carousel():
     colour_theme = request.form.get("colour_theme")
     design_manager_style = design_manager_style.strip().lower() if design_manager_style is not None else None
     colour_theme = colour_theme.strip().lower() if colour_theme is not None else None
-    if design_manager_style is not None and design_manager_style not in DESIGN_MANAGER_STYLES:
-        design_manager_style = "auto"
-    if colour_theme is not None and colour_theme not in DESIGN_MANAGER_PALETTES:
-        colour_theme = "auto"
+    try:
+        image_style = validate_content_pack_selections(
+            image_style, design_manager_style, colour_theme
+        )
+    except GenerationContractError:
+        flash(
+            "The selected carousel template, artwork style, or palette is not supported.",
+            "danger",
+        )
+        return redirect(url_for("content_pack"))
 
     if not content_pack_result:
         flash("No content pack found.", "danger")
@@ -2295,6 +2312,23 @@ def create_content_pack_carousel():
                 len(slides),
             )
         presentations = _carousel_presentations(slides)
+        resolved_artwork_style = campaign_direction.get(
+            "resolved_style", "editorial_illustration"
+        )
+        resolved_palette = campaign_direction.get(
+            "resolved_palette", "smu_classic"
+        )
+        resolved_capabilities = [
+            resolve_visual_capabilities(
+                template_id="content_pack_structured",
+                artwork_style_id=resolved_artwork_style,
+                composition_id=presentation["editorial_composition"],
+                palette_id=resolved_palette,
+                image_operation="generate_new",
+                legacy_render_style=(image_style or None),
+            )
+            for presentation in presentations
+        ]
         scene_plan = _scene_variety_plan(slides, presentations, campaign_grounding)
         logger.warning(
             "carousel_design_plan slide_count=%s scene_modes=%s environment_plan=%s",
@@ -2304,7 +2338,9 @@ def create_content_pack_carousel():
         )
         if image_style == "viral_carousel":
             preflight_started = perf_counter()
-            _validate_viral_carousel_copy(slides, presentations)
+            _validate_viral_carousel_copy(
+                slides, presentations, resolved_capabilities
+            )
             logger.info(
                 "carousel_preflight_complete slide_count=%s duration_ms=%.1f",
                 len(slides),
@@ -2380,14 +2416,15 @@ def create_content_pack_carousel():
                 typography_presentation=presentation["typography_presentation"],
                 editorial_composition=presentation["editorial_composition"],
                 optical_lock=presentation["optical_lock"],
-                campaign_style=campaign_direction.get("resolved_style"),
-                campaign_palette=campaign_direction.get("resolved_palette"),
+                campaign_style=resolved_capabilities[index].artwork_style_id,
+                campaign_palette=resolved_capabilities[index].palette_id,
                 campaign_grounding={
                     "campaign_subject": campaign_grounding["campaign_subject"],
                     "semantic_domain": campaign_grounding["semantic_domain"],
                     "slide_purpose": slide_grounding["slide_purpose"],
                     "scene_action": slide_grounding["scene_action"],
                 },
+                resolved_capabilities=resolved_capabilities[index],
             )
 
             post = Post(

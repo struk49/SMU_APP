@@ -4448,13 +4448,20 @@ def test_content_pack_carousel_keeps_selected_style_across_all_six_slides(
     assert all(
         "Private overlay copy" not in prompt for prompt in backgrounds
     )
+    for payload in payloads:
+        resolved = payload["resolved_capabilities"]
+        assert resolved["template_id"] == "content_pack_structured"
+        assert resolved["image_operation"] == "generate_new"
+        assert resolved["legacy_render_style"] == image_style
+        assert resolved["composition_id"] == payload["editorial_composition"]
+        assert resolved["artwork_style_id"] == payload["campaign_style"]
+        assert resolved["palette_id"] == payload["campaign_palette"]
 
 
-@pytest.mark.parametrize("image_style", ["", "unknown-style"])
-def test_content_pack_carousel_default_and_unknown_style_use_existing_fallback(
-    client, module, image_style
+def test_content_pack_carousel_default_style_uses_existing_fallback(
+    client, module
 ):
-    user = create_user(module, email=f"fallback-{image_style or 'default'}@example.com")
+    user = create_user(module, email="fallback-default@example.com")
     login(client, user)
     structured_slides = "\n".join(
         f"Slide {index}: Isolated copy {index}" for index in range(1, 7)
@@ -4466,7 +4473,7 @@ def test_content_pack_carousel_default_and_unknown_style_use_existing_fallback(
 
     response = client.post(
         "/content-pack/create-carousel",
-        data={"content_pack_result": content_pack_result, "image_style": image_style},
+        data={"content_pack_result": content_pack_result, "image_style": ""},
     )
     posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
     backgrounds = [
@@ -4484,6 +4491,45 @@ def test_content_pack_carousel_default_and_unknown_style_use_existing_fallback(
     assert all("art style: premium editorial illustration" in prompt for prompt in artwork_backgrounds)
     assert all("\nStyle:" not in prompt for prompt in artwork_backgrounds)
     assert all("1. CAMPAIGN STYLE LOCK" in prompt for prompt in artwork_backgrounds)
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        {"image_style": "unknown-style"},
+        {"design_manager_style": "unknown-style"},
+        {"colour_theme": "unknown-palette"},
+    ],
+)
+def test_content_pack_carousel_rejects_unsupported_explicit_selections_before_rows(
+    client, app, module, monkeypatch, selection
+):
+    user = create_user(module, email="unsupported-selection@example.com")
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": CONTENT_PACK_RESULT,
+            **selection,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert (
+        "selected carousel template, artwork style, or palette is not supported"
+        in response.get_data(as_text=True)
+    )
+    assert module.Post.query.count() == 0
+    assert reserve_calls == []
 
 
 def test_content_pack_carousel_preserves_exact_polish_slide_copy(

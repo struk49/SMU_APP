@@ -6,6 +6,11 @@ import re
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageStat, UnidentifiedImageError
 
+from smu_core.services.generation_contract import (
+    GenerationContractError,
+    coerce_resolved_visual_capabilities,
+)
+
 
 FONT_PATH = (
     Path(__file__).resolve().parents[2]
@@ -1640,8 +1645,33 @@ def preflight_viral_carousel_text(
     editorial_composition=None,
     optical_lock=None,
     allow_compact_fallback=True,
+    design_style="viral_carousel",
+    resolved_capabilities=None,
 ):
     """Measure the exact production typography path without rendering output."""
+    normalized_capabilities = None
+    if resolved_capabilities is not None:
+        try:
+            normalized_capabilities = coerce_resolved_visual_capabilities(
+                resolved_capabilities
+            )
+        except GenerationContractError:
+            return {
+                "fits": False,
+                "headline_fits": False,
+                "support_fits": not bool(body),
+                "failure_reason": "unsupported_generation_capabilities",
+            }
+        if (
+            normalized_capabilities.legacy_render_style != design_style
+            or normalized_capabilities.composition_id != editorial_composition
+        ):
+            return {
+                "fits": False,
+                "headline_fits": False,
+                "support_fits": not bool(body),
+                "failure_reason": "generation_capability_mismatch",
+            }
     if visual_weight not in VISUAL_WEIGHTS:
         return {
             "fits": False,
@@ -1733,13 +1763,17 @@ def preflight_viral_carousel_text(
         "eyebrow": eyebrow,
         "emphasis": emphasis,
         "layout_role": layout_role,
-        "design_style": "viral_carousel",
+        "design_style": design_style,
         "visual_treatment": visual_treatment,
         "visual_weight": visual_weight,
         "typography_presentation": typography_presentation,
         "editorial_composition": editorial_composition,
         "optical_lock": optical_lock,
-        "campaign_palette": None,
+        "campaign_palette": (
+            normalized_capabilities.palette_id
+            if normalized_capabilities is not None
+            else None
+        ),
         "measure_only": True,
     }
     used_layout = layout_variant
@@ -1825,8 +1859,25 @@ def render_social_text(
     optical_lock=None,
     campaign_style=None,
     campaign_palette=None,
+    resolved_capabilities=None,
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
+    normalized_capabilities = None
+    if resolved_capabilities is not None:
+        try:
+            normalized_capabilities = coerce_resolved_visual_capabilities(
+                resolved_capabilities
+            )
+        except GenerationContractError as exc:
+            raise SocialTextRenderError(
+                "unsupported_generation_capabilities"
+            ) from exc
+        if (
+            normalized_capabilities.legacy_render_style != design_style
+            or normalized_capabilities.artwork_style_id != campaign_style
+            or normalized_capabilities.palette_id != campaign_palette
+        ):
+            raise SocialTextRenderError("generation_capability_mismatch")
     if layout != "carousel":
         raise SocialTextRenderError("unsupported_layout")
     if layout_role is not None and (
@@ -1928,6 +1979,11 @@ def render_social_text(
             layout_role, visual_treatment, visual_weight, effective_variant,
             effective_typography, title,
         )
+        if (
+            normalized_capabilities is not None
+            and normalized_capabilities.composition_id != effective_composition
+        ):
+            raise SocialTextRenderError("generation_capability_mismatch")
         if design_style == "viral_carousel":
             image = _build_designed_carousel_canvas(
                 image,

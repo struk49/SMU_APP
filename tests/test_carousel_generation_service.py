@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import timedelta
 
@@ -804,6 +805,105 @@ def test_explicit_render_style_round_trips_and_worker_prefers_it(
 
     assert carousel_generation.parse_overlay_prompt(post.prompt)["render_style"] == render_style
     assert calls[0]["overlay"]["design_style"] == render_style
+
+
+def test_resolved_visual_capabilities_round_trip_and_reach_worker(app, module):
+    user = create_user(module, email="resolved-capabilities@example.com")
+    post = make_pending(module, user, group_id="resolved-capabilities")
+    resolved = {
+        "template_id": "content_pack_structured",
+        "artwork_style_id": "minimal_premium",
+        "composition_id": "asymmetric_split",
+        "palette_id": "monochrome",
+        "image_operation": "generate_new",
+        "legacy_render_style": "viral_carousel",
+    }
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Exact title",
+        render_style="viral_carousel",
+        layout_role="info",
+        layout_variant="split_left",
+        editorial_composition="asymmetric_split",
+        campaign_style="minimal_premium",
+        campaign_palette="monochrome",
+        resolved_capabilities=resolved,
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append(kwargs)
+        or "https://cdn.test/generated.jpg",
+    )
+
+    assert result["succeeded_count"] == 1
+    assert carousel_generation.parse_overlay_prompt(post.prompt)[
+        "resolved_capabilities"
+    ] == resolved
+    assert calls[0]["overlay"]["resolved_capabilities"] == resolved
+
+
+def test_resolved_visual_capabilities_must_match_legacy_overlay_fields():
+    resolved = {
+        "template_id": "content_pack_structured",
+        "artwork_style_id": "minimal_premium",
+        "composition_id": "asymmetric_split",
+        "palette_id": "monochrome",
+        "image_operation": "generate_new",
+        "legacy_render_style": "viral_carousel",
+    }
+
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            "Text-free background",
+            "Exact title",
+            render_style="viral_carousel",
+            layout_role="info",
+            layout_variant="split_left",
+            editorial_composition="asymmetric_split",
+            campaign_style="minimal_premium",
+            campaign_palette="warm_sunset",
+            resolved_capabilities=resolved,
+        )
+
+
+def test_normalized_payload_cannot_downgrade_to_legacy_or_drop_metadata():
+    resolved = {
+        "template_id": "content_pack_structured",
+        "artwork_style_id": "minimal_premium",
+        "composition_id": "asymmetric_split",
+        "palette_id": "monochrome",
+        "image_operation": "generate_new",
+        "legacy_render_style": "viral_carousel",
+    }
+    prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Text-free background",
+        "Exact title",
+        render_style="viral_carousel",
+        layout_role="info",
+        layout_variant="split_left",
+        editorial_composition="asymmetric_split",
+        campaign_style="minimal_premium",
+        campaign_palette="monochrome",
+        resolved_capabilities=resolved,
+    )
+    payload = json.loads(
+        prompt[len(carousel_generation.OVERLAY_PAYLOAD_PREFIX):]
+    )
+    assert payload["version"] == carousel_generation.NORMALIZED_OVERLAY_PAYLOAD_VERSION
+
+    without_metadata = dict(payload)
+    without_metadata.pop("resolved_capabilities")
+    downgraded = dict(payload, version=carousel_generation.LEGACY_OVERLAY_PAYLOAD_VERSION)
+
+    for malformed in (without_metadata, downgraded):
+        with pytest.raises(carousel_generation.OverlayPayloadError):
+            carousel_generation.parse_overlay_prompt(
+                carousel_generation.OVERLAY_PAYLOAD_PREFIX
+                + json.dumps(malformed, separators=(",", ":"))
+            )
 
 
 @pytest.mark.parametrize("render_style", ["", "unknown", 1, False, [], {}])
