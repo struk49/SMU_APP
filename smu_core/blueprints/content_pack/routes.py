@@ -22,6 +22,7 @@ from smu_core.services.content import (
     ContentPackGenerationError,
     extract_explicit_carousel_intent,
 )
+from smu_core.services.generation_contract import build_content_pack_request
 from smu_core.services.social_text import (
     preflight_viral_carousel_text,
     select_editorial_composition,
@@ -1830,8 +1831,37 @@ def content_pack():
             return redirect(url_for("content_pack"))
 
         try:
-            request_intent = extract_explicit_carousel_intent(source_input)
+            request_intent = (
+                extract_explicit_carousel_intent(source_input)
+                if source_type == "text"
+                else None
+            )
             user = current_user._get_current_object()
+            if not _content_pack_helper("can_generate_content_pack")(user):
+                summary = _content_pack_helper("get_usage_summary")(user)
+                flash(
+                    _content_pack_helper("usage_limit_message")(
+                        summary,
+                        "content_packs",
+                    ),
+                    "warning",
+                )
+                return redirect(url_for("content_pack"))
+
+            if source_type == "tiktok":
+                source_text = _content_pack_helper("extract_tiktok_transcript")(
+                    source_input
+                )
+            else:
+                source_text = source_input
+
+            generation_request = build_content_pack_request(
+                source_type=source_type,
+                source_text=source_text,
+                original_input=source_input,
+                carousel_intent=request_intent,
+            )
+
             if not _content_pack_helper("reserve_content_pack_credits")(user):
                 summary = _content_pack_helper("get_usage_summary")(user)
                 flash(
@@ -1845,13 +1875,6 @@ def content_pack():
 
             reserved_content_pack_credit = True
 
-            if source_type == "tiktok":
-                source_text = _content_pack_helper("extract_tiktok_transcript")(
-                    source_input
-                )
-            else:
-                source_text = source_input
-
             brand_context = _content_pack_helper("build_brand_context")(current_user.id)
             generate_content_pack = _content_pack_helper("generate_content_pack")
             if request_intent:
@@ -1859,11 +1882,13 @@ def content_pack():
                     source_text,
                     brand_context,
                     carousel_intent=request_intent,
+                    generation_request=generation_request,
                 )
             else:
                 content_pack_result = generate_content_pack(
                     source_text,
                     brand_context,
+                    generation_request=generation_request,
                 )
             carousel_intent_token = _register_carousel_request_intent(
                 request_intent,

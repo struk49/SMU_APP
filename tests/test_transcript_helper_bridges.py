@@ -74,9 +74,10 @@ def test_content_pack_tiktok_flow_invokes_transcript_helper(
         calls["url"] = url
         return "Transcript from helper"
 
-    def fake_generate_content_pack(source_text, brand_context):
+    def fake_generate_content_pack(source_text, brand_context, **kwargs):
         calls["source_text"] = source_text
         calls["brand_context"] = brand_context
+        calls["generation_request"] = kwargs["generation_request"]
         return "Generated content pack"
 
     monkeypatch.setitem(
@@ -104,8 +105,8 @@ def test_content_pack_tiktok_flow_invokes_transcript_helper(
     )
 
     assert response.status_code == 200
-    assert calls == {
-        "url": "https://www.tiktok.com/@user/video/123",
-        "source_text": "Transcript from helper",
-        "brand_context": "Brand context",
-    }
+    assert calls["url"] == "https://www.tiktok.com/@user/video/123"
+    assert calls["source_text"] == "Transcript from helper"
+    assert calls["brand_context"] == "Brand context"
+    assert calls["generation_request"].source_material.kind == "transcript"
+    assert calls["generation_request"].user_instructions == ""

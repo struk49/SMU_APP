@@ -822,10 +822,15 @@ def generate_pending_carousel_images():
         return run_worker()
 
 
-def generate_content_pack(source_text, brand_context=""):
+def generate_content_pack(
+    source_text, brand_context="", *, carousel_intent=None,
+    generation_request=None,
+):
     return content_service.generate_content_pack(
         source_text,
         brand_context,
+        carousel_intent=carousel_intent,
+        generation_request=generation_request,
         openai_api_key=OPENAI_API_KEY,
         openai_client=openai_client,
     )

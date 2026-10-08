@@ -15,6 +15,7 @@ from smu_core.services.content import (
     CarouselStructureRepairError,
     ContentPackGenerationError,
 )
+from smu_core.services.generation_contract import GenerationContractError
 from smu_core.services.time_utils import utc_now
 
 
@@ -1569,9 +1570,10 @@ def test_content_pack_post_uses_current_user_brand_context(client, app, module, 
         calls["user_id"] = user_id
         return "BRAND CONTEXT"
 
-    def fake_generate_content_pack(source_text, brand_context):
+    def fake_generate_content_pack(source_text, brand_context, **kwargs):
         calls["source_text"] = source_text
         calls["brand_context"] = brand_context
+        calls["generation_request"] = kwargs["generation_request"]
         return CONTENT_PACK_RESULT
 
     set_content_pack_helper(app, monkeypatch, "build_brand_context", fake_build_brand_context)
@@ -1584,13 +1586,82 @@ def test_content_pack_post_uses_current_user_brand_context(client, app, module, 
         )
 
     assert response.status_code == 200
-    assert calls == {
-        "user_id": user.id,
-        "source_text": "Topic idea",
-        "brand_context": "BRAND CONTEXT",
-    }
+    assert calls["user_id"] == user.id
+    assert calls["source_text"] == "Topic idea"
+    assert calls["brand_context"] == "BRAND CONTEXT"
+    assert calls["generation_request"].user_instructions == "Topic idea"
+    assert calls["generation_request"].source_material.content == "Topic idea"
     assert templates[0][1]["source_text"] == "Topic idea"
     assert templates[0][1]["content_pack_result"] == CONTENT_PACK_RESULT
+
+
+def test_invalid_generation_contract_fails_before_credit_reservation_and_provider(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="invalid-contract@example.com")
+    login(client, user)
+    reserve_calls = []
+    generation_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "can_generate_content_pack", lambda current_user: True
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_content_pack_credits",
+        lambda current_user: reserve_calls.append(current_user.id) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "generate_content_pack",
+        lambda *args, **kwargs: generation_calls.append(1),
+    )
+    monkeypatch.setattr(
+        content_pack_routes,
+        "build_content_pack_request",
+        lambda **kwargs: (_ for _ in ()).throw(
+            GenerationContractError("unsupported_capability")
+        ),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={"source_type": "text", "source_input": "Topic"},
+    )
+
+    assert response.status_code == 200
+    assert reserve_calls == []
+    assert generation_calls == []
+
+
+def test_crafted_capability_fields_cannot_override_server_contract(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="crafted-capability@example.com")
+    login(client, user)
+    calls = []
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda source_text, brand_context, **kwargs: (
+            calls.append(kwargs["generation_request"]) or CONTENT_PACK_RESULT
+        ),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={
+            "source_type": "text",
+            "source_input": "Topic",
+            "template_id": "uploaded_media",
+            "image_operation": "use_uploaded_as_reference",
+            "artwork_style": "unsupported-style",
+        },
+    )
+
+    assert response.status_code == 200
+    assert calls[0].visual_settings.template_id == "content_pack_structured"
+    assert calls[0].visual_settings.artwork_style == "auto"
+    assert calls[0].asset_use.mode == "generate_new"
 
 
 def test_explicit_carousel_intent_is_signed_and_passed_to_generation(
@@ -1600,9 +1671,13 @@ def test_explicit_carousel_intent_is_signed_and_passed_to_generation(
     login(client, user)
     calls = {}
 
-    def fake_generate(source_text, brand_context, *, carousel_intent=None):
+    def fake_generate(
+        source_text, brand_context, *, carousel_intent=None,
+        generation_request=None,
+    ):
         calls["source_text"] = source_text
         calls["intent"] = carousel_intent
+        calls["generation_request"] = generation_request
         return CONTENT_PACK_RESULT
 
     set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
@@ -1621,6 +1696,7 @@ def test_explicit_carousel_intent_is_signed_and_passed_to_generation(
     assert calls["intent"]["required_phrase_pairs"][0] == (
         "Cześć, jak się masz?", "Hi, how are you?"
     )
+    assert calls["generation_request"].content_requirements.exact_slide_count == 4
     assert context["carousel_intent_token"]
     with app.app_context():
         payload = content_pack_routes._intent_serializer().loads(
@@ -1685,7 +1761,7 @@ def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(
         app,
         monkeypatch,
         "generate_content_pack",
-        lambda source_text, brand_context: (_ for _ in ()).throw(
+        lambda source_text, brand_context, **kwargs: (_ for _ in ()).throw(
             ContentPackGenerationError("provider_timeout")
         ),
     )
@@ -1717,11 +1793,15 @@ def test_content_pack_tiktok_source_uses_transcript_helper(client, app, module, 
         fake_extract_tiktok_transcript,
     )
     set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    generation_calls = []
     set_content_pack_helper(
         app,
         monkeypatch,
         "generate_content_pack",
-        lambda source_text, brand_context: f"Generated from {source_text}",
+        lambda source_text, brand_context, **kwargs: (
+            generation_calls.append(kwargs["generation_request"])
+            or f"Generated from {source_text}"
+        ),
     )
 
     with captured_templates(app) as templates:
@@ -1732,6 +1812,9 @@ def test_content_pack_tiktok_source_uses_transcript_helper(client, app, module, 
 
     assert response.status_code == 200
     assert calls["url"] == "https://tiktok.test/video"
+    assert generation_calls[0].source_material.kind == "transcript"
+    assert generation_calls[0].source_material.content == "Transcript text"
+    assert generation_calls[0].user_instructions == ""
     assert templates[0][1]["source_text"] == "Transcript text"
     assert templates[0][1]["content_pack_result"] == "Generated from Transcript text"
 
@@ -4541,7 +4624,7 @@ def test_content_pack_brand_lookup_is_user_specific(client, app, module, monkeyp
         app,
         monkeypatch,
         "generate_content_pack",
-        lambda source_text, brand_context: brand_context,
+        lambda source_text, brand_context, **kwargs: brand_context,
     )
 
     with captured_templates(app) as templates:

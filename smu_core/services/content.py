@@ -11,6 +11,16 @@ import requests
 from openai import APIConnectionError, APITimeoutError
 from yt_dlp import YoutubeDL
 
+from smu_core.services.generation_contract import (
+    GENERATION_CONTRACT_VERSION,
+    SOURCE_FIDELITY_POLICY,
+    GenerationContractError,
+    GenerationOutput,
+    build_content_pack_request,
+    validate_generation_output,
+    validate_text_generation_request,
+)
+
 
 logger = logging.getLogger(__name__)
 NO_TIKTOK_TRANSCRIPT_ERROR = "No transcript or usable text found for this TikTok."
@@ -835,11 +845,22 @@ def generate_content_pack(
     brand_context="",
     *,
     carousel_intent=None,
+    generation_request=None,
     openai_api_key=None,
     openai_client=None,
 ):
     if not openai_api_key:
         raise Exception("OPENAI_API_KEY is missing from your .env file")
+
+    generation_request = generation_request or build_content_pack_request(
+        source_type="text",
+        source_text=source_text,
+        original_input=source_text,
+        carousel_intent=carousel_intent,
+    )
+    validate_text_generation_request(generation_request)
+    if generation_request.source_material.content != source_text:
+        raise ValueError("generation_contract_source_mismatch")
 
     prompt = f"""
 You are a thoughtful social media content strategist and writer.
@@ -876,6 +897,9 @@ Semantic classification:
   Vocabulary / Language Learning, or Community / Engagement.
 - Use the category to choose hooks, carousel structure, tone, and CTAs.
 - This classification is internal only. Never name or expose it in the output.
+
+Shared source-fidelity policy:
+{SOURCE_FIDELITY_POLICY}
 
 Source fidelity:
 - Never invent facts, statistics, testimonials, personal experiences, product
@@ -1193,7 +1217,16 @@ Source content:
         )
         raise ContentPackGenerationError(reason) from None
 
-    return response.output_text
+    try:
+        output = GenerationOutput(
+            version=GENERATION_CONTRACT_VERSION,
+            request_id=generation_request.request_id,
+            output_format="content_pack",
+            text=response.output_text,
+        )
+        return validate_generation_output(output, generation_request).text
+    except GenerationContractError:
+        raise ContentPackGenerationError("invalid_output") from None
 
 
 def repair_carousel_structure(

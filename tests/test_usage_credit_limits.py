@@ -209,7 +209,7 @@ def test_content_pack_generation_consumes_one_content_pack_credit(
         app,
         monkeypatch,
         "generate_content_pack",
-        lambda source_text, brand_context: CONTENT_PACK_RESULT,
+        lambda source_text, brand_context, **kwargs: CONTENT_PACK_RESULT,
     )
 
     response = client.post(
