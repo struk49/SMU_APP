@@ -93,6 +93,12 @@ CAMPAIGN_PALETTES = {
     "smu_classic", "monochrome", "warm_sunset", "cool_tech",
     "earth_and_cream", "electric", "soft_pastel",
 }
+CONTENT_PACK_TEMPLATES = {
+    "content_pack_structured",
+    "content_pack_editorial",
+    "content_pack_geometric",
+    "content_pack_minimalist",
+}
 CAMPAIGN_PALETTE_COLOURS = {
     "smu_classic": ((9, 18, 34, 255), (244, 211, 94, 255), (101, 214, 166, 255), (86, 142, 246, 255), (18, 34, 58, 255)),
     "monochrome": ((18, 18, 19, 255), (245, 242, 233, 255), (156, 158, 160, 255), (88, 90, 94, 255), (35, 35, 37, 255)),
@@ -891,13 +897,83 @@ def _style_tokens(design_style):
 
 def viral_composition_zones(
     width, height, layout_variant, visual_treatment=None,
-    editorial_composition=None,
+    editorial_composition=None, template_id="content_pack_structured",
 ):
     """Return pixel-safe, non-overlapping text and artwork regions."""
+    if template_id not in CONTENT_PACK_TEMPLATES:
+        raise SocialTextRenderError("unsupported_template")
     definition = (
         _editorial_composition_definition(layout_variant, editorial_composition)
         if editorial_composition else VIRAL_COMPOSITION_ZONES[layout_variant]
     )
+
+    if template_id == "content_pack_editorial":
+        # Editorial layouts deliberately let substantial photography run behind
+        # an opaque, measured text panel.  Typography remains protected by the
+        # panel while the artwork reads as a primary compositional element.
+        text = definition["text"]
+        art = definition["art"]
+        if layout_variant in {"hero_left", "hero_center"}:
+            definition = {
+                **definition,
+                "text": (0.06, text[1], 0.72, text[3]),
+                "support": (0.06, definition["support"][1], 0.72, definition["support"][3]),
+                "art": (0.36, 0.04, 0.98, 0.96),
+                "crop_mode": "cover",
+            }
+        else:
+            definition = {
+                **definition,
+                "text": (0.06, text[1], 0.62, text[3]),
+                "support": (0.06, definition["support"][1], 0.62, definition["support"][3]),
+                "art": (0.46, max(0.04, art[1] - 0.10), 0.98, min(0.96, art[3] + 0.10)),
+                "crop_mode": "cover",
+            }
+    elif template_id == "content_pack_geometric":
+        text = definition["text"]
+        art = definition["art"]
+        if layout_variant in {"hero_left", "hero_center"}:
+            text = (0.06, text[1], 0.68, text[3])
+            art = (
+                0.68, max(0.04, art[1] - 0.08),
+                0.96, min(0.94, art[3] + 0.08),
+            )
+        definition = {
+            **definition,
+            "text": (text[0], text[1], max(text[2], 0.58 if layout_variant != "split_right" else text[2]), text[3]),
+            "art": (
+                max(0.04, art[0] - 0.02), max(0.04, art[1] - 0.08),
+                min(0.96, art[2] + 0.04), min(0.94, art[3] + 0.08),
+            ),
+            "crop_mode": "cover",
+        }
+    elif template_id == "content_pack_minimalist":
+        art = definition["art"]
+        text = definition["text"]
+        inset_x = (art[2] - art[0]) * 0.24
+        inset_y = (art[3] - art[1]) * 0.24
+        if layout_variant in {"hero_left", "hero_center"}:
+            text = (0.07, text[1], 0.74, text[3])
+            art = (0.78, max(0.10, art[1]), 0.94, min(0.72, art[3]))
+            inset_x = 0
+            inset_y = 0
+        definition = {
+            **definition,
+            "text": (
+                0.07, text[1],
+                text[2] if layout_variant in {"hero_left", "hero_center"} else 0.86,
+                text[3],
+            ),
+            "support": (
+                0.07, definition["support"][1],
+                text[2] if layout_variant in {"hero_left", "hero_center"} else 0.86,
+                definition["support"][3],
+            ),
+            "art": (
+                art[0] + inset_x, art[1] + inset_y,
+                art[2] - inset_x, art[3] - inset_y,
+            ),
+        }
 
     def pixels(rect):
         return tuple(
@@ -910,7 +986,7 @@ def viral_composition_zones(
         "art_rect": pixels(definition["art"]),
         "support_rect": pixels(definition["support"]),
         "safe_margin": round(min(width, height) * 0.08),
-        "overlap_allowed": False,
+        "overlap_allowed": template_id == "content_pack_editorial",
         "crop_mode": (
             "cover"
             if editorial_composition in {"hero_bleed", "poster"}
@@ -926,12 +1002,14 @@ def viral_composition_zones(
 def viral_artwork_rect(
     width, height, layout_variant, visual_treatment="illustration",
     visual_weight="medium", editorial_composition=None,
+    template_id="content_pack_structured",
 ):
     """Return the weight-adjusted artwork rectangle inside the protected zone."""
     if visual_weight not in VISUAL_WEIGHTS:
         raise SocialTextRenderError("unsupported_visual_weight")
     zone = viral_composition_zones(
-        width, height, layout_variant, visual_treatment, editorial_composition
+        width, height, layout_variant, visual_treatment, editorial_composition,
+        template_id,
     )["art_rect"]
     padding = round(
         min(width, height) * VIRAL_DESIGN_TOKENS["artwork_padding"][visual_weight]
@@ -945,14 +1023,14 @@ def viral_artwork_rect(
 def editorial_composition_geometry(
     width, height, layout_variant, visual_treatment, visual_weight,
     editorial_composition,
-    optical_lock=None,
+    optical_lock=None, template_id="content_pack_structured",
 ):
     """Expose the exact deterministic production collision geometry."""
     if editorial_composition not in EDITORIAL_COMPOSITIONS:
         raise SocialTextRenderError("unsupported_editorial_composition")
     zones = viral_composition_zones(
         width, height, layout_variant, visual_treatment,
-        editorial_composition,
+        editorial_composition, template_id,
     )
     optical_lock = optical_lock or select_optical_lock(
         editorial_composition, layout_variant, visual_weight
@@ -961,7 +1039,7 @@ def editorial_composition_geometry(
         raise SocialTextRenderError("unsupported_optical_lock")
     artwork_bounds = viral_artwork_rect(
         width, height, layout_variant, visual_treatment, visual_weight,
-        editorial_composition,
+        editorial_composition, template_id,
     )
     text_rect = zones["text_rect"]
     lock_target = {
@@ -1052,8 +1130,11 @@ def _build_designed_carousel_canvas(
     visual_weight="medium", furniture_variant="dual_rail",
     editorial_composition=None,
     campaign_style=None, campaign_palette="smu_classic",
+    template_id="content_pack_structured",
 ):
     """Make artwork secondary to a deterministic, branded social-card canvas."""
+    if template_id not in CONTENT_PACK_TEMPLATES:
+        raise SocialTextRenderError("unsupported_template")
     width, height = source_image.size
     scale = min(width, height)
     background, accent_yellow, accent_green, accent_blue, panel = (
@@ -1065,7 +1146,8 @@ def _build_designed_carousel_canvas(
     draw = ImageDraw.Draw(canvas)
 
     composition = viral_composition_zones(
-        width, height, layout_variant, visual_treatment, editorial_composition
+        width, height, layout_variant, visual_treatment, editorial_composition,
+        template_id,
     )
     radius = max(16, round(scale * 0.035))
 
@@ -1099,7 +1181,39 @@ def _build_designed_carousel_canvas(
                 artwork, Image.new("RGBA", artwork.size, (8, 20, 38, 54))
             )
         mask = Image.new("L", artwork.size, 0)
-        if integrated:
+        if template_id == "content_pack_geometric":
+            if layout_variant in {"hero_left", "hero_center"}:
+                polygon = (
+                    (round(zone_width * 0.18), 0), (zone_width, 0),
+                    (zone_width, round(zone_height * 0.72)),
+                    (round(zone_width * 0.62), zone_height), (0, zone_height),
+                    (0, round(zone_height * 0.28)),
+                )
+            elif layout_variant in {"editorial_statement", "visual_focus"}:
+                polygon = (
+                    (round(zone_width * 0.50), 0), (zone_width, round(zone_height * 0.22)),
+                    (round(zone_width * 0.86), zone_height),
+                    (round(zone_width * 0.14), zone_height), (0, round(zone_height * 0.22)),
+                )
+            else:
+                polygon = (
+                    (
+                        (0, 0), (round(zone_width * 0.86), 0),
+                        (zone_width, round(zone_height * 0.18)),
+                        (zone_width, zone_height),
+                        (round(zone_width * 0.14), zone_height),
+                        (0, round(zone_height * 0.82)),
+                    )
+                    if layout_variant not in {"split_right"}
+                    else (
+                        (round(zone_width * 0.14), 0), (zone_width, 0),
+                        (zone_width, round(zone_height * 0.82)),
+                        (round(zone_width * 0.86), zone_height),
+                        (0, zone_height), (0, round(zone_height * 0.18)),
+                    )
+                )
+            ImageDraw.Draw(mask).polygon(polygon, fill=opacity)
+        elif integrated:
             ImageDraw.Draw(mask).rectangle(
                 (0, 0, zone_width, zone_height), fill=opacity
             )
@@ -1111,7 +1225,7 @@ def _build_designed_carousel_canvas(
 
     zone = viral_artwork_rect(
         width, height, layout_variant, visual_treatment, visual_weight,
-        editorial_composition,
+        editorial_composition, template_id,
     )
     if visual_treatment == "typography_only":
         pass
@@ -1186,7 +1300,30 @@ def _build_designed_carousel_canvas(
     else:
         paste_artwork(zone)
 
-    rail_height = max(8, round(scale * 0.012))
+    if template_id == "content_pack_geometric":
+        accent_size = round(scale * 0.055)
+        draw.polygon(
+            (
+                (round(width * 0.06), round(height * 0.06)),
+                (round(width * 0.06) + accent_size, round(height * 0.06)),
+                (round(width * 0.06), round(height * 0.06) + accent_size),
+            ),
+            fill=accent_green,
+        )
+        draw.ellipse(
+            (
+                round(width * 0.88), round(height * 0.06),
+                round(width * 0.94), round(height * 0.12),
+            ),
+            outline=accent_blue,
+            width=max(3, round(scale * 0.005)),
+        )
+    elif template_id == "content_pack_minimalist":
+        furniture_variant = "single_rail"
+
+    rail_height = max(5 if template_id == "content_pack_minimalist" else 8, round(
+        scale * (0.006 if template_id == "content_pack_minimalist" else 0.012)
+    ))
     rail_y = height - round(scale * 0.055)
     if furniture_variant in {"dual_rail", "single_rail"}:
         draw.rounded_rectangle(
@@ -1234,8 +1371,15 @@ def _draw_role_composition(
     editorial_composition=None,
     optical_lock=None,
     campaign_palette=None,
+    template_id="content_pack_structured",
     measure_only=False,
 ):
+    if template_id not in CONTENT_PACK_TEMPLATES:
+        raise SocialTextRenderError("unsupported_template")
+    designed_template = (
+        design_style == "viral_carousel"
+        or template_id != "content_pack_structured"
+    )
     design_layout = select_design_layout(layout_role, layout_variant)
     typography_presentation = typography_presentation or select_typography_presentation(
         layout_role, visual_treatment, visual_weight
@@ -1260,19 +1404,19 @@ def _draw_role_composition(
     readable_body_size = max(
         MIN_FONT_SIZE,
         round(VIRAL_READABILITY_MINIMUMS["support"] * viral_scale)
-        if design_style == "viral_carousel" else round(scale * 0.030),
+        if designed_template else round(scale * 0.030),
     )
     readable_brand_size = max(
         MIN_FONT_SIZE,
         round(VIRAL_READABILITY_MINIMUMS["brand"] * viral_scale)
-        if design_style == "viral_carousel" else round(scale * 0.022),
+        if designed_template else round(scale * 0.022),
     )
     readable_title_size = max(
         MIN_FONT_SIZE,
         round(VIRAL_READABILITY_MINIMUMS[
             "phrase" if layout_role == "phrase" else "headline"
         ] * viral_scale)
-        if design_style == "viral_carousel" else round(scale * 0.039),
+        if designed_template else round(scale * 0.039),
     )
     padding = max(12, round(scale * 0.018))
     layout_tokens = {
@@ -1347,14 +1491,14 @@ def _draw_role_composition(
     presentation_scale *= VIRAL_DESIGN_TOKENS["editorial_composition"][
         editorial_composition
     ]["headline_scale"]
-    if design_style == "viral_carousel" and design_layout != "compact_statement":
+    if designed_template and design_layout != "compact_statement":
         config = dict(config)
         config["region"] = viral_composition_zones(
             width, height, design_layout, visual_treatment,
-            editorial_composition,
+            editorial_composition, template_id,
         )["text_rect"]
     region_left, region_top, region_right, region_bottom = config["region"]
-    if design_style != "viral_carousel":
+    if not designed_template:
         styled_region_right = (
             region_left + (region_right - region_left) * tokens["region_width"]
         )
@@ -1362,9 +1506,14 @@ def _draw_role_composition(
     analysis_region = (region_left, region_top, region_right, region_bottom)
     stroke_width = max(
         1,
-        round(scale * (0.0025 if design_style == "viral_carousel" else 0.001)),
+        round(scale * (0.0025 if designed_template else 0.001)),
     )
     gap = max(10, round(scale * 0.026 * tokens["gap"]))
+    enhanced_template = template_id in {
+        "content_pack_editorial",
+        "content_pack_geometric",
+        "content_pack_minimalist",
+    }
     if eyebrow:
         eyebrow_block = _prepare_composition_block(
             draw,
@@ -1373,17 +1522,32 @@ def _draw_role_composition(
                 region_left + padding,
                 region_top,
                 region_right - padding,
-                region_top + round((region_bottom - region_top) * 0.10),
+                region_top + round(
+                    (region_bottom - region_top)
+                    * (0.16 if enhanced_template else 0.10)
+                ),
             ),
-            max_lines=1,
-            start_size=round(content_width * 0.032),
+            max_lines=2 if enhanced_template else 1,
+            start_size=round(
+                content_width * (0.037 if enhanced_template else 0.032)
+            ),
             min_size=(
-                max(readable_brand_size, round(VIRAL_READABILITY_MINIMUMS["eyebrow"] * viral_scale))
-                if design_style == "viral_carousel" else readable_brand_size
+                max(
+                    readable_brand_size,
+                    round(
+                        (
+                            max(32, VIRAL_READABILITY_MINIMUMS["eyebrow"])
+                            if enhanced_template
+                            else VIRAL_READABILITY_MINIMUMS["eyebrow"]
+                        )
+                        * viral_scale
+                    ),
+                )
+                if designed_template else readable_brand_size
             ),
             align=config["align"],
             stroke_width=stroke_width,
-            weight="semibold",
+            weight="bold" if enhanced_template else "semibold",
         )
         eyebrow_block["kind"] = "eyebrow"
         cursor = eyebrow_block["bounds"][3] + gap
@@ -1399,13 +1563,13 @@ def _draw_role_composition(
             round(VIRAL_READABILITY_MINIMUMS[
                 "translation" if layout_role == "phrase" else "support"
             ] * viral_scale),
-        ) if design_style == "viral_carousel" else readable_body_size,
+        ) if designed_template else readable_body_size,
         max(
             readable_body_size,
             round(VIRAL_READABILITY_MINIMUMS["cta"] * viral_scale),
-        ) if design_style == "viral_carousel" else readable_body_size,
+        ) if designed_template else readable_body_size,
     )
-    if design_style == "viral_carousel":
+    if designed_template:
         height_shares = (0.78, 0.31, 0.17) if not body and not cta else (0.52, 0.31, 0.17)
     else:
         height_shares = (0.45, 0.36, 0.19)
@@ -1423,16 +1587,25 @@ def _draw_role_composition(
     ):
         if not value:
             continue
-        if kind == "title" and design_style == "viral_carousel":
+        if kind == "title" and designed_template:
             weight_scale = (
                 1.0
                 if layout_role == "phrase" and visual_weight == "light"
                 else VIRAL_DESIGN_TOKENS["visual_weight_scale"][visual_weight]
             )
             font_scale *= weight_scale
-            font_scale *= presentation_scale
+            # Phrase slides share one deliberate target size.  The measured
+            # fitter may reduce it for genuinely long copy, but composition or
+            # artwork rhythm no longer causes otherwise-equivalent phrases to
+            # begin at unrelated sizes.
+            if layout_role == "phrase" and enhanced_template:
+                font_scale = 0.070
+            else:
+                font_scale *= presentation_scale
             word_count = len(re.findall(r"\b[\w']+\b", value, re.UNICODE))
-            if word_count <= 4:
+            if layout_role == "phrase" and enhanced_template:
+                pass
+            elif word_count <= 4:
                 font_scale *= 1.16 if visual_treatment == "typography_only" else 1.08
             elif word_count <= 7:
                 font_scale *= 1.08 if visual_treatment == "typography_only" else 1.03
@@ -1453,7 +1626,7 @@ def _draw_role_composition(
             "align": config["align"],
             "stroke_width": stroke_width,
             "preferred_max_lines": preferred,
-            "balanced": design_style == "viral_carousel" and kind != "cta",
+            "balanced": designed_template and kind != "cta",
         }
         if kind == "title" and emphasis:
             balanced = block_options.pop("balanced")
@@ -1471,7 +1644,7 @@ def _draw_role_composition(
         blocks.append(block)
         cursor = block["bounds"][3] + gap
 
-    if design_style == "viral_carousel" and blocks:
+    if designed_template and blocks:
         typography_top = min(block["bounds"][1] for block in blocks)
         typography_bottom = max(block["bounds"][3] for block in blocks)
         available = region_bottom - region_top
@@ -1537,11 +1710,37 @@ def _draw_role_composition(
                 "bounds": block["bounds"],
             }
         return result
+    if template_id == "content_pack_editorial":
+        panel_padding = max(12, round(scale * 0.024))
+        palette_colours = CAMPAIGN_PALETTE_COLOURS.get(
+            campaign_palette, CAMPAIGN_PALETTE_COLOURS["smu_classic"]
+        )
+        draw.rounded_rectangle(
+            (
+                max(margin, typography_bounds[0] - panel_padding),
+                max(margin, typography_bounds[1] - panel_padding),
+                min(width - margin, typography_bounds[2] + panel_padding),
+                min(height - margin, typography_bounds[3] + panel_padding),
+            ),
+            radius=max(14, round(scale * 0.025)),
+            fill=palette_colours[4],
+            outline=palette_colours[1],
+            width=max(2, round(scale * 0.003)),
+        )
     analysis = _analyze_text_region(source_image, typography_bounds, campaign_palette)
     foreground = analysis["foreground"]
     palette_colours = CAMPAIGN_PALETTE_COLOURS.get(
         campaign_palette, CAMPAIGN_PALETTE_COLOURS["smu_classic"]
     )
+    if template_id == "content_pack_editorial":
+        panel_luminance = _relative_luminance(palette_colours[4])
+        foreground = max(
+            (palette_colours[3], palette_colours[0], (255, 255, 255, 255)),
+            key=lambda candidate: (
+                (max(_relative_luminance(candidate), panel_luminance) + 0.05)
+                / (min(_relative_luminance(candidate), panel_luminance) + 0.05)
+            ),
+        )
     accent_candidates = palette_colours[1:4]
     accent = max(
         accent_candidates,
@@ -1646,6 +1845,7 @@ def preflight_viral_carousel_text(
     optical_lock=None,
     allow_compact_fallback=True,
     design_style="viral_carousel",
+    template_id=None,
     resolved_capabilities=None,
 ):
     """Measure the exact production typography path without rendering output."""
@@ -1665,6 +1865,10 @@ def preflight_viral_carousel_text(
         if (
             normalized_capabilities.legacy_render_style != design_style
             or normalized_capabilities.composition_id != editorial_composition
+            or (
+                template_id is not None
+                and normalized_capabilities.template_id != template_id
+            )
         ):
             return {
                 "fits": False,
@@ -1672,6 +1876,15 @@ def preflight_viral_carousel_text(
                 "support_fits": not bool(body),
                 "failure_reason": "generation_capability_mismatch",
             }
+        template_id = normalized_capabilities.template_id
+    template_id = template_id or "content_pack_structured"
+    if template_id not in CONTENT_PACK_TEMPLATES:
+        return {
+            "fits": False,
+            "headline_fits": False,
+            "support_fits": not bool(body),
+            "failure_reason": "unsupported_template",
+        }
     if visual_weight not in VISUAL_WEIGHTS:
         return {
             "fits": False,
@@ -1774,6 +1987,7 @@ def preflight_viral_carousel_text(
             if normalized_capabilities is not None
             else None
         ),
+        "template_id": template_id,
         "measure_only": True,
     }
     used_layout = layout_variant
@@ -1859,6 +2073,7 @@ def render_social_text(
     optical_lock=None,
     campaign_style=None,
     campaign_palette=None,
+    template_id=None,
     resolved_capabilities=None,
 ):
     """Render structured copy onto an image and return in-memory PNG bytes."""
@@ -1876,8 +2091,20 @@ def render_social_text(
             normalized_capabilities.legacy_render_style != design_style
             or normalized_capabilities.artwork_style_id != campaign_style
             or normalized_capabilities.palette_id != campaign_palette
+            or (
+                template_id is not None
+                and normalized_capabilities.template_id != template_id
+            )
         ):
             raise SocialTextRenderError("generation_capability_mismatch")
+        template_id = normalized_capabilities.template_id
+    template_id = template_id or "content_pack_structured"
+    if template_id not in CONTENT_PACK_TEMPLATES:
+        raise SocialTextRenderError("unsupported_template")
+    designed_template = (
+        design_style == "viral_carousel"
+        or template_id != "content_pack_structured"
+    )
     if layout != "carousel":
         raise SocialTextRenderError("unsupported_layout")
     if layout_role is not None and (
@@ -1958,7 +2185,7 @@ def render_social_text(
     except SocialTextRenderError:
         raise
     except (UnidentifiedImageError, OSError, ValueError) as exc:
-        if design_style == "viral_carousel" and layout_role is not None:
+        if designed_template and layout_role is not None:
             image = Image.new("RGBA", (1024, 1024), (9, 18, 34, 255))
         else:
             raise SocialTextRenderError("invalid_image") from exc
@@ -1984,7 +2211,7 @@ def render_social_text(
             and normalized_capabilities.composition_id != effective_composition
         ):
             raise SocialTextRenderError("generation_capability_mismatch")
-        if design_style == "viral_carousel":
+        if designed_template:
             image = _build_designed_carousel_canvas(
                 image,
                 effective_variant,
@@ -1994,6 +2221,7 @@ def render_social_text(
                 effective_composition,
                 campaign_style,
                 campaign_palette or "smu_classic",
+                template_id,
             )
         composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
         try:
@@ -2018,17 +2246,19 @@ def render_social_text(
                 editorial_composition=effective_composition,
                 optical_lock=optical_lock,
                 campaign_palette=campaign_palette,
+                template_id=template_id,
             )
         except SocialTextRenderError as exc:
             if exc.reason != "text_does_not_fit":
                 raise
-            if design_style == "viral_carousel":
+            if designed_template:
                 image = _build_designed_carousel_canvas(
                     image, effective_variant, "typography_only", visual_weight,
                     furniture_variant,
                     effective_composition,
                     campaign_style,
                     campaign_palette or "smu_classic",
+                    template_id,
                 )
             composition_layer = Image.new("RGBA", image.size, (0, 0, 0, 0))
             _draw_role_composition(
@@ -2052,6 +2282,7 @@ def render_social_text(
                 editorial_composition=effective_composition,
                 optical_lock=optical_lock,
                 campaign_palette=campaign_palette,
+                template_id=template_id,
             )
         image = Image.alpha_composite(image, composition_layer)
         output = BytesIO()

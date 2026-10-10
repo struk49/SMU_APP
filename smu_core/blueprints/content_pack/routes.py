@@ -1392,6 +1392,11 @@ def _validate_viral_carousel_copy(
             if slide.get("emphasis") and slide["emphasis"] in title
             else None
         )
+        slide_capabilities = (
+            resolved_capabilities[index]
+            if resolved_capabilities is not None
+            else None
+        )
         result = preflight_viral_carousel_text(
             title=title,
             body=body,
@@ -1406,11 +1411,12 @@ def _validate_viral_carousel_copy(
             typography_presentation=presentation["typography_presentation"],
             editorial_composition=presentation["editorial_composition"],
             optical_lock=presentation["optical_lock"],
-            resolved_capabilities=(
-                resolved_capabilities[index]
-                if resolved_capabilities is not None
-                else None
+            design_style=(
+                slide_capabilities.legacy_render_style
+                if slide_capabilities is not None
+                else "viral_carousel"
             ),
+            resolved_capabilities=slide_capabilities,
         )
         if not result["fits"]:
             support_failure = bool(body) and not result["support_fits"]
@@ -1953,13 +1959,16 @@ def create_content_pack_carousel():
     content_pack_result = request.form.get("content_pack_result", "").strip()
     intent_token = request.form.get("carousel_intent_token", "").strip()
     image_style = request.form.get("image_style", "").strip()
+    template_id = request.form.get(
+        "template_id", "content_pack_structured"
+    ).strip().lower()
     design_manager_style = request.form.get("design_manager_style")
     colour_theme = request.form.get("colour_theme")
     design_manager_style = design_manager_style.strip().lower() if design_manager_style is not None else None
     colour_theme = colour_theme.strip().lower() if colour_theme is not None else None
     try:
-        image_style = validate_content_pack_selections(
-            image_style, design_manager_style, colour_theme
+        image_style, template_id = validate_content_pack_selections(
+            image_style, design_manager_style, colour_theme, template_id
         )
     except GenerationContractError:
         flash(
@@ -2320,7 +2329,7 @@ def create_content_pack_carousel():
         )
         resolved_capabilities = [
             resolve_visual_capabilities(
-                template_id="content_pack_structured",
+                template_id=template_id,
                 artwork_style_id=resolved_artwork_style,
                 composition_id=presentation["editorial_composition"],
                 palette_id=resolved_palette,
@@ -2336,7 +2345,10 @@ def create_content_pack_carousel():
             ",".join(item["scene_mode"] for item in scene_plan),
             ",".join(item["environment_category"] for item in scene_plan),
         )
-        if image_style == "viral_carousel":
+        if (
+            image_style == "viral_carousel"
+            or template_id != "content_pack_structured"
+        ):
             preflight_started = perf_counter()
             _validate_viral_carousel_copy(
                 slides, presentations, resolved_capabilities
@@ -2592,24 +2604,28 @@ def create_content_pack_platform_draft():
         brand_context = build_brand_context(current_user.id)
 
         enhanced_prompt = f"""
-Brand Brief:
-{brand_context}
+Create one social media image for this {platform} post.
 
-Create a social media image for this {platform} post.
+Authority:
+- Follow Extra Visual Direction where it is explicit.
+- Treat the Post Caption as source context, not as artwork instructions.
+- Use the Brand Brief only for compatible brand constraints.
+- Do not invent claims, offers, testimonials, product capabilities, logos, or
+  readable text that the explicit direction does not request.
 
-Post Caption:
+Brand Brief (reference constraints):
+{brand_context or "No brand brief supplied."}
+
+Post Caption (source context only):
 {caption}
 
-Extra Visual Direction:
+Extra Visual Direction (authoritative artwork brief):
 {image_prompt}
 
 Requirements:
-- Match the meaning and mood of the post
-- Avoid random unrelated objects
-- Avoid generic stock image style
-- Square 1:1 format
-- High quality
-- Suitable for {platform}
+- Match the supported meaning and mood of the post.
+- Avoid random unrelated objects and generic stock-image styling.
+- Use a square 1:1, high-quality composition suitable for {platform}.
 """
 
         styled_prompt = apply_image_style(enhanced_prompt, image_style)

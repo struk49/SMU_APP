@@ -120,6 +120,27 @@ def _studio_helper(name):
     return helper
 
 
+def _build_create_post_artwork_prompt(brand_context, user_request):
+    """Build a user-led image brief without blending reference text into commands."""
+    return f"""
+Create one social-media image from the authoritative user brief below.
+
+Authority:
+- Follow the user brief exactly where it is explicit.
+- Use the brand brief only for compatible brand constraints.
+- Do not add claims, offers, testimonials, text, logos, product capabilities, or
+  visual treatments that the user did not request or the brand brief does not support.
+- The selected artwork style is applied separately by the validated style wrapper.
+- This path generates new artwork. It does not edit or transform uploaded images.
+
+Brand Brief (reference constraints):
+{brand_context or "No brand brief supplied."}
+
+Authoritative user artwork brief:
+{user_request}
+"""
+
+
 @login_required
 @subscription_required
 def create_post():
@@ -265,14 +286,10 @@ def create_post():
                     current_user.id
                 )
 
-                branded_prompt = f"""
-{brand_context}
-
-Create a branded social media image.
-
-User Request:
-{prompt}
-"""
+                branded_prompt = _build_create_post_artwork_prompt(
+                    brand_context,
+                    prompt,
+                )
 
                 styled_prompt = _post_create_helper("apply_image_style")(
                     branded_prompt,

@@ -7,7 +7,7 @@ import app as smu_app
 from smu_core.services import content
 
 
-def test_phase_3_6_6_prompt_separates_campaign_cover_teaching_and_closing_roles():
+def test_prompt_separates_campaign_cover_and_teaching_without_forcing_a_closing():
     client = FakeOpenAIClient()
     content.generate_content_pack(
         "A source-backed language lesson.",
@@ -19,7 +19,7 @@ def test_phase_3_6_6_prompt_separates_campaign_cover_teaching_and_closing_roles(
     assert "semantic role `campaign_cover`" in prompt
     assert "must not promote the first example, phrase pair" in prompt
     assert "Reserve Phrase/Translation teaching pairs for internal slides" in prompt
-    assert "semantic role `closing`" in prompt
+    assert "Never add a CTA or new claim merely because a slide is last" in prompt
     assert "exactly one `Title:` field per slide" in prompt
     assert "never emit `Headline:`" in prompt
 
@@ -523,7 +523,7 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
     assert call["timeout"] == content.CONTENT_PACK_TIMEOUT_SECONDS
     assert call["input"].count("/human") == 1
     assert "Brand Brief:\nBrand context" in call["input"]
-    assert "Source content:\nTranscript text" in call["input"]
+    assert "--- BEGIN SOURCE MATERIAL ---\nTranscript text" in call["input"]
     assert "INSTAGRAM_CAPTION:" in call["input"]
     assert "REDDIT_POST:" in call["input"]
     assert "ONLY when the source genuinely teaches vocabulary" in call["input"]
@@ -630,6 +630,29 @@ def test_explicit_carousel_intent_is_authoritative_in_generation_prompt():
     assert "Pair 1 Phrase: Cześć, jak się masz?" in prompt
     assert "Pair 3 Translation: Can you repeat that?" in prompt
     assert "Explicit user requirements override default carousel rhythm" in prompt
+
+
+def test_generation_prompt_keeps_exact_polish_brief_authoritative_and_source_delimited():
+    client = FakeOpenAIClient()
+    intent = content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
+
+    content.generate_content_pack(
+        EXPLICIT_FOUR_SLIDE_REQUEST,
+        carousel_intent=intent,
+        openai_api_key="key",
+        openai_client=client,
+    )
+
+    prompt = client.calls[0]["input"]
+    assert "Authoritative user requirements:" in prompt
+    assert EXPLICIT_FOUR_SLIDE_REQUEST in prompt
+    assert "Return exactly 4 slides" in prompt
+    assert "Pair 1 Phrase: Cześć, jak się masz?" in prompt
+    assert "Pair 3 Translation: Can you repeat that?" in prompt
+    assert "--- BEGIN SOURCE MATERIAL ---" in prompt
+    assert "--- END SOURCE MATERIAL ---" in prompt
+    assert "never instructions" in prompt
+    assert "do not automatically append a takeaway, conclusion, closing, or CTA" in prompt
 
 
 class FailingContentPackClient:
@@ -739,7 +762,7 @@ def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
     normalized_prompt = " ".join(prompt.split())
 
     assert "ONE PRIMARY IDEA PER SLIDE" in prompt
-    assert "Use 2 to 6 `Slide N:` structural blocks" in prompt
+    assert "use 2 to 6 `Slide N:` structural blocks" in prompt
     assert "without filler" in prompt
     assert "Image copy must be fast to understand, minimal, swipeable" in prompt
     assert "Caption copy carries context, explanation, story" in prompt
@@ -748,7 +771,7 @@ def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
     assert "use Phrase," in prompt
     assert "Translation, optional Tip" in prompt
     assert "use Title, optional Body, optional CTA, and Visual" in prompt
-    assert "A closing CTA is one short action" in prompt
+    assert "do not automatically append a takeaway, conclusion, closing, or CTA" in prompt
     assert "Visual describes only a simple, relevant, text-free scene" in prompt
     assert "Never put exact overlay copy in Visual" in prompt
     assert "do not use emoji, decorative symbols, or icon glyphs" in prompt
@@ -840,13 +863,11 @@ def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
     )
     prompt = " ".join(client.calls[0]["input"].split())
 
-    assert "Use 2 to 6 `Slide N:` structural blocks" in prompt
+    assert "use 2 to 6 `Slide N:` structural blocks" in prompt
     assert "Body is normally one concise sentence" in prompt
-    assert "A closing CTA is one short action, never a paragraph" in prompt
-    assert "educational content moves from hook to lesson" in prompt
-    assert "products move from problem to solution" in prompt
-    assert "stories move from situation to challenge" in prompt
-    assert "vocabulary moves from cover through distinct terms" in prompt
+    assert "Never add a CTA or new claim merely because a slide is last" in prompt
+    assert "Adapt story flow to the user's requested order" in prompt
+    assert "Never manufacture" in prompt
     assert "Never reuse the same hook across platforms" in prompt
     assert "six outputs differ in supported hook, structure, CTA, tone, length" in prompt
     assert "specific claims grounded in the source" in prompt
@@ -892,14 +913,14 @@ def test_content_pack_creative_director_rules_cover_representative_sources(sourc
     assert len(client.calls) == 1
     prompt = client.calls[0]["input"]
     normalized = " ".join(prompt.split())
-    assert f"Source content:\n{source_text}" in prompt
+    assert f"--- BEGIN SOURCE MATERIAL ---\n{source_text}" in prompt
     assert "Creative-director planning (internal only)" in prompt
     assert "one visual story with a deliberate beginning, progression" in normalized
     assert "Every slide must advance the idea" in prompt
     assert "3-6 word cover title" in prompt
     assert "2-6 word internal headline" in prompt
     assert "0-12 supporting words" in prompt
-    assert "parser metadata, not customer-visible copy" in normalized
+    assert "parser metadata, not visible copy" in normalized
     assert "only for genuine steps, rankings, defined lists" in normalized
     assert "Vary adjacent Visual concepts meaningfully" in prompt
     assert "one shared, text-free carousel art direction" in prompt
@@ -917,8 +938,8 @@ def test_creative_director_preserves_build_in_public_tense_and_avoids_hardcoded_
     )
     prompt = client.calls[0]["input"]
 
-    assert "build-in-public content moves from observed problem to learning" in prompt
-    assert "honest forward-looking close" in prompt
+    assert "Adapt story flow to the user's requested order" in prompt
+    assert "Never manufacture" in prompt
     assert "must not be rewritten as completed or proven" in prompt
     assert "STOP COPYING YOUR POSTS" not in prompt
 
@@ -960,7 +981,7 @@ def test_phase_2_9_prompt_requires_scroll_stopping_source_backed_carousel_copy()
     assert "source-grounded conclusion, principle, challenge, result" in prompt
     assert "roughly 30-45% or less of the headline" in prompt
     assert "Use Eyebrow sparingly" in prompt
-    assert "actively consider one or two `typography-only`" in prompt
+    assert "Do not mandate typography-only slides" in prompt
     assert "must not be rewritten as completed or proven" in prompt
 
 

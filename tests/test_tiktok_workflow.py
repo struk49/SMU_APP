@@ -141,6 +141,15 @@ def test_tiktok_carousel_workflow_and_batched_worker(client, app, module, monkey
     assert {post.group_id for post in posts} == {group_id}
     assert [post.sort_order for post in posts] == list(range(6))
     assert [post.is_cover for post in posts] == [True, False, False, False, False, False]
+    assert "Authoritative visible slide copy:\nHook" in posts[0].prompt
+    assert "Authoritative visible slide copy:\nProof" in posts[1].prompt
+    assert "Preserve the supplied slide wording exactly" in posts[0].prompt
+    assert "dark background" not in posts[0].prompt
+    assert "yellow accent" not in posts[0].prompt
+    assert "HIGH-CONVERTING" not in posts[0].prompt
+    assert "Do not add facts, claims, offers, testimonials" in posts[1].prompt
+    assert "Brand Brief (reference constraints only):\nBrand" in posts[0].prompt
+    assert "Shared artwork direction:\nCarousel visual prompt" in posts[0].prompt
 
     def fake_generate_image(prompt):
         generated_prompts.append(prompt)

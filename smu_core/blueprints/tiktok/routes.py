@@ -43,6 +43,28 @@ def _safe_tiktok_hostname(tiktok_url):
     return urlparse(tiktok_url).hostname or ""
 
 
+def _build_tiktok_carousel_artwork_prompt(
+    slide_text, shared_artwork_direction, *, is_cover
+):
+    role = "cover" if is_cover else "content"
+    return f"""
+Create one square Instagram carousel {role} image.
+
+Authoritative visible slide copy:
+{slide_text}
+
+Shared artwork direction:
+{shared_artwork_direction}
+
+Requirements:
+- Preserve the supplied slide wording exactly; do not rewrite or add visible copy.
+- Do not add facts, claims, offers, testimonials, logos, or calls to action.
+- Follow the user-selected artwork style already included in the shared direction.
+- Keep the {role} copy readable and visually distinct from the artwork.
+- Do not impose a fixed colour treatment unless the shared direction requests it.
+"""
+
+
 def _repurpose_result_context(result):
     if result is None:
         return {
@@ -355,10 +377,17 @@ def create_tiktok_carousel_draft():
         brand_context = _tiktok_helper("build_brand_context")(current_user.id)
 
         image_prompt = f"""
-        {brand_context}
+Brand Brief (reference constraints only):
+{brand_context or "No brand brief supplied."}
 
-        {image_prompt}
-        """
+Shared artwork direction:
+{image_prompt}
+
+Authority:
+- The shared artwork direction remains authoritative where it is explicit.
+- Use the Brand Brief only for compatible brand constraints.
+- Do not invent claims, offers, testimonials, capabilities, or visible copy.
+"""
 
         styled_image_prompt = _tiktok_helper("apply_image_style")(
             image_prompt,
@@ -401,42 +430,11 @@ def create_tiktok_carousel_draft():
         placeholder_url = _tiktok_helper("get_placeholder_image_url")()
 
         for index, slide_text in enumerate(slides):
-            if index == 0:
-                full_prompt = f"""
-Create a HIGH-CONVERTING viral Instagram carousel COVER slide.
-
-Main headline:
-{slide_text}
-
-Use this visual direction:
-{styled_image_prompt}
-
-Design style:
-- dark background
-- bold typography
-- yellow accent blocks
-- white headline text
-- green and blue highlight colours
-- square 1:1 format
-"""
-            else:
-                full_prompt = f"""
-Create a HIGH-CONVERTING Instagram carousel educational slide.
-
-Slide content:
-{slide_text}
-
-Use this visual direction:
-{styled_image_prompt}
-
-Design style:
-- dark background
-- bold typography
-- yellow highlight boxes
-- white main text
-- green accents
-- square 1:1 format
-"""
+            full_prompt = _build_tiktok_carousel_artwork_prompt(
+                slide_text,
+                styled_image_prompt,
+                is_cover=index == 0,
+            )
 
             post = Post(
                 file_url=placeholder_url,

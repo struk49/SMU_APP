@@ -92,6 +92,7 @@ SAFE_GENERATION_FAILURE_REASONS = {
     "unsupported_visual_weight",
     "unsupported_furniture_variant",
     "unsupported_editorial_composition",
+    "unsupported_template",
     "unsupported_generation_capabilities",
     "generation_capability_mismatch",
 }

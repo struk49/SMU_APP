@@ -100,6 +100,29 @@ def test_content_pack_visual_capabilities_resolve_to_stable_separate_ids():
 
 
 @pytest.mark.parametrize(
+    "template_id",
+    [
+        "content_pack_editorial",
+        "content_pack_geometric",
+        "content_pack_minimalist",
+    ],
+)
+def test_template_family_ids_are_supported_independently(template_id):
+    resolved = resolve_visual_capabilities(
+        template_id=template_id,
+        artwork_style_id="photorealistic",
+        composition_id="asymmetric_split",
+        palette_id="warm_sunset",
+        image_operation="generate_new",
+        legacy_render_style="viral_carousel",
+    )
+
+    assert resolved.template_id == template_id
+    assert resolved.artwork_style_id == "photorealistic"
+    assert resolved.palette_id == "warm_sunset"
+
+
+@pytest.mark.parametrize(
     ("values", "reason"),
     [
         ({"artwork_style_id": "auto"}, "unsupported_capability_combination"),
@@ -133,6 +156,7 @@ def test_content_pack_visual_capabilities_reject_unsupported_combinations(
         ("unknown", None, None),
         ("", "unknown", None),
         ("", None, "unknown"),
+        ("", None, None, "provider_canvas"),
     ],
 )
 def test_explicit_unsupported_content_pack_selections_are_rejected(selection):

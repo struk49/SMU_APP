@@ -18,6 +18,9 @@ CAPABILITY_REGISTRY = MappingProxyType({
     },
     "templates": {
         "content_pack_structured": {"available": True, "surfaces": ("content_pack",)},
+        "content_pack_editorial": {"available": True, "surfaces": ("content_pack",)},
+        "content_pack_geometric": {"available": True, "surfaces": ("content_pack",)},
+        "content_pack_minimalist": {"available": True, "surfaces": ("content_pack",)},
         "provider_canvas": {"available": True, "surfaces": ("create_post", "tiktok")},
         "uploaded_media": {"available": True, "surfaces": ("create_post",)},
     },
@@ -217,7 +220,9 @@ def validate_artwork_request(request):
     return request
 
 
-def validate_content_pack_selections(image_style, artwork_style, palette):
+def validate_content_pack_selections(
+    image_style, artwork_style, palette, template_id="content_pack_structured"
+):
     normalized_image_style = str(image_style or "").strip().lower()
     if normalized_image_style not in LEGACY_CONTENT_PACK_IMAGE_STYLE_MAP:
         raise GenerationContractError("unsupported_artwork_style_selection")
@@ -227,7 +232,14 @@ def validate_content_pack_selections(image_style, artwork_style, palette):
         )
     if palette is not None:
         _validate_capability("palettes", str(palette).strip().lower(), "content_pack")
-    return normalized_image_style
+    normalized_template = str(template_id or "").strip().lower()
+    _validate_capability("templates", normalized_template, "content_pack")
+    if normalized_template not in {
+        "content_pack_structured", "content_pack_editorial",
+        "content_pack_geometric", "content_pack_minimalist",
+    }:
+        raise GenerationContractError("unsupported_capability_combination")
+    return normalized_image_style, normalized_template
 
 
 def resolve_visual_capabilities(
@@ -240,7 +252,10 @@ def resolve_visual_capabilities(
     _validate_capability("palettes", palette_id, surface)
     _validate_capability("image_operations", image_operation, surface)
     if surface == "content_pack" and (
-        template_id != "content_pack_structured"
+        template_id not in {
+            "content_pack_structured", "content_pack_editorial",
+            "content_pack_geometric", "content_pack_minimalist",
+        }
         or image_operation != "generate_new"
         or artwork_style_id == "auto"
         or composition_id == "auto"

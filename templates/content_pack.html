@@ -172,6 +172,33 @@
                    name="carousel_intent_token"
                    value="{{ carousel_intent_token or '' }}">
 
+            <fieldset class="mb-4">
+                <legend class="form-label fw-semibold mb-2">Template</legend>
+                <div class="row g-3" data-template-picker>
+                    {% for template in [
+                        ('content_pack_editorial', 'Editorial', 'Large photography with dedicated text panels.'),
+                        ('content_pack_geometric', 'Geometric', 'Shaped image frames with coordinated accents.'),
+                        ('content_pack_minimalist', 'Minimalist', 'Spacious typography with restrained decoration.')
+                    ] %}
+                    <div class="col-md-4">
+                        <input class="btn-check" type="radio" name="template_id"
+                               id="template-{{ template[0] }}" value="{{ template[0] }}"
+                               {% if loop.first %}checked{% endif %}>
+                        <label class="template-picker-card d-block h-100 rounded-3 p-2"
+                               for="template-{{ template[0] }}">
+                            <span class="template-thumbnail template-thumbnail--{{ template[0].replace('content_pack_', '') }}" aria-hidden="true">
+                                <span class="template-thumbnail__text"></span>
+                                <span class="template-thumbnail__art"></span>
+                                <span class="template-thumbnail__accent"></span>
+                            </span>
+                            <span class="d-block fw-semibold mt-2">{{ template[1] }}</span>
+                            <span class="d-block small text-muted">{{ template[2] }}</span>
+                        </label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </fieldset>
+
             <div class="mb-3">
                 <label class="form-label fw-semibold">Carousel Image Style</label>
 
@@ -226,6 +253,102 @@
 
     </div>
 </div>
+
+<style>
+.template-picker-card {
+    border: 2px solid var(--bs-border-color);
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.btn-check:checked + .template-picker-card {
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12);
+    transform: translateY(-1px);
+}
+.btn-check:focus-visible + .template-picker-card {
+    outline: 3px solid rgba(var(--bs-primary-rgb), .35);
+    outline-offset: 2px;
+}
+.template-thumbnail {
+    background: #111827;
+    border-radius: .55rem;
+    display: block;
+    height: 7.25rem;
+    overflow: hidden;
+    position: relative;
+}
+.template-thumbnail__text,
+.template-thumbnail__art,
+.template-thumbnail__accent {
+    display: block;
+    position: absolute;
+}
+.template-thumbnail__text::before,
+.template-thumbnail__text::after {
+    background: #f8fafc;
+    border-radius: 999px;
+    content: "";
+    height: .45rem;
+    left: .65rem;
+    position: absolute;
+    top: .75rem;
+    width: 2.9rem;
+}
+.template-thumbnail__text::after { opacity: .65; top: 1.55rem; width: 2rem; }
+.template-thumbnail--editorial .template-thumbnail__text {
+    background: #1f2937;
+    border: 1px solid #f5c451;
+    border-radius: .4rem;
+    height: 3rem;
+    left: .55rem;
+    top: 1.4rem;
+    width: 4.2rem;
+    z-index: 2;
+}
+.template-thumbnail--editorial .template-thumbnail__art {
+    background: linear-gradient(145deg, #ca8a04, #2563eb);
+    bottom: .5rem;
+    right: .5rem;
+    top: .5rem;
+    width: 57%;
+}
+.template-thumbnail--geometric .template-thumbnail__art {
+    background: linear-gradient(145deg, #7c3aed, #22d3ee);
+    bottom: .55rem;
+    clip-path: polygon(15% 0, 100% 0, 100% 82%, 85% 100%, 0 100%, 0 18%);
+    right: .55rem;
+    top: .55rem;
+    width: 52%;
+}
+.template-thumbnail--geometric .template-thumbnail__text { left: .45rem; top: 2rem; }
+.template-thumbnail--geometric .template-thumbnail__accent {
+    border: .25rem solid #f5c451;
+    border-radius: 50%;
+    height: 1.25rem;
+    left: .55rem;
+    top: .55rem;
+    width: 1.25rem;
+}
+.template-thumbnail--minimalist { background: #f8fafc; }
+.template-thumbnail--minimalist .template-thumbnail__text { left: .9rem; top: 1.8rem; }
+.template-thumbnail--minimalist .template-thumbnail__text::before,
+.template-thumbnail--minimalist .template-thumbnail__text::after { background: #111827; }
+.template-thumbnail--minimalist .template-thumbnail__art {
+    background: linear-gradient(145deg, #f59e0b, #fed7aa);
+    border-radius: .35rem;
+    bottom: 1.15rem;
+    right: 1rem;
+    top: 1.15rem;
+    width: 36%;
+}
+.template-thumbnail--minimalist .template-thumbnail__accent {
+    background: #2563eb;
+    bottom: .7rem;
+    height: .18rem;
+    left: .9rem;
+    width: 2.5rem;
+}
+</style>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {

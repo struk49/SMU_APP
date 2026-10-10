@@ -57,6 +57,11 @@ def test_create_get_renders_template_and_calendar_default(client, app, module):
     assert response.status_code == 200
     assert recorded[0][0] == "create_post.html"
     assert recorded[0][1]["default_scheduled_time"] == "2026-07-14T09:00"
+    html = response.get_data(as_text=True)
+    assert "Uploaded media is used unchanged" in html
+    assert "does not apply the AI artwork" in html
+    assert "This prompt generates new AI artwork only" in html
+    assert "It does not edit uploaded" in html
 
 
 def test_single_upload_creates_one_post_without_real_cloudinary(client, app, module, monkeypatch):
@@ -127,6 +132,9 @@ def test_single_ai_generation_creates_one_post_without_real_openai(client, app, 
     assert post.file_url == "https://cdn.test/generated.jpg"
     assert post.file_type == "image"
     assert "Make a launch image" in post.prompt
+    assert "Authoritative user artwork brief:" in post.prompt
+    assert "Do not add claims, offers, testimonials" in post.prompt
+    assert "selected artwork style is applied separately" in post.prompt
     assert "STYLE:minimal" in post.prompt
     assert post.caption == "Launch caption"
     assert post.platforms == "facebook"
@@ -136,6 +144,45 @@ def test_single_ai_generation_creates_one_post_without_real_openai(client, app, 
     assert post.sort_order == 0
     assert post.is_cover is True
     assert post.user_id == user.id
+
+
+def test_product_post_uses_uploaded_photo_unchanged_without_generation(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="uploaded-product-photo@example.com")
+    generated = []
+    set_create_helper(
+        app,
+        monkeypatch,
+        "upload_to_cloudinary",
+        lambda file, force_jpeg=False: {
+            "secure_url": "https://cdn.test/user-product-photo.jpg"
+        },
+    )
+    set_create_helper(
+        app,
+        monkeypatch,
+        "generate_multiple_openai_images",
+        lambda *args, **kwargs: generated.append((args, kwargs)),
+    )
+    login(client, user)
+
+    response = client.post(
+        "/create",
+        data={
+            "media": (BytesIO(b"photo"), "product.jpg"),
+            "prompt": "Use this exact supplied product photo unchanged.",
+            "caption": "A source-backed product caption.",
+            "platforms": ["instagram"],
+        },
+        content_type="multipart/form-data",
+    )
+    post = Post.query.one()
+
+    assert response.status_code == 302
+    assert generated == []
+    assert post.file_url == "https://cdn.test/user-product-photo.jpg"
+    assert post.prompt == "Use this exact supplied product photo unchanged."
 
 
 def test_carousel_upload_creates_grouped_posts_in_cover_order(client, app, module, monkeypatch):

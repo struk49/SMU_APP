@@ -1,5 +1,6 @@
 from io import BytesIO
 from pathlib import Path
+import hashlib
 
 import pytest
 from PIL import Image, ImageDraw, ImageFont
@@ -1401,8 +1402,17 @@ def test_preflight_uses_real_layout_and_matches_renderer(role, layout, treatment
     assert rendered.startswith(b"\x89PNG")
 
 
+@pytest.mark.parametrize(
+    "template_id",
+    [
+        "content_pack_structured",
+        "content_pack_editorial",
+        "content_pack_geometric",
+        "content_pack_minimalist",
+    ],
+)
 def test_preflight_and_renderer_use_the_same_resolved_geometry_and_palette(
-    monkeypatch,
+    monkeypatch, template_id,
 ):
     calls = []
     original = social_text._draw_role_composition
@@ -1413,13 +1423,14 @@ def test_preflight_and_renderer_use_the_same_resolved_geometry_and_palette(
                 kwargs["design_style"],
                 kwargs["editorial_composition"],
                 kwargs["campaign_palette"],
+                kwargs["template_id"],
             )
         )
         return original(*args, **kwargs)
 
     monkeypatch.setattr(social_text, "_draw_role_composition", capture)
     resolved = resolve_visual_capabilities(
-        template_id="content_pack_structured",
+        template_id=template_id,
         artwork_style_id="minimal_premium",
         composition_id="asymmetric_split",
         palette_id="monochrome",
@@ -1448,7 +1459,171 @@ def test_preflight_and_renderer_use_the_same_resolved_geometry_and_palette(
     assert result["fits"] is True
     assert rendered.startswith(b"\x89PNG")
     assert calls[0] == calls[1] == (
-        "viral_carousel", "asymmetric_split", "monochrome"
+        "viral_carousel", "asymmetric_split", "monochrome", template_id
+    )
+
+
+def test_template_families_produce_distinct_canvases_with_readable_phrase_copy():
+    outputs = []
+    for template_id in (
+        "content_pack_editorial",
+        "content_pack_geometric",
+        "content_pack_minimalist",
+    ):
+        resolved = resolve_visual_capabilities(
+            template_id=template_id,
+            artwork_style_id="photorealistic",
+            composition_id="asymmetric_split",
+            palette_id="warm_sunset",
+            image_operation="generate_new",
+            legacy_render_style="viral_carousel",
+        )
+        arguments = {
+            "title": "Czy możesz powtórzyć?",
+            "body": "Can you repeat that?",
+            "eyebrow": "Ask for a little help",
+            "layout_role": "phrase",
+            "layout_variant": "split_left",
+            "design_style": "viral_carousel",
+            "visual_treatment": "illustration",
+            "visual_weight": "medium",
+            "editorial_composition": "asymmetric_split",
+            "resolved_capabilities": resolved,
+        }
+        measurement = social_text.preflight_viral_carousel_text(**arguments)
+        outputs.append(social_text.render_social_text(
+            source_bytes(size=(1024, 1024)),
+            campaign_style="photorealistic",
+            campaign_palette="warm_sunset",
+            **arguments,
+        ))
+
+        assert measurement["fits"] is True
+        assert measurement["headline_font_size"] > measurement["support_font_size"]
+
+    assert len(set(outputs)) == 3
+
+
+def test_template_families_have_deliberately_distinct_artwork_geometry():
+    editorial = social_text.viral_composition_zones(
+        1024, 1024, "split_left", "visual_focus", "asymmetric_split",
+        "content_pack_editorial",
+    )
+    geometric = social_text.viral_composition_zones(
+        1024, 1024, "split_left", "visual_focus", "asymmetric_split",
+        "content_pack_geometric",
+    )
+    minimalist = social_text.viral_composition_zones(
+        1024, 1024, "split_left", "visual_focus", "asymmetric_split",
+        "content_pack_minimalist",
+    )
+
+    def area(rect):
+        return (rect[2] - rect[0]) * (rect[3] - rect[1])
+
+    assert editorial["overlap_allowed"] is True
+    assert geometric["overlap_allowed"] is False
+    assert minimalist["overlap_allowed"] is False
+    assert area(editorial["art_rect"]) > area(geometric["art_rect"])
+    assert area(geometric["art_rect"]) > area(minimalist["art_rect"])
+    assert (
+        minimalist["text_rect"][2] - minimalist["text_rect"][0]
+        > geometric["text_rect"][2] - geometric["text_rect"][0]
+    )
+
+    minimalist_cover = social_text.viral_composition_zones(
+        1024, 1024, "hero_left", "illustration", "hero_bleed",
+        "content_pack_minimalist",
+    )
+    text = minimalist_cover["text_rect"]
+    art = minimalist_cover["art_rect"]
+    assert text[2] <= art[0]
+
+
+@pytest.mark.parametrize(
+    "template_id",
+    [
+        "content_pack_editorial",
+        "content_pack_geometric",
+        "content_pack_minimalist",
+    ],
+)
+def test_teaching_slides_share_target_phrase_size_until_fitting_requires_reduction(
+    template_id,
+):
+    phrases = (
+        ("Cześć, jak się masz?", "Hi, how are you?", "Start a conversation"),
+        ("Co lubisz robić?", "What do you like doing?", "Keep the conversation going"),
+        ("Czy możesz powtórzyć?", "Can you repeat that?", "Ask for a little help"),
+    )
+    sizes = []
+    for title, body, eyebrow in phrases:
+        resolved = resolve_visual_capabilities(
+            template_id=template_id,
+            artwork_style_id="photorealistic",
+            composition_id="asymmetric_split",
+            palette_id="warm_sunset",
+            image_operation="generate_new",
+            legacy_render_style="viral_carousel",
+        )
+        result = social_text.preflight_viral_carousel_text(
+            title=title,
+            body=body,
+            eyebrow=eyebrow,
+            layout_role="phrase",
+            layout_variant="split_left",
+            design_style="viral_carousel",
+            visual_treatment="illustration",
+            visual_weight="medium",
+            editorial_composition="asymmetric_split",
+            resolved_capabilities=resolved,
+        )
+        assert result["fits"] is True
+        sizes.append(result["headline_font_size"])
+
+    assert max(sizes) - min(sizes) <= 1
+
+
+def test_structured_legacy_typography_and_render_match_c6b82fa_snapshot():
+    arguments = {
+        "title": "Czy możesz powtórzyć?",
+        "body": "Can you repeat that?",
+        "eyebrow": "Ask for a little help",
+        "layout_role": "phrase",
+        "layout_variant": "split_left",
+        "design_style": "viral_carousel",
+        "visual_treatment": "illustration",
+        "visual_weight": "medium",
+        "typography_presentation": "editorial",
+        "editorial_composition": "asymmetric_split",
+        "template_id": "content_pack_structured",
+    }
+    measurement = social_text.preflight_viral_carousel_text(**arguments)
+    assert measurement == {
+        "fits": True,
+        "headline_fits": True,
+        "support_fits": True,
+        "headline_font_size": 73,
+        "support_font_size": 58,
+        "headline_lines": 2,
+        "support_lines": 2,
+        "failure_reason": None,
+        "layout": "split_left",
+        "editorial_composition": "asymmetric_split",
+        "typography_bounds": (100, 318, 539, 714),
+    }
+
+    source = Image.new("RGB", (1024, 1024), (35, 57, 89))
+    buffer = BytesIO()
+    source.save(buffer, "PNG")
+    rendered = social_text.render_social_text(
+        buffer.getvalue(),
+        campaign_style="photorealistic",
+        campaign_palette="warm_sunset",
+        **arguments,
+    )
+    assert hashlib.sha256(rendered).hexdigest() == (
+        "9abdf770dced33dfb6b1f6119a409c3884be3779e762e6b394209437dc6076f9"
     )
 
 

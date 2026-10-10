@@ -811,7 +811,7 @@ def test_resolved_visual_capabilities_round_trip_and_reach_worker(app, module):
     user = create_user(module, email="resolved-capabilities@example.com")
     post = make_pending(module, user, group_id="resolved-capabilities")
     resolved = {
-        "template_id": "content_pack_structured",
+        "template_id": "content_pack_geometric",
         "artwork_style_id": "minimal_premium",
         "composition_id": "asymmetric_split",
         "palette_id": "monochrome",

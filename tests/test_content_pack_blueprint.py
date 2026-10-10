@@ -4499,6 +4499,7 @@ def test_content_pack_carousel_default_style_uses_existing_fallback(
         {"image_style": "unknown-style"},
         {"design_manager_style": "unknown-style"},
         {"colour_theme": "unknown-palette"},
+        {"template_id": "provider_canvas"},
     ],
 )
 def test_content_pack_carousel_rejects_unsupported_explicit_selections_before_rows(
@@ -4530,6 +4531,78 @@ def test_content_pack_carousel_rejects_unsupported_explicit_selections_before_ro
     )
     assert module.Post.query.count() == 0
     assert reserve_calls == []
+
+
+@pytest.mark.parametrize(
+    "template_id",
+    [
+        "content_pack_editorial",
+        "content_pack_geometric",
+        "content_pack_minimalist",
+    ],
+)
+def test_template_picker_selection_is_independent_and_survives_to_rows(
+    client, module, template_id
+):
+    user = create_user(module, email=f"{template_id}@example.com")
+    login(client, user)
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": CONTENT_PACK_RESULT,
+            "image_style": "realistic",
+            "template_id": template_id,
+            "design_manager_style": "photorealistic",
+            "colour_theme": "warm_sunset",
+        },
+    )
+    payloads = [
+        carousel_generation.parse_overlay_prompt(post.prompt)
+        for post in module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    ]
+
+    assert response.status_code == 302
+    assert len(payloads) == 3
+    assert {
+        payload["resolved_capabilities"]["template_id"] for payload in payloads
+    } == {template_id}
+    assert {
+        payload["resolved_capabilities"]["artwork_style_id"] for payload in payloads
+    } == {"photorealistic"}
+    assert {
+        payload["resolved_capabilities"]["palette_id"] for payload in payloads
+    } == {"warm_sunset"}
+    assert {
+        payload["resolved_capabilities"]["legacy_render_style"]
+        for payload in payloads
+    } == {"realistic"}
+
+
+def test_content_pack_page_exposes_three_thumbnail_template_choices(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="template-picker@example.com")
+    login(client, user)
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda *args, **kwargs: CONTENT_PACK_RESULT,
+    )
+
+    page = client.post(
+        "/content-pack",
+        data={"source_type": "text", "source_input": "Template picker"},
+    ).get_data(as_text=True)
+
+    assert 'data-template-picker' in page
+    for template_id in (
+        "content_pack_editorial",
+        "content_pack_geometric",
+        "content_pack_minimalist",
+    ):
+        assert f'value="{template_id}"' in page
 
 
 def test_content_pack_carousel_preserves_exact_polish_slide_copy(
@@ -4633,7 +4706,9 @@ def test_create_platform_draft_creates_single_post(client, app, module, monkeypa
     assert post.status == "generating"
     assert post.sort_order == 0
     assert post.is_cover is False
-    assert "Brand Brief:\nBRAND" in post.prompt
+    assert "Brand Brief (reference constraints):\nBRAND" in post.prompt
+    assert "Post Caption (source context only):\nLinkedIn caption" in post.prompt
+    assert "Extra Visual Direction (authoritative artwork brief):" in post.prompt
     assert "LinkedIn caption" in post.prompt
     assert response.location.endswith(f"/post/{post.id}")
 
