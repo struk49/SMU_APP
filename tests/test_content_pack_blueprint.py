@@ -1741,6 +1741,45 @@ def test_conflicting_explicit_counts_fail_before_content_pack_credit_or_generati
     assert generation_calls == []
 
 
+@pytest.mark.parametrize(
+    "invalid_source",
+    [
+        "Slide 1 — Teaching\nPhrase: Dziękuję.\nRequirements:\nExactly four slides.",
+        (
+            "Slide 1 — Teaching\nPhrase: Dziękuję.\n"
+            "Translation: Thank you.\nEnglish translation: Thanks."
+        ),
+    ],
+)
+def test_invalid_pair_intent_fails_before_content_pack_credit_or_generation(
+    invalid_source, client, app, module, monkeypatch
+):
+    user = create_user(module, email="invalid-pair@example.com")
+    login(client, user)
+    reserve_calls = []
+    generation_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_content_pack_credits",
+        lambda current_user: reserve_calls.append(1) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "generate_content_pack",
+        lambda *args, **kwargs: generation_calls.append(1),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={"source_type": "text", "source_input": invalid_source},
+    )
+
+    assert response.status_code == 200
+    assert "Each supplied Polish phrase must have one English translation" in (
+        response.get_data(as_text=True)
+    )
+    assert reserve_calls == []
+    assert generation_calls == []
+
+
 def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(
     client, app, module, monkeypatch
 ):

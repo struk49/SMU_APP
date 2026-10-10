@@ -596,6 +596,54 @@ def test_explicit_carousel_intent_accepts_revised_phrase_translation_labels():
     )
 
 
+@pytest.mark.parametrize(
+    "field_guidance",
+    [
+        "Phrase:/Translation: are field labels; never display them in images.",
+        (
+            "Polish phrase:/English translation: are field labels; "
+            "never display them in images."
+        ),
+    ],
+)
+def test_explanatory_field_labels_after_final_slide_are_not_structural_fields(
+    field_guidance,
+):
+    request_text = EXPLICIT_FOUR_SLIDE_REQUEST + "\n" + field_guidance
+
+    assert content.extract_explicit_carousel_intent(request_text) == {
+        "required_slide_count": 4,
+        "required_phrase_pairs": [
+            ("Cześć, jak się masz?", "Hi, how are you?"),
+            ("Co lubisz robić?", "What do you like doing?"),
+            ("Czy możesz powtórzyć?", "Can you repeat that?"),
+        ],
+    }
+    assert content.extract_explicit_carousel_intent(
+        "Requirements:\n" + field_guidance + "\n\n" + EXPLICIT_FOUR_SLIDE_REQUEST
+    ) == content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
+
+
+def test_explanatory_heading_words_inside_supplied_copy_do_not_close_slide():
+    request_text = (
+        "Create exactly two slides.\n\n"
+        "Slide 1 — Teaching\n"
+        "Phrase: Requirements: zachowaj spokój.\n"
+        "Translation: Requirements: keep calm.\n\n"
+        "Slide 2 — Teaching\n"
+        "Phrase: Notes: słuchaj uważnie.\n"
+        "Translation: Notes: listen carefully."
+    )
+
+    assert content.extract_explicit_carousel_intent(request_text) == {
+        "required_slide_count": 2,
+        "required_phrase_pairs": [
+            ("Requirements: zachowaj spokój.", "Requirements: keep calm."),
+            ("Notes: słuchaj uważnie.", "Notes: listen carefully."),
+        ],
+    }
+
+
 def test_explicit_carousel_intent_rejects_conflicts_and_malformed_pairs():
     with pytest.raises(content.CarouselRequestIntentError) as conflict:
         content.extract_explicit_carousel_intent(
@@ -612,6 +660,15 @@ def test_explicit_carousel_intent_rejects_conflicts_and_malformed_pairs():
             "Slide 1 — Teaching\nPolish phrase: Dziękuję."
         )
     assert malformed.value.reason == "malformed_phrase_pair_intent"
+
+    with pytest.raises(content.CarouselRequestIntentError) as ambiguous:
+        content.extract_explicit_carousel_intent(
+            "Slide 1 — Teaching\n"
+            "Phrase: Dziękuję.\n"
+            "Translation: Thank you.\n"
+            "English translation: Thanks."
+        )
+    assert ambiguous.value.reason == "malformed_phrase_pair_intent"
 
 
 def test_explicit_carousel_intent_is_authoritative_in_generation_prompt():

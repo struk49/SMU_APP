@@ -51,6 +51,10 @@ REQUEST_PAIR_FIELD_RE = re.compile(
     r"^(Polish phrase|Phrase|English translation|Translation)\s*:\s*(.*)$",
     re.IGNORECASE,
 )
+REQUEST_EXPLANATORY_SECTION_RE = re.compile(
+    r"^(Requirements?|Instructions?|Constraints?|Notes?)\s*:$",
+    re.IGNORECASE,
+)
 NUMBER_WORDS = {
     "one": 1,
     "two": 2,
@@ -113,12 +117,22 @@ def extract_explicit_carousel_intent(source_text):
     saw_pair_label = False
     current = None
     blocks = []
+    in_explanatory_section = False
     for raw_line in source.splitlines():
         line = raw_line.strip()
         if REQUEST_SLIDE_MARKER_RE.fullmatch(line):
             if current is not None:
                 blocks.append(current)
             current = {}
+            in_explanatory_section = False
+            continue
+        if REQUEST_EXPLANATORY_SECTION_RE.fullmatch(line):
+            if current is not None:
+                blocks.append(current)
+            current = None
+            in_explanatory_section = True
+            continue
+        if in_explanatory_section:
             continue
         pair_match = REQUEST_PAIR_FIELD_RE.fullmatch(line)
         if pair_match is None:
