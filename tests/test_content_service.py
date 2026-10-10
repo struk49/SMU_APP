@@ -569,6 +569,39 @@ Requirements:
 - Exactly four slides in this order.
 - Add no extra phrases, headings, pronunciation guides or calls to action."""
 
+EXACT_LIVE_FOUR_SLIDE_REQUEST = """Create a four-slide educational Instagram carousel for Polish with Me about everyday Polish conversation for beginners.
+
+Slide 1 — Cover
+Title: Speak Polish with confidence
+Subtitle: Three phrases for everyday conversations
+
+Slide 2 — Teaching
+Title: Start a conversation
+Polish phrase: Cześć, jak się masz?
+English translation: Hi, how are you?
+
+Slide 3 — Teaching
+Title: Keep the conversation going
+Polish phrase: Co lubisz robić?
+English translation: What do you like doing?
+
+Slide 4 — Takeaway
+Title: Ask for a little help
+Polish phrase: Czy możesz powtórzyć?
+English translation: Can you repeat that?
+
+Requirements:
+- Exactly four slides in this order.
+- Exactly one primary heading per slide.
+- Preserve every supplied Polish phrase and English translation exactly, including Polish characters and punctuation.
+- Show each Polish phrase together with its English translation.
+- Slide numbers, story roles and field labels are instructions only; never display them in the images.
+- Add no extra phrases, headings, pronunciation guides or calls to action.
+- Use large, readable text with clear spacing and strong contrast.
+- Illustrations should support friendly everyday conversations and leave clear space for text.
+- Write a short caption about these exact three phrases. Do not mention phrases absent from the carousel.
+- In the generated CAROUSEL_IDEA section, use separate labelled slide blocks. Use Title:, Phrase: and Translation: on separate lines for teaching slides."""
+
 
 def test_explicit_carousel_intent_extracts_only_count_and_structural_pairs():
     intent = content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
@@ -584,6 +617,43 @@ def test_explicit_carousel_intent_extracts_only_count_and_structural_pairs():
     assert content.extract_explicit_carousel_intent(
         "Teach these three phrases in a useful carousel."
     ) is None
+
+
+@pytest.mark.parametrize("label_style", ["long", "short"])
+def test_exact_live_four_slide_request_extracts_count_and_pairs(label_style):
+    request_text = EXACT_LIVE_FOUR_SLIDE_REQUEST
+    if label_style == "short":
+        request_text = request_text.replace("Polish phrase:", "Phrase:").replace(
+            "English translation:", "Translation:"
+        )
+
+    matches = [
+        match.groups()
+        for raw_line in request_text.splitlines()
+        if (match := content.REQUEST_PAIR_FIELD_RE.fullmatch(raw_line.strip()))
+    ]
+    assert len(matches) == 6
+    assert [value for _, value in matches] == [
+        "Cześć, jak się masz?",
+        "Hi, how are you?",
+        "Co lubisz robić?",
+        "What do you like doing?",
+        "Czy możesz powtórzyć?",
+        "Can you repeat that?",
+    ]
+    assert content.extract_explicit_carousel_intent(request_text) == {
+        "required_slide_count": 4,
+        "required_phrase_pairs": [
+            ("Cześć, jak się masz?", "Hi, how are you?"),
+            ("Co lubisz robić?", "What do you like doing?"),
+            ("Czy możesz powtórzyć?", "Can you repeat that?"),
+        ],
+    }
+    assert content.explicit_carousel_intent_diagnostic_counts(request_text) == {
+        "slide_marker_count": 4,
+        "phrase_field_count": 3,
+        "translation_field_count": 3,
+    }
 
 
 def test_explicit_carousel_intent_accepts_revised_phrase_translation_labels():

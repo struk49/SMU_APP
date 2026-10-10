@@ -1,6 +1,7 @@
 import base64
 import binascii
 import logging
+import os
 import re
 from time import perf_counter
 import uuid
@@ -22,6 +23,7 @@ from smu_core.services.content import (
     CarouselRequestIntentError,
     CarouselStructureRepairError,
     ContentPackGenerationError,
+    explicit_carousel_intent_diagnostic_counts,
     extract_explicit_carousel_intent,
 )
 from smu_core.services.generation_contract import (
@@ -1950,6 +1952,22 @@ def content_pack():
             )
 
         except CarouselRequestIntentError as exc:
+            diagnostic_counts = explicit_carousel_intent_diagnostic_counts(
+                source_input
+            )
+            revision = os.environ.get("RENDER_GIT_COMMIT", "")
+            if re.fullmatch(r"[0-9a-fA-F]{7,40}", revision or "") is None:
+                revision = "unknown"
+            logger.warning(
+                "content_pack_intent_rejected revision=%s category=%s "
+                "slide_marker_count=%d phrase_field_count=%d "
+                "translation_field_count=%d",
+                revision,
+                exc.reason,
+                diagnostic_counts["slide_marker_count"],
+                diagnostic_counts["phrase_field_count"],
+                diagnostic_counts["translation_field_count"],
+            )
             message = {
                 "conflicting_slide_counts": (
                     "Your carousel request contains conflicting explicit slide counts. "

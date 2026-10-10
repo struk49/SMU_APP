@@ -100,7 +100,11 @@ Requirements:
 - Preserve every supplied Polish phrase and English translation exactly, including Polish characters and punctuation.
 - Show each Polish phrase together with its English translation.
 - Slide numbers, story roles and field labels are instructions only; never display them in the images.
-- Add no extra phrases, headings, pronunciation guides or calls to action."""
+- Add no extra phrases, headings, pronunciation guides or calls to action.
+- Use large, readable text with clear spacing and strong contrast.
+- Illustrations should support friendly everyday conversations and leave clear space for text.
+- Write a short caption about these exact three phrases. Do not mention phrases absent from the carousel.
+- In the generated CAROUSEL_IDEA section, use separate labelled slide blocks. Use Title:, Phrase: and Translation: on separate lines for teaching slides."""
 
 POST_361_CAROUSEL = """Slide 1:
 Title: Speak Polish with confidence
@@ -1664,8 +1668,9 @@ def test_crafted_capability_fields_cannot_override_server_contract(
     assert calls[0].asset_use.mode == "generate_new"
 
 
+@pytest.mark.parametrize("line_ending", ["\n", "\r\n"])
 def test_explicit_carousel_intent_is_signed_and_passed_to_generation(
-    client, app, module, monkeypatch
+    line_ending, client, app, module, monkeypatch
 ):
     user = create_user(module, email="explicit-intent@example.com")
     login(client, user)
@@ -1683,15 +1688,16 @@ def test_explicit_carousel_intent_is_signed_and_passed_to_generation(
     set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
     set_content_pack_helper(app, monkeypatch, "generate_content_pack", fake_generate)
 
+    submitted_source = EXPLICIT_FOUR_SLIDE_SOURCE.replace("\n", line_ending)
     with captured_templates(app) as templates:
         response = client.post(
             "/content-pack",
-            data={"source_type": "text", "source_input": EXPLICIT_FOUR_SLIDE_SOURCE},
+            data={"source_type": "text", "source_input": submitted_source},
         )
 
     context = templates[0][1]
     assert response.status_code == 200
-    assert calls["source_text"] == EXPLICIT_FOUR_SLIDE_SOURCE
+    assert calls["source_text"].splitlines() == EXPLICIT_FOUR_SLIDE_SOURCE.splitlines()
     assert calls["intent"]["required_slide_count"] == 4
     assert calls["intent"]["required_phrase_pairs"][0] == (
         "Cześć, jak się masz?", "Hi, how are you?"
@@ -1778,6 +1784,48 @@ def test_invalid_pair_intent_fails_before_content_pack_credit_or_generation(
     )
     assert reserve_calls == []
     assert generation_calls == []
+
+
+def test_invalid_pair_intent_logs_only_safe_structural_diagnostics(
+    client, app, module, monkeypatch, caplog
+):
+    user = create_user(module, email="intent-diagnostics@example.com")
+    login(client, user)
+    fake_customer_text = "customer-text-must-not-be-logged"
+    monkeypatch.setenv("RENDER_GIT_COMMIT", "bd1f12b905c0d9b77af07957033915edef7c144f")
+    reserve_calls = []
+    generation_calls = []
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_content_pack_credits",
+        lambda current_user: reserve_calls.append(1) or True,
+    )
+    set_content_pack_helper(
+        app, monkeypatch, "generate_content_pack",
+        lambda *args, **kwargs: generation_calls.append(1),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        response = client.post(
+            "/content-pack",
+            data={
+                "source_type": "text",
+                "source_input": (
+                    "Slide 1 — Teaching\n"
+                    f"Phrase: {fake_customer_text}\n"
+                    "Requirements:\nExactly four slides."
+                ),
+            },
+        )
+
+    assert response.status_code == 200
+    assert reserve_calls == []
+    assert generation_calls == []
+    assert "revision=bd1f12b905c0d9b77af07957033915edef7c144f" in caplog.text
+    assert "category=malformed_phrase_pair_intent" in caplog.text
+    assert "slide_marker_count=1" in caplog.text
+    assert "phrase_field_count=1" in caplog.text
+    assert "translation_field_count=0" in caplog.text
+    assert fake_customer_text not in caplog.text
 
 
 def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(

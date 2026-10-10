@@ -171,6 +171,30 @@ def extract_explicit_carousel_intent(source_text):
     return intent or None
 
 
+def explicit_carousel_intent_diagnostic_counts(source_text):
+    """Return content-free structural counts for safe rejection diagnostics."""
+    counts = {
+        "slide_marker_count": 0,
+        "phrase_field_count": 0,
+        "translation_field_count": 0,
+    }
+    for raw_line in str(source_text or "").splitlines():
+        line = raw_line.strip()
+        if REQUEST_SLIDE_MARKER_RE.fullmatch(line):
+            counts["slide_marker_count"] += 1
+        field_match = REQUEST_PAIR_FIELD_RE.fullmatch(line)
+        if field_match is None:
+            continue
+        label = field_match.group(1).lower()
+        key = (
+            "phrase_field_count"
+            if label in {"polish phrase", "phrase"}
+            else "translation_field_count"
+        )
+        counts[key] += 1
+    return counts
+
+
 def _format_carousel_request_intent(intent):
     if not intent:
         return "No additional explicit carousel count or phrase-pair contract was supplied."
