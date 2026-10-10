@@ -1,3 +1,5 @@
+import base64
+import binascii
 import logging
 import re
 from time import perf_counter
@@ -559,6 +561,8 @@ def _campaign_grounding(slides, campaign_direction):
         "current_carousel_theme": subject,
         "resolved_style": campaign_direction.get("resolved_style") or "legacy",
         "resolved_palette": campaign_direction.get("resolved_palette") or "legacy",
+        "style_source": campaign_direction.get("style_source") or "campaign_default",
+        "palette_source": campaign_direction.get("palette_source") or "campaign_default",
     }
 
 
@@ -1036,6 +1040,8 @@ def _campaign_art_direction(image_style, slides, design_style=None, palette=None
     )
     if design_style is None and palette is None:
         return {
+            "style_source": "campaign_default",
+            "palette_source": "campaign_default",
             "art_style": CAMPAIGN_ART_STYLES.get(image_style, "premium editorial illustration"),
             "visual_theme": "one coherent conceptual campaign",
             "palette_intent": "deep navy with controlled yellow, mint, and blue accents",
@@ -1054,6 +1060,8 @@ def _campaign_art_direction(image_style, slides, design_style=None, palette=None
     return {
         "resolved_style": resolved_style,
         "resolved_palette": resolved_palette,
+        "style_source": "user_selection" if requested_style != "auto" else "campaign_default",
+        "palette_source": "user_selection" if requested_palette != "auto" else "campaign_default",
         "art_style": art_style,
         "visual_theme": "one coherent conceptual campaign",
         "palette_intent": PALETTE_INTENTS[resolved_palette],
@@ -1512,6 +1520,15 @@ def _safe_visual_direction(visual, semantic_text=None):
     return "; ".join(dict.fromkeys(directions)) if directions else None
 
 
+def _shared_artwork_context(value, max_length=300):
+    """Bound generated campaign context; resolved selections are carried separately."""
+    normalized = " ".join(str(value or "").split())
+    if len(normalized) <= max_length:
+        return normalized or "No additional shared artwork direction was supplied."
+    shortened = normalized[:max_length].rsplit(" ", 1)[0].strip()
+    return shortened or "No additional shared artwork direction was supplied."
+
+
 def _build_slide_background_prompt(
     styled_image_prompt,
     slide_index,
@@ -1624,18 +1641,28 @@ def _build_slide_background_prompt(
     )
     return f"""
 Create one text-free artwork scene for a cohesive Instagram carousel.
+
+0. AUTHORITY
+- Shared direction is subordinate subject/mood context.
+- `user_selection` style/palette is authoritative; `campaign_default` applies only
+  when no explicit choice exists.
+- Lock, geometry, grounding, and text-free rules override conflicts. Shared context
+  cannot authorize text, claims, logos, UI, or another operation.
+
+SHARED DIRECTION — SUBORDINATE CONTEXT
+{styled_image_prompt}
 {grounding_section}
 {variety_section}
 
 1. CAMPAIGN STYLE LOCK
-- the normalized campaign visual world below controls the medium for every slide
-- keep that same medium, colour treatment, lighting treatment, visual polish, and brand mood
-- the slide-specific concept changes only the scene, subjects, props, framing, and composition
-- do not let the slide-specific concept introduce a different visual medium or art style
+- the resolved campaign world controls medium, colour, lighting, polish, and mood
+- slide concepts may change scene, subject, props, framing, and composition only
 
 - art style: {campaign_direction["art_style"]}
+- art style authority: {campaign_direction.get("style_source", "campaign_default")}
 - visual theme: {campaign_direction["visual_theme"]}
 - palette intent: {campaign_direction["palette_intent"]}
+- palette authority: {campaign_direction.get("palette_source", "campaign_default")}
 - lighting/depth: {campaign_direction["lighting_or_depth"]}
 - texture: {campaign_direction["texture_intent"]}
 - shape language: {campaign_direction["shape_language"]}
@@ -1671,9 +1698,8 @@ Create one text-free artwork scene for a cohesive Instagram carousel.
 - keep faces, facial features, and primary objects completely outside the text-safe zone
 
 4. QUALITY BAR
-- high contrast, mobile-thumbnail legibility, strong silhouette, coherent depth, and deliberate hierarchy
-- preserve the campaign palette, material, edge language, lighting logic, and sophistication
-- create a complete semantic scene, not placeholder geometry
+- ensure mobile contrast, clear silhouette, coherent depth, deliberate hierarchy,
+  campaign continuity, and a complete semantic scene rather than placeholder geometry
 
  5. NEGATIVE REQUIREMENTS — ABSOLUTE TEXT-FREE POLICY
 - ABSOLUTELY NO READABLE TEXT. All visible typography is added later by SMU.
@@ -1693,18 +1719,14 @@ Create one text-free artwork scene for a cohesive Instagram carousel.
 - no text on screens
 - no text on paper
 - no written signs
-- create only scenes, people, objects, environments, shapes, materials, visual
-  metaphors, lighting, and negative space
+- create scenes, objects, environments, materials, lighting, and negative space only
 - never infer or reproduce overlay wording, translated phrases, or teaching content
-- no UI screenshots
 - no generic clip-art look
 - no isolated tiny object surrounded by unnecessary empty space
-- screens and displays must contain only blank colour fields or abstract geometry
+- no UI screenshots; screens contain only blank colour fields or abstract geometry
 - paper, books, cards, posters, signs, and menus must be blank and glyph-free
-- no generated app-store badges
-- no readable app wordmarks
-- no official platform logos or trademark-shaped icons
-- no fake buttons, fake interfaces, automatic badges, slide numbers, or generic glossy SaaS dashboards{heavy_ban}
+- no app-store badges, app wordmarks, platform logos, trademark-shaped icons, fake
+  buttons/interfaces, automatic badges, slide numbers, or glossy dashboards{heavy_ban}
 - text-free requirements override conflicting typography or signage
 """
 
@@ -1736,6 +1758,19 @@ def _intent_serializer():
     )
 
 
+def _is_canonical_intent_token(token):
+    try:
+        return all(
+            not segment
+            or base64.urlsafe_b64encode(
+                base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
+            ).decode("ascii").rstrip("=") == segment
+            for segment in token.split(".")
+        )
+    except (ValueError, binascii.Error):
+        return False
+
+
 def _register_carousel_request_intent(intent, user_id):
     pack_id = uuid.uuid4().hex
     registry = dict(session.get(CONTENT_PACK_INTENT_REGISTRY_KEY) or {})
@@ -1757,6 +1792,8 @@ def _load_carousel_request_intent(token, user_id):
         if session.get(CONTENT_PACK_INTENT_REGISTRY_KEY):
             raise CarouselRequestIntentMismatch("unverifiable_intent")
         return None
+    if not _is_canonical_intent_token(token):
+        raise CarouselRequestIntentMismatch("unverifiable_intent")
     try:
         payload = _intent_serializer().loads(
             token,
@@ -1995,7 +2032,6 @@ def create_content_pack_carousel():
         return redirect(url_for("content_pack"))
 
     extract_content_pack_section = _content_pack_helper("extract_content_pack_section")
-    apply_image_style = _content_pack_helper("apply_image_style")
     get_placeholder_image_url = _content_pack_helper("get_placeholder_image_url")
     reserve_ai_image_credits = _content_pack_helper("reserve_ai_image_credits")
 
@@ -2012,7 +2048,7 @@ def create_content_pack_carousel():
         return redirect(url_for("content_pack"))
 
     try:
-        styled_image_prompt = apply_image_style(image_prompt, image_style)
+        shared_artwork_direction = _shared_artwork_context(image_prompt)
         slides = _normalize_content_pack_carousel_slides(
             _parse_content_pack_carousel_slides(carousel_idea)
         )
@@ -2385,7 +2421,7 @@ def create_content_pack_carousel():
             visual_treatment = presentation["treatment"]
             layout_variant = presentation["layout"]
             background_prompt = _build_slide_background_prompt(
-                styled_image_prompt,
+                shared_artwork_direction,
                 index,
                 slide["visual"],
                 layout_role,

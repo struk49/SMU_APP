@@ -18,7 +18,8 @@ def test_prompt_separates_campaign_cover_and_teaching_without_forcing_a_closing(
 
     assert "semantic role `campaign_cover`" in prompt
     assert "must not promote the first example, phrase pair" in prompt
-    assert "Reserve Phrase/Translation teaching pairs for internal slides" in prompt
+    assert "including the final slide when the requested order places a required pair there" in prompt
+    assert "never convert it into or follow it with a closing slide" in prompt
     assert "Never add a CTA or new claim merely because a slide is last" in prompt
     assert "exactly one `Title:` field per slide" in prompt
     assert "never emit `Headline:`" in prompt
@@ -627,9 +628,11 @@ def test_explicit_carousel_intent_is_authoritative_in_generation_prompt():
     prompt = client.calls[0]["input"]
     assert "Return exactly 4 slides" in prompt
     assert "Do not append a closing slide or CTA beyond that exact count" in prompt
+    assert "final required slide may remain a Phrase/Translation teaching slide" in prompt
     assert "Pair 1 Phrase: Cześć, jak się masz?" in prompt
     assert "Pair 3 Translation: Can you repeat that?" in prompt
     assert "Explicit user requirements override default carousel rhythm" in prompt
+    assert "End the narrative with" not in prompt
 
 
 def test_generation_prompt_keeps_exact_polish_brief_authoritative_and_source_delimited():

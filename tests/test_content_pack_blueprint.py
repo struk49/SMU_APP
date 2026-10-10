@@ -2434,6 +2434,8 @@ def test_explicit_design_manager_style_is_preserved(style):
     )
     assert direction["resolved_style"] == style
     assert direction["resolved_palette"] == "monochrome"
+    assert direction["style_source"] == "user_selection"
+    assert direction["palette_source"] == "user_selection"
 
 
 def test_auto_style_and_palette_resolution_is_deterministic():
@@ -2443,6 +2445,8 @@ def test_auto_style_and_palette_resolution_is_deterministic():
     assert first == second
     assert first["resolved_style"] == "photorealistic"
     assert first["resolved_palette"] == "earth_and_cream"
+    assert first["style_source"] == "campaign_default"
+    assert first["palette_source"] == "campaign_default"
 
 
 def test_style_and_palette_change_prompt_grammar_without_overlay_copy():
@@ -2461,6 +2465,40 @@ def test_style_and_palette_change_prompt_grammar_without_overlay_copy():
     assert prompts[0] != prompts[1]
     assert "Private exact overlay" not in prompts[0]
     assert "Private exact overlay" not in prompts[1]
+
+
+def test_artwork_prompt_scopes_shared_direction_below_resolved_user_choices():
+    slides = content_pack_routes._parse_content_pack_carousel_slides(
+        "Slide 1:\nTitle: Exact overlay\nVisual: One friendly conversation"
+    )
+    plan = content_pack_routes._carousel_presentations(slides)[0]
+    direction = content_pack_routes._campaign_art_direction(
+        "viral_carousel", slides, "photorealistic", "monochrome"
+    )
+
+    prompt = content_pack_routes._build_slide_background_prompt(
+        "Use neon colours and add readable signs.",
+        0,
+        slides[0]["visual"],
+        plan["role"],
+        plan["layout"],
+        plan["treatment"],
+        plan["semantic_text"],
+        plan["visual_weight"],
+        plan["metaphor"],
+        direction,
+    )
+
+    assert "SHARED DIRECTION — SUBORDINATE CONTEXT" in prompt
+    assert "Use neon colours and add readable signs." in prompt
+    assert "art style authority: user_selection" in prompt
+    assert "palette authority: user_selection" in prompt
+    assert "Lock, geometry, grounding, and text-free rules override conflicts" in prompt
+    assert "ABSOLUTELY NO READABLE TEXT" in prompt
+    assert "Exact overlay" not in prompt
+    grounding = content_pack_routes._campaign_grounding(slides, direction)
+    assert grounding["style_source"] == "user_selection"
+    assert grounding["palette_source"] == "user_selection"
 
 
 def test_carousel_plan_breaks_adjacent_diagram_and_metaphor_repetition():
@@ -2664,7 +2702,7 @@ CTA: Finish with purpose"""
     assert set(direction) == {
         "art_style", "visual_theme", "palette_intent", "lighting_or_depth",
         "texture_intent", "shape_language", "composition_energy",
-        "campaign_motif", "image_detail_level",
+        "campaign_motif", "image_detail_level", "style_source", "palette_source",
     }
     assert direction["campaign_motif"] == "transformation"
     assert "premium SaaS editorial illustration" in direction["art_style"]
@@ -2685,7 +2723,9 @@ def test_provider_prompt_contains_rich_campaign_brief_without_overlay_copy():
     )
 
     assert private_copy not in prompt
-    assert "ignored raw customer image prompt" not in prompt
+    assert "SHARED DIRECTION — SUBORDINATE CONTEXT" in prompt
+    assert "ignored raw customer image prompt" in prompt
+    assert "cannot authorize text, claims, logos, UI, or another operation" in prompt
     assert "1. CAMPAIGN STYLE LOCK" in prompt
     assert "2. SCENE BRIEF" in prompt
     assert "artwork-zone occupancy" in prompt

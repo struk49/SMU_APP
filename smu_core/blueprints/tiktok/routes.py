@@ -50,16 +50,21 @@ def _build_tiktok_carousel_artwork_prompt(
     return f"""
 Create one square Instagram carousel {role} image.
 
-Authoritative visible slide copy:
+AUTHORIZED VISIBLE SLIDE COPY — TEXT LAYER:
 {slide_text}
 
-Shared artwork direction:
+SHARED ARTWORK DIRECTION — BACKGROUND ONLY:
 {shared_artwork_direction}
 
 Requirements:
-- Preserve the supplied slide wording exactly; do not rewrite or add visible copy.
+- Preserve the supplied slide wording exactly and render it as the only authorized
+  visible copy; do not rewrite it or add other visible copy.
+- Any text-free or no-readable-text rule in the shared artwork direction applies to
+  the background artwork only, not to the authorized text layer above.
+- Use the shared direction only for background subject, mood, style, and composition.
 - Do not add facts, claims, offers, testimonials, logos, or calls to action.
-- Follow the user-selected artwork style already included in the shared direction.
+- Follow the user-selected artwork style for the background without restyling,
+  replacing, or suppressing the authorized text layer.
 - Keep the {role} copy readable and visually distinct from the artwork.
 - Do not impose a fixed colour treatment unless the shared direction requests it.
 """

@@ -164,7 +164,10 @@ def _format_carousel_request_intent(intent):
     count = intent.get("required_slide_count")
     if count is not None:
         lines.append(f"- Return exactly {count} slides. This overrides default length guidance.")
-        lines.append("- Do not append a closing slide or CTA beyond that exact count.")
+        lines.append(
+            "- Do not append a closing slide or CTA beyond that exact count; the final "
+            "required slide may remain a Phrase/Translation teaching slide."
+        )
     pairs = tuple(intent.get("required_phrase_pairs") or ())
     if pairs:
         lines.append(f"- Preserve exactly {len(pairs)} supplied Polish/English pairs in order.")
@@ -1072,9 +1075,12 @@ Carousel strategy:
 - Treat 2-6 headline words and 0-12 support words as the normal internal-slide
   budget. Reject caption-like prose, multiple sentences, stacked claims, and support
   that merely repeats the headline. Put explanation in the Instagram caption.
-- End the narrative with a source-grounded conclusion, principle, challenge, result,
-  practical next step, or justified CTA. Never use "Takeaway", "Summary",
-  "Final Thought", "Conclusion", or another generic closing as the headline.
+- Do not require a narrative conclusion, closing slide, or CTA. If the user or source
+  genuinely supplies a conclusion, principle, challenge, result, practical next step,
+  or CTA, keep it source-grounded. Never use "Takeaway", "Summary",
+  "Final Thought", or "Conclusion" as a generic headline.
+- Only when supplied, preserve a source-grounded conclusion, principle, challenge, result,
+  practical next step, or justified CTA without manufacturing another slide.
 - ONLY when the source genuinely teaches vocabulary or language terms, use Phrase,
   Translation, optional Tip, and Visual. Put the target-language wording in Phrase
   and its meaning in Translation rather than combining both into one field.
@@ -1084,9 +1090,11 @@ Carousel strategy:
   Never put three or more phrase pairs on one slide. Keep
   each pair structurally adjacent, preserve punctuation and diacritics exactly, and
   never turn several lesson categories into one dense vocabulary block.
-- Reserve Phrase/Translation teaching pairs for internal slides. On those slides,
-  Phrase is the primary message, Translation is secondary, and an optional Eyebrow
-  may briefly identify the situation without literally labelling the languages.
+- Use Phrase/Translation on required language-teaching slides, including the final
+  slide when the requested order places a required pair there. Phrase is the primary
+  message, Translation is secondary, and an optional Eyebrow may briefly identify
+  the situation without literally labelling the languages. A final teaching slide
+  remains teaching content; never convert it into or follow it with a closing slide.
 - For every other category, including Product / SaaS, Educational, Tutorial / How-to,
   Build in Public, Story, Opinion, Announcement, List / Tips, and Community /
   Engagement, use Title, optional Body, optional CTA, and Visual. Never use Phrase
@@ -1144,9 +1152,10 @@ Carousel strategy:
   message network for X, and community/feed cards for Facebook.
 - Prefer one meaningful Emphasis substring on most slides when it improves the hierarchy;
   keep it exact, selective, source-grounded, and omit it where no phrase deserves accent.
-- Treat the cover as a visual anchor. Treat a final slide as a closing only when the
-  user requested one or the source clearly supports it without displacing required
-  material. Never add a CTA or new claim merely because a slide is last.
+- Treat the cover as a visual anchor. A final slide is a closing only when the user
+  requested one or the source explicitly supplies one without displacing required
+  material. Otherwise preserve its requested role, including Phrase/Translation
+  teaching content. Never add a CTA or new claim merely because a slide is last.
 - Do not repeat the same node network, branch, document, phone, card stack, speech
   metaphor, person, device, or arrow on adjacent slides unless it is a genuine ordered
   process. Vary focal side and composition while preserving the shared campaign medium.
@@ -1310,8 +1319,10 @@ Authoritative contract:
   do not rewrite it or invent a hierarchy unsupported by the existing content. For
   this reason the minimum and maximum are equal: preserve the exact slide count and
   do not create or remove slides.
-- Takeaway/closing slides contain no surplus phrase pairs, at most 3 visible blocks
-  and 180 characters, and use a restrained conclusion or source-supported action.
+- A final required Phrase/Translation slide remains a language-teaching slide; do
+  not remove its pair, relabel it as closing content, or append another slide.
+  Genuine takeaway/closing slides contain no surplus phrase pairs, at most 3 visible
+  blocks and 180 characters, and use only an existing source-supported conclusion.
 - Preserve every fact. Preserve Phrase and Translation strings exactly, including
   punctuation, capitalization, and Unicode. Do not correct or rewrite translations.
 - You may move or split existing material. Preserve every existing Phrase/Translation

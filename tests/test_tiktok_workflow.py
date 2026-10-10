@@ -141,8 +141,10 @@ def test_tiktok_carousel_workflow_and_batched_worker(client, app, module, monkey
     assert {post.group_id for post in posts} == {group_id}
     assert [post.sort_order for post in posts] == list(range(6))
     assert [post.is_cover for post in posts] == [True, False, False, False, False, False]
-    assert "Authoritative visible slide copy:\nHook" in posts[0].prompt
-    assert "Authoritative visible slide copy:\nProof" in posts[1].prompt
+    assert "AUTHORIZED VISIBLE SLIDE COPY — TEXT LAYER:\nHook" in posts[0].prompt
+    assert "AUTHORIZED VISIBLE SLIDE COPY — TEXT LAYER:\nProof" in posts[1].prompt
+    assert "SHARED ARTWORK DIRECTION — BACKGROUND ONLY:" in posts[0].prompt
+    assert "text-free or no-readable-text rule" in posts[0].prompt
     assert "Preserve the supplied slide wording exactly" in posts[0].prompt
     assert "dark background" not in posts[0].prompt
     assert "yellow accent" not in posts[0].prompt
