@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 import logging
 import re
+import uuid
 
 import pytest
 from flask import session, template_rendered, url_for
@@ -1823,9 +1824,70 @@ def test_invalid_pair_intent_logs_only_safe_structural_diagnostics(
     assert "revision=bd1f12b905c0d9b77af07957033915edef7c144f" in caplog.text
     assert "category=malformed_phrase_pair_intent" in caplog.text
     assert "slide_marker_count=1" in caplog.text
+    assert "slide_marker_candidate_count=1" in caplog.text
+    assert "marker_markdown_wrapper_count=0" in caplog.text
+    assert "marker_non_breaking_space_count=0" in caplog.text
+    assert "marker_unicode_colon_count=0" in caplog.text
+    assert "marker_invisible_format_count=0" in caplog.text
     assert "phrase_field_count=1" in caplog.text
     assert "translation_field_count=0" in caplog.text
     assert fake_customer_text not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "marker_transform",
+    [
+        lambda marker: f"**{marker}**",
+        lambda marker: f"### {marker}",
+        lambda marker: marker.replace("Slide ", "Slide\u00a0"),
+        lambda marker: f"{marker.split(' — ', 1)[0]}:",
+        lambda marker: marker.replace(" — ", "： "),
+        lambda marker: f"\u200b{marker}\u200f",
+    ],
+    ids=[
+        "bold",
+        "heading",
+        "nbsp",
+        "plain-colon",
+        "unicode-colon",
+        "invisible-format",
+    ],
+)
+def test_content_pack_form_accepts_supported_request_marker_presentations(
+    marker_transform, client, app, module, monkeypatch
+):
+    user = create_user(module, email=f"marker-{uuid.uuid4().hex}@example.com")
+    login(client, user)
+    calls = []
+    source_input = re.sub(
+        r"(?m)^Slide \d+ [—-] [^\r\n]+$",
+        lambda match: marker_transform(match.group(0)),
+        EXPLICIT_FOUR_SLIDE_SOURCE,
+    )
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda source_text, brand_context, **kwargs: (
+            calls.append(kwargs["carousel_intent"]) or CONTENT_PACK_RESULT
+        ),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={"source_type": "text", "source_input": source_input},
+    )
+
+    assert response.status_code == 200
+    assert calls == [{
+        "required_slide_count": 4,
+        "required_phrase_pairs": [
+            ("Cześć, jak się masz?", "Hi, how are you?"),
+            ("Co lubisz robić?", "What do you like doing?"),
+            ("Czy możesz powtórzyć?", "Can you repeat that?"),
+        ],
+    }]
 
 
 def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(

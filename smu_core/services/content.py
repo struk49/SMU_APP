@@ -44,8 +44,13 @@ EXPLICIT_CAROUSEL_COUNT_RE = re.compile(
     re.IGNORECASE,
 )
 REQUEST_SLIDE_MARKER_RE = re.compile(
-    r"^Slide\s+\d+\s*(?:[\u2014\u2013-]\s*[^\r\n]+)?\s*$",
+    r"^Slide\s+\d+\s*(?:[\u2014\u2013\-:\uFE55\uFF1A\u2236]\s*[^\r\n]*)?\s*$",
     re.IGNORECASE,
+)
+REQUEST_SLIDE_CANDIDATE_RE = re.compile(r"^Slide\s+\d+", re.IGNORECASE)
+REQUEST_MARKER_MARKDOWN_HEADING_RE = re.compile(r"^#{1,6}\s+")
+REQUEST_MARKER_INVISIBLE_TRANSLATION = str.maketrans(
+    "", "", "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff"
 )
 REQUEST_PAIR_FIELD_RE = re.compile(
     r"^(Polish phrase|Phrase|English translation|Translation)\s*:\s*(.*)$",
@@ -100,6 +105,38 @@ def _requested_integer(value):
     return NUMBER_WORDS.get(normalized)
 
 
+def _request_slide_marker_details(raw_line):
+    """Normalize presentation-only marker syntax without touching slide copy."""
+    original = str(raw_line or "")
+    details = {
+        "markdown_wrapper": False,
+        "non_breaking_space": "\u00a0" in original,
+        "unicode_colon": any(char in original for char in "\uFE55\uFF1A\u2236"),
+        "invisible_format": any(
+            char in original for char in "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff"
+        ),
+    }
+    marker = original.translate(REQUEST_MARKER_INVISIBLE_TRANSLATION).strip()
+    heading_match = REQUEST_MARKER_MARKDOWN_HEADING_RE.match(marker)
+    if heading_match is not None:
+        details["markdown_wrapper"] = True
+        marker = marker[heading_match.end():].strip()
+    for wrapper in ("**", "__"):
+        if marker.startswith(wrapper) and marker.endswith(wrapper):
+            details["markdown_wrapper"] = True
+            marker = marker[len(wrapper):-len(wrapper)].strip()
+            break
+    details["candidate"] = REQUEST_SLIDE_CANDIDATE_RE.match(marker) is not None
+    details["recognized"] = REQUEST_SLIDE_MARKER_RE.fullmatch(marker) is not None
+    return marker, details
+
+
+def is_request_slide_marker(raw_line):
+    """Return whether a whole line is a narrowly supported request marker."""
+    _, details = _request_slide_marker_details(raw_line)
+    return details["recognized"]
+
+
 def extract_explicit_carousel_intent(source_text):
     """Extract only explicit slide counts and structurally labelled phrase pairs."""
     source = str(source_text or "")
@@ -120,7 +157,7 @@ def extract_explicit_carousel_intent(source_text):
     in_explanatory_section = False
     for raw_line in source.splitlines():
         line = raw_line.strip()
-        if REQUEST_SLIDE_MARKER_RE.fullmatch(line):
+        if is_request_slide_marker(raw_line):
             if current is not None:
                 blocks.append(current)
             current = {}
@@ -175,13 +212,29 @@ def explicit_carousel_intent_diagnostic_counts(source_text):
     """Return content-free structural counts for safe rejection diagnostics."""
     counts = {
         "slide_marker_count": 0,
+        "slide_marker_candidate_count": 0,
+        "marker_markdown_wrapper_count": 0,
+        "marker_non_breaking_space_count": 0,
+        "marker_unicode_colon_count": 0,
+        "marker_invisible_format_count": 0,
         "phrase_field_count": 0,
         "translation_field_count": 0,
     }
     for raw_line in str(source_text or "").splitlines():
         line = raw_line.strip()
-        if REQUEST_SLIDE_MARKER_RE.fullmatch(line):
+        _, marker_details = _request_slide_marker_details(raw_line)
+        if marker_details["candidate"]:
+            counts["slide_marker_candidate_count"] += 1
+        if marker_details["recognized"]:
             counts["slide_marker_count"] += 1
+            for detail_key, count_key in (
+                ("markdown_wrapper", "marker_markdown_wrapper_count"),
+                ("non_breaking_space", "marker_non_breaking_space_count"),
+                ("unicode_colon", "marker_unicode_colon_count"),
+                ("invisible_format", "marker_invisible_format_count"),
+            ):
+                if marker_details[detail_key]:
+                    counts[count_key] += 1
         field_match = REQUEST_PAIR_FIELD_RE.fullmatch(line)
         if field_match is None:
             continue

@@ -1960,11 +1960,20 @@ def content_pack():
                 revision = "unknown"
             logger.warning(
                 "content_pack_intent_rejected revision=%s category=%s "
-                "slide_marker_count=%d phrase_field_count=%d "
+                "slide_marker_count=%d slide_marker_candidate_count=%d "
+                "marker_markdown_wrapper_count=%d "
+                "marker_non_breaking_space_count=%d "
+                "marker_unicode_colon_count=%d "
+                "marker_invisible_format_count=%d phrase_field_count=%d "
                 "translation_field_count=%d",
                 revision,
                 exc.reason,
                 diagnostic_counts["slide_marker_count"],
+                diagnostic_counts["slide_marker_candidate_count"],
+                diagnostic_counts["marker_markdown_wrapper_count"],
+                diagnostic_counts["marker_non_breaking_space_count"],
+                diagnostic_counts["marker_unicode_colon_count"],
+                diagnostic_counts["marker_invisible_format_count"],
                 diagnostic_counts["phrase_field_count"],
                 diagnostic_counts["translation_field_count"],
             )

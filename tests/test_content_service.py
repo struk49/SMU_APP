@@ -651,9 +651,74 @@ def test_exact_live_four_slide_request_extracts_count_and_pairs(label_style):
     }
     assert content.explicit_carousel_intent_diagnostic_counts(request_text) == {
         "slide_marker_count": 4,
+        "slide_marker_candidate_count": 4,
+        "marker_markdown_wrapper_count": 0,
+        "marker_non_breaking_space_count": 0,
+        "marker_unicode_colon_count": 0,
+        "marker_invisible_format_count": 0,
         "phrase_field_count": 3,
         "translation_field_count": 3,
     }
+
+
+def test_exact_live_four_slide_request_accepts_plain_colon_markers():
+    request_text = "\n".join(
+        f"{line.split(' — ', 1)[0]}:"
+        if line.startswith("Slide ") and " — " in line
+        else line
+        for line in EXACT_LIVE_FOUR_SLIDE_REQUEST.splitlines()
+    )
+
+    assert content.extract_explicit_carousel_intent(request_text) == {
+        "required_slide_count": 4,
+        "required_phrase_pairs": [
+            ("Cześć, jak się masz?", "Hi, how are you?"),
+            ("Co lubisz robić?", "What do you like doing?"),
+            ("Czy możesz powtórzyć?", "Can you repeat that?"),
+        ],
+    }
+    assert content.explicit_carousel_intent_diagnostic_counts(request_text)[
+        "slide_marker_count"
+    ] == 4
+
+
+@pytest.mark.parametrize(
+    ("marker", "category"),
+    [
+        ("**Slide 2 — Teaching**", "markdown_wrapper"),
+        ("### Slide 2 — Teaching", "markdown_wrapper"),
+        ("Slide\u00a02 — Teaching", "non_breaking_space"),
+        ("Slide 2： Teaching", "unicode_colon"),
+        ("\u200bSlide 2 — Teaching\u200f", "invisible_format"),
+    ],
+)
+def test_request_slide_marker_accepts_narrow_presentation_variants(marker, category):
+    request_text = (
+        "Create exactly two slides.\n"
+        "Slide 1 — Cover\nTitle: Cover\n"
+        f"{marker}\nPhrase: Dziękuję.\nTranslation: Thank you."
+    )
+
+    assert content.extract_explicit_carousel_intent(request_text) == {
+        "required_slide_count": 2,
+        "required_phrase_pairs": [("Dziękuję.", "Thank you.")],
+    }
+    diagnostics = content.explicit_carousel_intent_diagnostic_counts(request_text)
+    assert diagnostics["slide_marker_count"] == 2
+    assert diagnostics[f"marker_{category}_count"] == 1
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "We discuss Slide 2 in this paragraph.",
+        "2. Ordinary numbered prose",
+        "Slide 2 is where the lesson continues",
+        "- Slide 2 — list item",
+    ],
+)
+def test_request_slide_marker_rejects_numbered_prose_and_mentions(line):
+    assert content.is_request_slide_marker(line) is False
 
 
 def test_explicit_carousel_intent_accepts_revised_phrase_translation_labels():
