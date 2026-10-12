@@ -15,8 +15,15 @@ CAROUSEL_GENERATION_BATCH_SIZE = 5
 OVERLAY_PAYLOAD_PREFIX = "SMU_OVERLAY_V1:"
 LEGACY_OVERLAY_PAYLOAD_VERSION = 1
 NORMALIZED_OVERLAY_PAYLOAD_VERSION = 2
-MAX_OVERLAY_PAYLOAD_BYTES = 8192
+LOCAL_OVERLAY_GENERATION_MODE = "local_overlay"
+PROVIDER_COMPLETE_IMAGE_GENERATION_MODE = "provider_complete_image"
+CONTENT_PACK_GENERATION_MODES = {
+    LOCAL_OVERLAY_GENERATION_MODE,
+    PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
+}
+MAX_OVERLAY_PAYLOAD_BYTES = 16384
 MAX_BACKGROUND_PROMPT_LENGTH = 6200
+MAX_PROVIDER_COMPLETE_IMAGE_PROMPT_LENGTH = 10000
 MAX_OVERLAY_TITLE_LENGTH = 180
 MAX_OVERLAY_BODY_LENGTH = 600
 MAX_OVERLAY_CTA_LENGTH = 120
@@ -197,14 +204,20 @@ def build_content_pack_overlay_prompt(
     campaign_palette=None,
     campaign_grounding=None,
     resolved_capabilities=None,
+    generation_mode=LOCAL_OVERLAY_GENERATION_MODE,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
     brand = _normalize_optional_overlay_text(brand)
+    prompt_limit = (
+        MAX_PROVIDER_COMPLETE_IMAGE_PROMPT_LENGTH
+        if generation_mode == PROVIDER_COMPLETE_IMAGE_GENERATION_MODE
+        else MAX_BACKGROUND_PROMPT_LENGTH
+    )
     if (
         not isinstance(background_prompt, str)
         or not background_prompt.strip()
-        or len(background_prompt) > MAX_BACKGROUND_PROMPT_LENGTH
+        or len(background_prompt) > prompt_limit
         or not isinstance(title, str)
         or not title
         or len(title) > MAX_OVERLAY_TITLE_LENGTH
@@ -212,6 +225,7 @@ def build_content_pack_overlay_prompt(
         or not _valid_optional_overlay_text(cta, MAX_OVERLAY_CTA_LENGTH)
         or not _valid_optional_overlay_text(brand, MAX_OVERLAY_BRAND_LENGTH)
         or not isinstance(credits_reserved, bool)
+        or generation_mode not in CONTENT_PACK_GENERATION_MODES
         or (
             render_style is not None
             and (
@@ -367,6 +381,8 @@ def build_content_pack_overlay_prompt(
             "image_operation": normalized_capabilities.image_operation,
             "legacy_render_style": normalized_capabilities.legacy_render_style,
         }
+    if generation_mode != LOCAL_OVERLAY_GENERATION_MODE:
+        payload["generation_mode"] = generation_mode
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -414,11 +430,16 @@ def parse_overlay_prompt(prompt):
         "campaign_palette",
         "campaign_grounding",
         "resolved_capabilities",
+        "generation_mode",
     }
     if (
         not isinstance(payload, dict)
         or not expected_keys.issubset(payload)
         or not set(payload).issubset(allowed_keys)
+        or (
+            "generation_mode" in payload
+            and payload["generation_mode"] not in CONTENT_PACK_GENERATION_MODES
+        )
         or (
             "render_style" in payload
             and (
@@ -549,10 +570,16 @@ def parse_overlay_prompt(prompt):
 
     background_prompt = payload["background_prompt"]
     overlay = payload["overlay"]
+    prompt_limit = (
+        MAX_PROVIDER_COMPLETE_IMAGE_PROMPT_LENGTH
+        if payload.get("generation_mode")
+        == PROVIDER_COMPLETE_IMAGE_GENERATION_MODE
+        else MAX_BACKGROUND_PROMPT_LENGTH
+    )
     if (
         not isinstance(background_prompt, str)
         or not background_prompt.strip()
-        or len(background_prompt) > MAX_BACKGROUND_PROMPT_LENGTH
+        or len(background_prompt) > prompt_limit
         or not isinstance(overlay, dict)
         or set(overlay) != {"title", "body", "cta", "brand"}
         or not isinstance(overlay["title"], str)
@@ -655,6 +682,10 @@ def generate_pending_carousel_images(
             reserved_credit = credits_pre_reserved or bool(reserve_image_credits)
             if overlay_payload is None:
                 image_url = image_generator(pending_post.prompt)
+            elif overlay_payload.get(
+                "generation_mode", LOCAL_OVERLAY_GENERATION_MODE
+            ) == PROVIDER_COMPLETE_IMAGE_GENERATION_MODE:
+                image_url = image_generator(overlay_payload["background_prompt"])
             else:
                 overlay = dict(overlay_payload["overlay"])
                 if "layout_role" in overlay_payload:

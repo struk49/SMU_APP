@@ -2032,8 +2032,12 @@ def test_create_content_pack_carousel_creates_grouped_posts(client, app, module,
     for title, payload in zip(
         ["First slide", "Second slide", "Third slide"], payloads
     ):
-        assert title not in payload["background_prompt"]
-    assert all("no readable text" in payload["background_prompt"] for payload in payloads)
+        assert f"Title: {title}" in payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+    assert all(
+        "5. VISIBLE TEXT POLICY" in payload["background_prompt"]
+        for payload in payloads
+    )
     assert all(payload["overlay"]["body"] is None for payload in payloads)
     assert all(payload["credits_reserved"] is True for payload in payloads)
     assert response.location.endswith(f"/post/{posts[0].id}")
@@ -2874,7 +2878,7 @@ def test_provider_prompt_contains_rich_campaign_brief_without_overlay_copy():
     assert private_copy not in prompt
     assert "SHARED DIRECTION — SUBORDINATE CONTEXT" in prompt
     assert "ignored raw customer image prompt" in prompt
-    assert "cannot authorize text, claims, logos, UI, or another operation" in prompt
+    assert "cannot authorize additional text, claims, logos," in prompt
     assert "1. CAMPAIGN STYLE LOCK" in prompt
     assert "2. SCENE BRIEF" in prompt
     assert "artwork-zone occupancy" in prompt
@@ -4481,7 +4485,7 @@ def test_background_prompts_reserve_role_specific_negative_space():
     )
 
 
-def test_content_pack_carousel_builds_six_distinct_text_free_backgrounds(
+def test_content_pack_carousel_builds_six_distinct_provider_complete_prompts(
     client, app, module, monkeypatch
 ):
     user = create_user(module)
@@ -4552,45 +4556,23 @@ CTA: Learn more Polish with Polish with Me"""
         "split_right",
         "closing",
     ]
-    artwork_payloads = [
-        payload for payload in payloads
-        if payload["visual_treatment"] != "typography_only"
-    ]
+    assert all(
+        payload["generation_mode"] == "provider_complete_image"
+        for payload in payloads
+    )
     assert all(
         payload["layout_variant"] in payload["background_prompt"]
-        for payload in artwork_payloads
+        for payload in payloads
     )
-    assert all(
-        payload["background_prompt"] == content_pack_routes.TYPOGRAPHY_ONLY_BACKGROUND
-        for payload in payloads if payload["visual_treatment"] == "typography_only"
-    )
-    assert len(set(payload["background_prompt"] for payload in artwork_payloads)) == len(artwork_payloads)
-    assert all("art style: minimalist modern design" in payload["background_prompt"] for payload in artwork_payloads)
-    assert all("2. SCENE BRIEF" in payload["background_prompt"] for payload in artwork_payloads)
-    required_text_free_phrases = (
-        "no readable text",
-        "no words",
-        "no letters",
-        "no handwriting",
-        "no pseudo-text",
-        "no gibberish text",
-        "no typography",
-        "no captions",
-        "no labels",
-        "no readable logos",
-        "no text on screens",
-        "no text on paper",
-        "no written signs",
-    )
-    assert all(
-        phrase in prompt
-        for prompt in (payload["background_prompt"] for payload in artwork_payloads)
-        for phrase in required_text_free_phrases
-    )
+    assert len(set(backgrounds)) == len(backgrounds)
+    assert all("art style: minimalist modern design" in prompt for prompt in backgrounds)
+    assert all("2. SCENE BRIEF" in prompt for prompt in backgrounds)
+    assert all("5. VISIBLE TEXT POLICY" in prompt for prompt in backgrounds)
+    assert all("7. AUTHORIZED VISIBLE COPY" in prompt for prompt in backgrounds)
     for payload in payloads:
         for value in payload["overlay"].values():
             if value:
-                assert value not in payload["background_prompt"]
+                assert value in payload["background_prompt"]
 
 
 @pytest.mark.parametrize(
@@ -4635,8 +4617,15 @@ def test_content_pack_carousel_keeps_selected_style_across_all_six_slides(
     assert all(expected_treatment in prompt for prompt in artwork_backgrounds)
     assert all("1. CAMPAIGN STYLE LOCK" in prompt for prompt in artwork_backgrounds)
     assert all(
-        "Private overlay copy" not in prompt for prompt in backgrounds
+        payload["generation_mode"] == "provider_complete_image"
+        for payload in payloads
     )
+    assert [
+        f"Title: Private overlay copy {index}" in prompt
+        for index, prompt in enumerate(backgrounds, start=1)
+    ] == [True] * 6
+    assert all("AUTHORIZED VISIBLE COPY" in prompt for prompt in backgrounds)
+    assert all("Do not display the field labels themselves" in prompt for prompt in backgrounds)
     for payload in payloads:
         resolved = payload["resolved_capabilities"]
         assert resolved["template_id"] == "content_pack_structured"
@@ -4766,6 +4755,12 @@ def test_template_picker_selection_is_independent_and_survives_to_rows(
         payload["resolved_capabilities"]["legacy_render_style"]
         for payload in payloads
     } == {"realistic"}
+    assert all(
+        f"template: {template_id}" in payload["background_prompt"]
+        and "artwork style: photorealistic" in payload["background_prompt"]
+        and "palette: warm_sunset" in payload["background_prompt"]
+        for payload in payloads
+    )
 
 
 def test_content_pack_page_exposes_three_thumbnail_template_choices(
@@ -4827,7 +4822,84 @@ def test_content_pack_carousel_preserves_exact_polish_slide_copy(
     assert response.status_code == 302
     assert [payload["overlay"]["title"] for payload in payloads] == polish_slides
     for text, payload in zip(polish_slides, payloads):
-        assert text not in payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+        assert f"Title: {text}" in payload["background_prompt"]
+        assert "Copy these values exactly, including Unicode" in payload[
+            "background_prompt"
+        ]
+
+
+@pytest.mark.parametrize(
+    "structured_slides",
+    [
+        """Slide 1:
+Title: Build a clearer weekly plan
+Subtitle: A practical rhythm for team decisions
+Slide 2:
+Title: Name the next decision
+Body: Give every open question a clear owner
+Slide 3:
+CTA: Review the plan together on Friday""",
+        """Slide 1:
+Title: Organise product feedback
+Subtitle: A practical evidence-review workflow
+Slide 2:
+Title: Group repeated themes
+Body: Keep related customer observations together
+Slide 3:
+CTA: Review the evidence before prioritising""",
+    ],
+    ids=("general_business", "product_workflow"),
+)
+def test_provider_complete_general_content_prompt_has_one_authorized_copy_block(
+    client, module, structured_slides
+):
+    user = create_user(module)
+    login(client, user)
+    first_title = re.search(r"^Title: (.+)$", structured_slides, re.MULTILINE).group(1)
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        structured_slides,
+    ).replace(
+        "Bright image direction",
+        f"Text-free premium brand artwork for {first_title} with calm, trustworthy lighting",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": content_pack_result,
+            "template_id": "content_pack_geometric",
+            "design_manager_style": "photorealistic",
+            "colour_theme": "cool_tech",
+        },
+    )
+    payloads = [
+        carousel_generation.parse_overlay_prompt(post.prompt)
+        for post in module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    ]
+
+    assert response.status_code == 302
+    assert len(payloads) == 3
+    for payload in payloads:
+        prompt = payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+        assert "template: content_pack_geometric" in prompt
+        assert "artwork style: photorealistic" in prompt
+        assert "palette: cool_tech" in prompt
+        assert f"composition: {payload['editorial_composition']}" in prompt
+        assert "Any text-free or no-typography wording inside it" in prompt
+        assert "Authorized copy and resolved user selections" in prompt
+        assert "ABSOLUTELY NO READABLE TEXT" not in prompt
+        assert "All visible typography is added later by SMU" not in prompt
+        assert "Polish phrase" not in prompt
+        assert "English translation" not in prompt
+        for value in payload["overlay"].values():
+            if value:
+                assert prompt.count(value) == 1
+    assert "[authorized visible copy omitted from artwork direction]" in payloads[0][
+        "background_prompt"
+    ]
 
 
 def test_content_pack_carousel_rejects_oversized_slide_without_rows(
