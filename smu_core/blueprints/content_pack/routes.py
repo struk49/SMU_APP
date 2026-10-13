@@ -33,6 +33,7 @@ from smu_core.services.generation_contract import (
     build_content_pack_request,
     resolve_visual_capabilities,
     validate_content_pack_selections,
+    validate_content_pack_visual_treatment,
 )
 from smu_core.services.social_text import (
     preflight_viral_carousel_text,
@@ -99,6 +100,33 @@ PROVIDER_TEMPLATE_DIRECTIONS = {
     "content_pack_editorial": "Use substantial artwork with a deliberate dedicated editorial text panel.",
     "content_pack_geometric": "Use a distinctly shaped artwork region with coordinated geometric accents and a separate text region.",
     "content_pack_minimalist": "Use spacious typography-led composition with restrained supporting artwork and generous breathing room.",
+}
+CONTENT_PACK_VISUAL_DESCRIPTION_MAX_LENGTH = 600
+PROVIDER_VISUAL_TREATMENT_DIRECTIONS = {
+    "auto": (
+        "Use the compatible generated IMAGE_PROMPT and campaign art direction."
+    ),
+    "infographic": (
+        "Explain this slide's message visually with a relevant diagram, sequence, "
+        "comparison, relationship, or purposeful icon system. Do not default to "
+        "people, laptops, coffee cups, office photography, or decorative charts. "
+        "Ignore any conflicting photographic subject, prop, or scene suggested "
+        "earlier and reinterpret the message using infographic logic. "
+        "Do not invent statistics, measurements, claims, labels, or unsupported "
+        "data. Use the selected palette; infographic does not imply monochrome."
+    ),
+    "photography": (
+        "Use purposeful photographic subjects and scenes that directly support the "
+        "slide message, with credible natural detail and deliberate composition."
+    ),
+    "illustration": (
+        "Use a drawn visual explanation with purposeful subjects, objects, and "
+        "relationships rather than generic decorative artwork."
+    ),
+    "text_led": (
+        "Make the authorized typography the composition's main visual element and "
+        "use only minimal, restrained supporting imagery."
+    ),
 }
 TYPOGRAPHY_ONLY_BACKGROUND = "LOCAL_TYPOGRAPHY_CANVAS_NO_ARTWORK_PROMPT"
 STRUCTURE_ROLES = {"cover", "phrase", "info", "cta"}
@@ -1538,6 +1566,47 @@ def _shared_artwork_context(value, max_length=300):
     return shortened or "No additional shared artwork direction was supplied."
 
 
+def _validated_visual_description(value):
+    description = str(value or "").strip()
+    if (
+        len(description) > CONTENT_PACK_VISUAL_DESCRIPTION_MAX_LENGTH
+        or any(ord(char) < 32 and char not in "\r\n\t" for char in description)
+    ):
+        raise GenerationContractError("invalid_visual_description")
+    return description
+
+
+def _content_pack_visual_error_fields(
+    *, template_id, presentation_treatment, artwork_style, palette,
+    visual_description, reason,
+):
+    def supported(category, value):
+        record = CAPABILITY_REGISTRY.get(category, {}).get(value)
+        return bool(
+            record
+            and record.get("available")
+            and "content_pack" in record.get("surfaces", ())
+        )
+
+    message = "Choose a supported value."
+    if len(str(visual_description or "")) > CONTENT_PACK_VISUAL_DESCRIPTION_MAX_LENGTH:
+        return {"visual_description": "Describe the visuals in 600 characters or fewer."}
+    if reason == "invalid_visual_description":
+        return {"visual_description": "Describe the visuals using ordinary text only."}
+    if not supported("templates", template_id):
+        return {"template_id": message}
+    if palette is not None and not supported("palettes", palette):
+        return {"colour_theme": message}
+    if not supported("visual_treatments", presentation_treatment):
+        return {"presentation_treatment": message}
+    if artwork_style is not None and not supported("artwork_styles", artwork_style):
+        return {"design_manager_style": message}
+    return {
+        "presentation_treatment": "Choose a visual treatment and artwork style that work together.",
+        "design_manager_style": "Choose an artwork style compatible with the visual treatment.",
+    }
+
+
 def _build_slide_background_prompt(
     styled_image_prompt,
     slide_index,
@@ -1762,7 +1831,8 @@ override compatible brand constraints and campaign defaults.
 
 
 def _build_provider_complete_image_prompt(
-    scene_prompt, slide, presentation, resolved_capabilities
+    scene_prompt, slide, presentation, resolved_capabilities,
+    visual_description="",
 ):
     visible_fields = (
         ("Eyebrow", slide.get("eyebrow")),
@@ -1774,6 +1844,22 @@ def _build_provider_complete_image_prompt(
     visible_copy = "\n".join(
         f"{label}: {value}" for label, value in visible_fields if value
     )
+    treatment_id = resolved_capabilities.presentation_treatment_id
+    description = visual_description or "No additional user visual direction was supplied."
+    scene_prompt = f"""{scene_prompt}
+
+5A. USER-SELECTED VISUAL AUTHORITY
+This section overrides generated IMAGE_PROMPT suggestions and campaign defaults where
+they conflict. Compatible brand constraints still apply. It controls artwork only and
+cannot add, remove, paraphrase, or replace the authorized visible copy in section 7.
+- selected visual treatment: {treatment_id}
+- treatment direction: {PROVIDER_VISUAL_TREATMENT_DIRECTIONS[treatment_id]}
+- the selected visual treatment is binding; apply the user's visual description only
+  where it is compatible with that treatment
+- user visual description: {description}
+- add no visible wording beyond section 7, including labels, numbers, legends, chart
+  annotations, badges, watermarks, logos, or invented interface text
+"""
     for _, value in sorted(
         ((label, value) for label, value in visible_fields if value),
         key=lambda item: len(item[1]),
@@ -1788,6 +1874,7 @@ def _build_provider_complete_image_prompt(
 - template: {resolved_capabilities.template_id}
 - {PROVIDER_TEMPLATE_DIRECTIONS[resolved_capabilities.template_id]}
 - artwork style: {resolved_capabilities.artwork_style_id}
+- visual treatment: {resolved_capabilities.presentation_treatment_id}
 - palette: {resolved_capabilities.palette_id}
 - composition: {resolved_capabilities.composition_id}
 - typography presentation: {presentation["typography_presentation"]}
@@ -2098,18 +2185,50 @@ def create_content_pack_carousel():
     ).strip().lower()
     design_manager_style = request.form.get("design_manager_style")
     colour_theme = request.form.get("colour_theme")
+    presentation_treatment = request.form.get("presentation_treatment", "auto")
+    visual_description = request.form.get("visual_description", "")
+    submitted_visual_values = {
+        "template_id": template_id,
+        "presentation_treatment": presentation_treatment,
+        "design_manager_style": design_manager_style or "auto",
+        "colour_theme": colour_theme or "auto",
+        "visual_description": visual_description,
+    }
     design_manager_style = design_manager_style.strip().lower() if design_manager_style is not None else None
     colour_theme = colour_theme.strip().lower() if colour_theme is not None else None
     try:
         image_style, template_id = validate_content_pack_selections(
             image_style, design_manager_style, colour_theme, template_id
         )
-    except GenerationContractError:
+        presentation_treatment, design_manager_style = (
+            validate_content_pack_visual_treatment(
+                presentation_treatment,
+                design_manager_style,
+            )
+        )
+        visual_description = _validated_visual_description(visual_description)
+    except GenerationContractError as exc:
+        carousel_field_errors = _content_pack_visual_error_fields(
+            template_id=template_id,
+            presentation_treatment=str(presentation_treatment or "").strip().lower(),
+            artwork_style=design_manager_style,
+            palette=colour_theme,
+            visual_description=visual_description,
+            reason=exc.reason,
+        )
         flash(
-            "The selected carousel template, artwork style, or palette is not supported.",
+            "The selected template, visual treatment, artwork style, palette, or "
+            "visual description is not supported. Choose a compatible combination.",
             "danger",
         )
-        return redirect(url_for("content_pack"))
+        return render_template(
+            "content_pack.html",
+            source_text="",
+            content_pack_result=content_pack_result,
+            carousel_intent_token=intent_token,
+            carousel_form_values=submitted_visual_values,
+            carousel_field_errors=carousel_field_errors,
+        )
 
     if not content_pack_result:
         flash("No content pack found.", "danger")
@@ -2145,7 +2264,12 @@ def create_content_pack_carousel():
         return redirect(url_for("content_pack"))
 
     try:
-        shared_artwork_direction = _shared_artwork_context(image_prompt)
+        shared_artwork_direction = (
+            "Generated IMAGE_PROMPT suggestions are intentionally omitted because "
+            "explicit user visual controls are authoritative."
+            if presentation_treatment != "auto" or visual_description
+            else _shared_artwork_context(image_prompt)
+        )
         slides = _normalize_content_pack_carousel_slides(
             _parse_content_pack_carousel_slides(carousel_idea)
         )
@@ -2468,6 +2592,7 @@ def create_content_pack_carousel():
                 palette_id=resolved_palette,
                 image_operation="generate_new",
                 legacy_render_style=(image_style or None),
+                presentation_treatment_id=presentation_treatment,
             )
             for presentation in presentations
         ]
@@ -2540,6 +2665,7 @@ def create_content_pack_carousel():
                 slide,
                 presentation,
                 resolved_capabilities[index],
+                visual_description,
             )
             stored_prompt = build_content_pack_overlay_prompt(
                 background_prompt,
@@ -2577,6 +2703,8 @@ def create_content_pack_carousel():
                     "scene_action": slide_grounding["scene_action"],
                 },
                 resolved_capabilities=resolved_capabilities[index],
+                selected_visual_treatment=presentation_treatment,
+                visual_description=visual_description,
                 generation_mode=PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
             )
 

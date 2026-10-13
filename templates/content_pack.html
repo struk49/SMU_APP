@@ -183,7 +183,7 @@
                     <div class="col-md-4">
                         <input class="btn-check" type="radio" name="template_id"
                                id="template-{{ template[0] }}" value="{{ template[0] }}"
-                               {% if loop.first %}checked{% endif %}>
+                               {% if (carousel_form_values and carousel_form_values.template_id == template[0]) or (not carousel_form_values and loop.first) %}checked{% endif %}>
                         <label class="template-picker-card d-block h-100 rounded-3 p-2"
                                for="template-{{ template[0] }}">
                             <span class="template-thumbnail template-thumbnail--{{ template[0].replace('content_pack_', '') }}" aria-hidden="true">
@@ -197,51 +197,63 @@
                     </div>
                     {% endfor %}
                 </div>
+                {% if carousel_field_errors and carousel_field_errors.template_id %}
+                <div class="invalid-feedback d-block">{{ carousel_field_errors.template_id }}</div>
+                {% endif %}
             </fieldset>
 
-            <div class="mb-3">
-                <label class="form-label fw-semibold">Carousel Image Style</label>
+            <input type="hidden" name="image_style" value="">
 
-                <select name="image_style" class="form-select">
-                    <option value="viral_carousel">Viral Carousel</option>
-                    <option value="">Default</option>
-                    <option value="realistic">Realistic</option>
-                    <option value="luxury">Luxury Brand</option>
-                    <option value="minimal">Minimalist</option>
-                    <option value="corporate">Corporate</option>
-                    <option value="pixar">3D Animated</option>
-                </select>
-
-                <div class="form-text">
-                    This creates multiple Instagram carousel slides from the CAROUSEL_IDEA section.
+            <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" for="presentationTreatment">Visual Treatment</label>
+                    <select id="presentationTreatment" name="presentation_treatment" class="form-select{% if carousel_field_errors and carousel_field_errors.presentation_treatment %} is-invalid{% endif %}">
+                        <option value="infographic" {% if (carousel_form_values and carousel_form_values.presentation_treatment == 'infographic') or not carousel_form_values %}selected{% endif %}>Infographic</option>
+                        <option value="photography" {% if carousel_form_values and carousel_form_values.presentation_treatment == 'photography' %}selected{% endif %}>Photography</option>
+                        <option value="illustration" {% if carousel_form_values and carousel_form_values.presentation_treatment == 'illustration' %}selected{% endif %}>Illustration</option>
+                        <option value="text_led" {% if carousel_form_values and carousel_form_values.presentation_treatment == 'text_led' %}selected{% endif %}>Text-led</option>
+                        <option value="auto" {% if carousel_form_values and carousel_form_values.presentation_treatment == 'auto' %}selected{% endif %}>Auto / Content Pack suggestion</option>
+                    </select>
+                    {% if carousel_field_errors and carousel_field_errors.presentation_treatment %}
+                    <div class="invalid-feedback">{{ carousel_field_errors.presentation_treatment }}</div>
+                    {% endif %}
+                    <div class="form-text">Controls how each message is explained visually.</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" for="designManagerStyle">Artwork Style</label>
+                    <select id="designManagerStyle" name="design_manager_style" class="form-select{% if carousel_field_errors and carousel_field_errors.design_manager_style %} is-invalid{% endif %}">
+                        {% for value, label in [('auto', 'Auto / compatible default'), ('editorial_illustration', 'Editorial Illustration'), ('minimal_premium', 'Minimal Premium'), ('photorealistic', 'Photorealistic'), ('three_d_clay', '3D / Clay'), ('bold_graphic', 'Bold Graphic'), ('collage_magazine', 'Collage / Magazine')] %}
+                        <option value="{{ value }}" {% if carousel_form_values and carousel_form_values.design_manager_style == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if carousel_field_errors and carousel_field_errors.design_manager_style %}
+                    <div class="invalid-feedback">{{ carousel_field_errors.design_manager_style }}</div>
+                    {% endif %}
+                    <div class="form-text">Explicit incompatible combinations are rejected.</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold" for="colourTheme">Colour Theme</label>
+                    <select id="colourTheme" name="colour_theme" class="form-select{% if carousel_field_errors and carousel_field_errors.colour_theme %} is-invalid{% endif %}">
+                        {% for value, label in [('auto', 'Auto'), ('smu_classic', 'SMU Classic'), ('monochrome', 'Monochrome'), ('warm_sunset', 'Warm Sunset'), ('cool_tech', 'Cool Tech'), ('earth_and_cream', 'Earth & Cream'), ('electric', 'Electric'), ('soft_pastel', 'Soft Pastel')] %}
+                        <option value="{{ value }}" {% if carousel_form_values and carousel_form_values.colour_theme == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if carousel_field_errors and carousel_field_errors.colour_theme %}
+                    <div class="invalid-feedback">{{ carousel_field_errors.colour_theme }}</div>
+                    {% endif %}
                 </div>
             </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" for="designManagerStyle">Design Style</label>
-                    <select id="designManagerStyle" name="design_manager_style" class="form-select">
-                        <option value="auto">Auto</option>
-                        <option value="editorial_illustration">Editorial Illustration</option>
-                        <option value="minimal_premium">Minimal Premium</option>
-                        <option value="photorealistic">Photorealistic</option>
-                        <option value="three_d_clay">3D / Clay</option>
-                        <option value="bold_graphic">Bold Graphic</option>
-                        <option value="collage_magazine">Collage / Magazine</option>
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label fw-semibold" for="colourTheme">Colour Theme</label>
-                    <select id="colourTheme" name="colour_theme" class="form-select">
-                        <option value="auto">Auto</option>
-                        <option value="smu_classic">SMU Classic</option>
-                        <option value="monochrome">Monochrome</option>
-                        <option value="warm_sunset">Warm Sunset</option>
-                        <option value="cool_tech">Cool Tech</option>
-                        <option value="earth_and_cream">Earth &amp; Cream</option>
-                        <option value="electric">Electric</option>
-                        <option value="soft_pastel">Soft Pastel</option>
-                    </select>
+            <div class="mb-3">
+                <label class="form-label fw-semibold" for="visualDescription">Describe the visuals <span class="fw-normal text-muted">(optional)</span></label>
+                <textarea id="visualDescription" name="visual_description"
+                          class="form-control{% if carousel_field_errors and carousel_field_errors.visual_description %} is-invalid{% endif %}" rows="3" maxlength="600"
+                          placeholder="For example: Use simple process arrows and purposeful customer-message icons; avoid office photography.">{{ carousel_form_values.visual_description if carousel_form_values else '' }}</textarea>
+                {% if carousel_field_errors and carousel_field_errors.visual_description %}
+                <div class="invalid-feedback">{{ carousel_field_errors.visual_description }}</div>
+                {% endif %}
+                <div class="form-text">
+                    This direction overrides generated artwork suggestions where compatible with the selected treatment, but cannot change the authorized slide copy.
                 </div>
             </div>
 

@@ -876,6 +876,51 @@ def test_resolved_visual_capabilities_round_trip_and_reach_worker(app, module):
     assert calls[0]["overlay"]["resolved_capabilities"] == resolved
 
 
+def test_provider_complete_user_visual_direction_round_trips_without_local_overlay(
+    app, module
+):
+    user = create_user(module, email="provider-visual-direction@example.com")
+    post = make_pending(module, user, group_id="provider-visual-direction")
+    description = "Use purposeful message-flow icons and avoid office photography."
+    resolved = {
+        "template_id": "content_pack_editorial",
+        "artwork_style_id": "bold_graphic",
+        "composition_id": "asymmetric_split",
+        "palette_id": "warm_sunset",
+        "image_operation": "generate_new",
+        "legacy_render_style": None,
+        "presentation_treatment_id": "infographic",
+    }
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Complete infographic prompt",
+        "Exact title",
+        layout_role="info",
+        layout_variant="split_left",
+        editorial_composition="asymmetric_split",
+        campaign_style="bold_graphic",
+        campaign_palette="warm_sunset",
+        resolved_capabilities=resolved,
+        selected_visual_treatment="infographic",
+        visual_description=description,
+        generation_mode=carousel_generation.PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append((prompt, kwargs))
+        or "https://cdn.test/generated.jpg",
+    )
+
+    payload = carousel_generation.parse_overlay_prompt(post.prompt)
+    assert result["succeeded_count"] == 1
+    assert payload["selected_visual_treatment"] == "infographic"
+    assert payload["visual_description"] == description
+    assert payload["resolved_capabilities"] == resolved
+    assert calls == [("Complete infographic prompt", {})]
+
+
 def test_resolved_visual_capabilities_must_match_legacy_overlay_fields():
     resolved = {
         "template_id": "content_pack_structured",

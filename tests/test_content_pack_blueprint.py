@@ -53,6 +53,30 @@ HASHTAGS:
 #one #two
 """
 
+CUSTOMER_ENQUIRIES_CONTENT_PACK = """INSTAGRAM_CAPTION:
+Clearer customer enquiries start with keeping messages together and setting expectations.
+
+CAROUSEL_IDEA:
+Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+Visual: Generic office photography with a person using a laptop.
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+Visual: A person holding a phone beside a coffee cup.
+Slide 3:
+Title: Make the next step clear
+Body: Tell customers what happens next and when to expect a reply.
+Visual: A person replying from an office desk.
+
+IMAGE_PROMPT:
+Generic people-at-laptops office photography.
+
+HASHTAGS:
+#CustomerEnquiries
+"""
+
 LIVE_COMPACT_LANGUAGE_CAROUSEL = """Slide 1: Speak Polish with confidence — Three phrases for everyday conversations
 Slide 2: Start a conversation — Cześć, jak się masz? — Hi, how are you?
 Slide 3: Keep the conversation going — Co lubisz robić? — What do you like doing?
@@ -4678,6 +4702,10 @@ def test_content_pack_carousel_default_style_uses_existing_fallback(
         {"design_manager_style": "unknown-style"},
         {"colour_theme": "unknown-palette"},
         {"template_id": "provider_canvas"},
+        {
+            "presentation_treatment": "infographic",
+            "design_manager_style": "photorealistic",
+        },
     ],
 )
 def test_content_pack_carousel_rejects_unsupported_explicit_selections_before_rows(
@@ -4704,11 +4732,64 @@ def test_content_pack_carousel_rejects_unsupported_explicit_selections_before_ro
 
     assert response.status_code == 200
     assert (
-        "selected carousel template, artwork style, or palette is not supported"
+        "selected template, visual treatment, artwork style, palette, or visual description is not supported"
         in response.get_data(as_text=True)
     )
     assert module.Post.query.count() == 0
     assert reserve_calls == []
+
+
+def test_invalid_visual_combination_preserves_form_and_same_intent_can_succeed(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="visual-redisplay@example.com")
+    login(client, user)
+    token = register_intent_for_client(
+        client,
+        app,
+        user.id,
+        {"required_slide_count": 3},
+    )
+    reserve_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    description = "Use <arrows> & purposeful icons."
+    submitted = {
+        "content_pack_result": CUSTOMER_ENQUIRIES_CONTENT_PACK,
+        "carousel_intent_token": token,
+        "template_id": "content_pack_geometric",
+        "presentation_treatment": "infographic",
+        "design_manager_style": "photorealistic",
+        "colour_theme": "warm_sunset",
+        "visual_description": description,
+    }
+
+    rejected = client.post("/content-pack/create-carousel", data=submitted)
+    page = rejected.get_data(as_text=True)
+
+    assert rejected.status_code == 200
+    assert "Choose a visual treatment and artwork style that work together." in page
+    assert 'value="content_pack_geometric"\n                               checked' in page
+    assert 'value="infographic" selected' in page
+    assert 'value="photorealistic" selected' in page
+    assert 'value="warm_sunset" selected' in page
+    assert "Use &lt;arrows&gt; &amp; purposeful icons." in page
+    assert CUSTOMER_ENQUIRIES_CONTENT_PACK.strip().replace("&", "&amp;") in page
+    assert f'value="{token}"' in page
+    assert "Create Instagram Carousel Draft" in page
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+    submitted["design_manager_style"] = "bold_graphic"
+    corrected = client.post("/content-pack/create-carousel", data=submitted)
+
+    assert corrected.status_code == 302
+    assert reserve_calls == [1]
+    assert module.Post.query.count() == 3
 
 
 @pytest.mark.parametrize(
@@ -4787,6 +4868,136 @@ def test_content_pack_page_exposes_three_thumbnail_template_choices(
         "content_pack_minimalist",
     ):
         assert f'value="{template_id}"' in page
+
+    assert 'name="presentation_treatment"' in page
+    assert '<option value="infographic" selected>' in page
+    assert 'name="visual_description"' in page
+    assert 'name="image_style" value=""' in page
+    assert "Carousel Image Style" not in page
+
+
+def test_infographic_control_reaches_provider_prompt_and_worker_without_overlay(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="infographic-acceptance@example.com")
+    login(client, user)
+    token = register_intent_for_client(
+        client,
+        app,
+        user.id,
+        {"required_slide_count": 3},
+    )
+    visual_description = (
+        "Use a simple message-flow diagram, a grouped inbox icon, and a clear "
+        "next-step path. Avoid people and office photography."
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": CUSTOMER_ENQUIRIES_CONTENT_PACK,
+            "carousel_intent_token": token,
+            "template_id": "content_pack_editorial",
+            "presentation_treatment": "infographic",
+            "design_manager_style": "auto",
+            "colour_theme": "monochrome",
+            "visual_description": visual_description,
+        },
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [
+        carousel_generation.parse_overlay_prompt(post.prompt) for post in posts
+    ]
+
+    assert response.status_code == 302
+    assert len(payloads) == 3
+    assert [payload["overlay"] for payload in payloads] == [
+        {
+            "title": "Make customer enquiries easier",
+            "body": "Three habits for clearer communication",
+            "cta": None,
+            "brand": None,
+        },
+        {
+            "title": "Keep enquiries together",
+            "body": "Use one place to track messages and follow-ups.",
+            "cta": None,
+            "brand": None,
+        },
+        {
+            "title": "Make the next step clear",
+            "body": "Tell customers what happens next and when to expect a reply.",
+            "cta": None,
+            "brand": None,
+        },
+    ]
+    for payload in payloads:
+        resolved = payload["resolved_capabilities"]
+        prompt = payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+        assert payload["selected_visual_treatment"] == "infographic"
+        assert payload["visual_description"] == visual_description
+        assert resolved["presentation_treatment_id"] == "infographic"
+        assert resolved["template_id"] == "content_pack_editorial"
+        assert resolved["artwork_style_id"] == "bold_graphic"
+        assert resolved["palette_id"] == "monochrome"
+        assert "5A. USER-SELECTED VISUAL AUTHORITY" in prompt
+        assert "Generic people-at-laptops office photography" not in prompt
+        assert "explicit user visual controls are authoritative" in prompt
+        assert "selected visual treatment: infographic" in prompt
+        assert visual_description in prompt
+        assert "Do not default to people, laptops, coffee cups" in prompt
+        assert "infographic does not imply monochrome" in prompt
+        assert "add no visible wording beyond section 7" in prompt
+        for value in payload["overlay"].values():
+            if value:
+                assert prompt.count(value) == 1
+
+    calls = []
+
+    def fake_generate(prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return f"https://cdn.test/infographic-{len(calls)}.jpg"
+
+    monkeypatch.setattr(module, "generate_openai_image", fake_generate)
+    worker_result = module.generate_pending_carousel_images()
+
+    assert worker_result["succeeded_count"] == 3
+    assert len(calls) == 3
+    assert [prompt for prompt, _ in calls] == [
+        payload["background_prompt"] for payload in payloads
+    ]
+    assert [kwargs for _, kwargs in calls] == [{}, {}, {}]
+
+
+def test_oversized_visual_description_fails_before_credits_and_rows(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="visual-description-limit@example.com")
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": CUSTOMER_ENQUIRIES_CONTENT_PACK,
+            "presentation_treatment": "infographic",
+            "design_manager_style": "auto",
+            "visual_description": "x" * 601,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "visual description is not supported" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
 
 
 def test_content_pack_carousel_preserves_exact_polish_slide_copy(

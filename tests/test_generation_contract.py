@@ -15,6 +15,7 @@ from smu_core.services.generation_contract import (
     coerce_resolved_visual_capabilities,
     resolve_visual_capabilities,
     validate_content_pack_selections,
+    validate_content_pack_visual_treatment,
     validate_artwork_request,
     validate_generation_output,
     validate_text_generation_request,
@@ -68,7 +69,7 @@ def test_transcript_is_source_material_and_never_authoritative_instructions():
 def test_capability_registry_records_supported_and_unavailable_operations():
     assert CAPABILITY_REGISTRY.keys() == {
         "formats", "templates", "artwork_styles", "compositions",
-        "palettes", "image_operations",
+        "palettes", "visual_treatments", "image_operations",
     }
     assert capability("image_operations", "generate_new")["available"] is True
     assert capability("image_operations", "use_uploaded_unchanged") == {
@@ -79,6 +80,10 @@ def test_capability_registry_records_supported_and_unavailable_operations():
     assert capability("image_operations", "restyle_uploaded")["available"] is False
     assert "create_post" in capability("artwork_styles", "auto")["surfaces"]
     assert "tiktok" in capability("palettes", "auto")["surfaces"]
+    assert capability("visual_treatments", "infographic") == {
+        "available": True,
+        "surfaces": ("content_pack",),
+    }
 
 
 def test_content_pack_visual_capabilities_resolve_to_stable_separate_ids():
@@ -96,7 +101,56 @@ def test_content_pack_visual_capabilities_resolve_to_stable_separate_ids():
     assert resolved.composition_id == "asymmetric_split"
     assert resolved.palette_id == "warm_sunset"
     assert resolved.image_operation == "generate_new"
+    assert resolved.presentation_treatment_id == "auto"
     assert coerce_resolved_visual_capabilities(resolved) == resolved
+
+
+@pytest.mark.parametrize(
+    ("treatment", "artwork", "expected"),
+    [
+        ("infographic", "auto", ("infographic", "bold_graphic")),
+        ("photography", "auto", ("photography", "photorealistic")),
+        ("illustration", "three_d_clay", ("illustration", "three_d_clay")),
+        ("text_led", "minimal_premium", ("text_led", "minimal_premium")),
+        (None, None, ("auto", None)),
+    ],
+)
+def test_visual_treatment_resolves_only_compatible_artwork(
+    treatment, artwork, expected
+):
+    assert validate_content_pack_visual_treatment(treatment, artwork) == expected
+
+
+@pytest.mark.parametrize(
+    ("treatment", "artwork"),
+    [
+        ("infographic", "photorealistic"),
+        ("photography", "bold_graphic"),
+        ("illustration", "photorealistic"),
+        ("text_led", "three_d_clay"),
+        ("unknown", "auto"),
+    ],
+)
+def test_visual_treatment_rejects_unknown_or_contradictory_artwork(
+    treatment, artwork
+):
+    with pytest.raises(GenerationContractError):
+        validate_content_pack_visual_treatment(treatment, artwork)
+
+
+def test_old_resolved_capability_payload_defaults_treatment_for_compatibility():
+    legacy = {
+        "template_id": "content_pack_structured",
+        "artwork_style_id": "editorial_illustration",
+        "composition_id": "asymmetric_split",
+        "palette_id": "warm_sunset",
+        "image_operation": "generate_new",
+        "legacy_render_style": "viral_carousel",
+    }
+
+    resolved = coerce_resolved_visual_capabilities(legacy)
+
+    assert resolved.presentation_treatment_id == "auto"
 
 
 @pytest.mark.parametrize(
@@ -130,6 +184,11 @@ def test_template_family_ids_are_supported_independently(template_id):
         ({"palette_id": "auto"}, "unsupported_capability_combination"),
         ({"template_id": "provider_canvas"}, "capability_unavailable_for_surface"),
         ({"image_operation": "restyle_uploaded"}, "unsupported_capability"),
+        (
+            {"presentation_treatment_id": "photography"},
+            "unsupported_capability_combination",
+        ),
+        ({"presentation_treatment_id": "unknown"}, "unknown_capability"),
     ],
 )
 def test_content_pack_visual_capabilities_reject_unsupported_combinations(

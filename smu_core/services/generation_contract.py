@@ -73,6 +73,12 @@ CAPABILITY_REGISTRY = MappingProxyType({
             )
         },
     },
+    "visual_treatments": {
+        treatment: {"available": True, "surfaces": ("content_pack",)}
+        for treatment in (
+            "auto", "infographic", "photography", "illustration", "text_led",
+        )
+    },
     "image_operations": {
         "generate_new": {"available": True, "surfaces": ("content_pack", "create_post", "tiktok")},
         "use_uploaded_unchanged": {"available": True, "surfaces": ("create_post",)},
@@ -169,6 +175,30 @@ class ResolvedVisualCapabilities:
     palette_id: str
     image_operation: str
     legacy_render_style: str | None = None
+    presentation_treatment_id: str = "auto"
+
+
+CONTENT_PACK_TREATMENT_ARTWORK_STYLES = MappingProxyType({
+    "infographic": frozenset({
+        "editorial_illustration", "minimal_premium", "three_d_clay",
+        "bold_graphic", "collage_magazine",
+    }),
+    "photography": frozenset({"photorealistic"}),
+    "illustration": frozenset({
+        "editorial_illustration", "minimal_premium", "three_d_clay",
+        "bold_graphic", "collage_magazine",
+    }),
+    "text_led": frozenset({
+        "editorial_illustration", "minimal_premium", "bold_graphic",
+        "collage_magazine",
+    }),
+})
+CONTENT_PACK_TREATMENT_DEFAULT_ARTWORK_STYLE = MappingProxyType({
+    "infographic": "bold_graphic",
+    "photography": "photorealistic",
+    "illustration": "editorial_illustration",
+    "text_led": "minimal_premium",
+})
 
 
 def capability(category, capability_id):
@@ -242,15 +272,42 @@ def validate_content_pack_selections(
     return normalized_image_style, normalized_template
 
 
+def validate_content_pack_visual_treatment(treatment_id, artwork_style_id):
+    normalized_treatment = str(treatment_id or "auto").strip().lower()
+    artwork_was_absent = artwork_style_id is None
+    normalized_artwork = str(artwork_style_id or "auto").strip().lower()
+    _validate_capability("visual_treatments", normalized_treatment, "content_pack")
+    _validate_capability("artwork_styles", normalized_artwork, "content_pack")
+    if normalized_treatment == "auto":
+        return (
+            normalized_treatment,
+            None if artwork_was_absent else normalized_artwork,
+        )
+    if normalized_artwork == "auto":
+        return (
+            normalized_treatment,
+            CONTENT_PACK_TREATMENT_DEFAULT_ARTWORK_STYLE[normalized_treatment],
+        )
+    if normalized_artwork not in CONTENT_PACK_TREATMENT_ARTWORK_STYLES[
+        normalized_treatment
+    ]:
+        raise GenerationContractError("unsupported_capability_combination")
+    return normalized_treatment, normalized_artwork
+
+
 def resolve_visual_capabilities(
     *, template_id, artwork_style_id, composition_id, palette_id,
-    image_operation, legacy_render_style=None, surface="content_pack",
+    image_operation, legacy_render_style=None, presentation_treatment_id="auto",
+    surface="content_pack",
 ):
     _validate_capability("templates", template_id, surface)
     _validate_capability("artwork_styles", artwork_style_id, surface)
     _validate_capability("compositions", composition_id, surface)
     _validate_capability("palettes", palette_id, surface)
     _validate_capability("image_operations", image_operation, surface)
+    _validate_capability(
+        "visual_treatments", presentation_treatment_id, surface
+    )
     if surface == "content_pack" and (
         template_id not in {
             "content_pack_structured", "content_pack_editorial",
@@ -260,6 +317,13 @@ def resolve_visual_capabilities(
         or artwork_style_id == "auto"
         or composition_id == "auto"
         or palette_id == "auto"
+    ):
+        raise GenerationContractError("unsupported_capability_combination")
+    if (
+        surface == "content_pack"
+        and presentation_treatment_id != "auto"
+        and artwork_style_id
+        not in CONTENT_PACK_TREATMENT_ARTWORK_STYLES[presentation_treatment_id]
     ):
         raise GenerationContractError("unsupported_capability_combination")
     if legacy_render_style is not None and (
@@ -274,6 +338,7 @@ def resolve_visual_capabilities(
         palette_id=palette_id,
         image_operation=image_operation,
         legacy_render_style=legacy_render_style,
+        presentation_treatment_id=presentation_treatment_id,
     )
 
 
@@ -286,14 +351,21 @@ def coerce_resolved_visual_capabilities(value, *, surface="content_pack"):
             palette_id=value.palette_id,
             image_operation=value.image_operation,
             legacy_render_style=value.legacy_render_style,
+            presentation_treatment_id=value.presentation_treatment_id,
             surface=surface,
         )
-    if not isinstance(value, Mapping) or set(value) != {
+    legacy_keys = {
         "template_id", "artwork_style_id", "composition_id", "palette_id",
         "image_operation", "legacy_render_style",
+    }
+    if not isinstance(value, Mapping) or frozenset(value) not in {
+        frozenset(legacy_keys),
+        frozenset(legacy_keys | {"presentation_treatment_id"}),
     }:
         raise GenerationContractError("invalid_resolved_capabilities")
-    return resolve_visual_capabilities(surface=surface, **value)
+    normalized = dict(value)
+    normalized.setdefault("presentation_treatment_id", "auto")
+    return resolve_visual_capabilities(surface=surface, **normalized)
 
 
 def validate_generation_output(output, request):
