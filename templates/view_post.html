@@ -358,3 +358,48 @@
 </div>
 
 {% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% if post.post_type == 'carousel' and carousel_posts | selectattr('status', 'equalto', 'generating') | list %}
+<script>
+(() => {
+    const statusUrl = {{ url_for('carousel_generation_status', post_id=post.id) | tojson }};
+    const initialStatuses = {{ carousel_posts | map(attribute='status') | list | tojson }};
+    let previousStatuses = JSON.stringify(initialStatuses);
+    let timerId = null;
+
+    async function pollGenerationStatus() {
+        try {
+            const response = await fetch(statusUrl, {
+                credentials: "same-origin",
+                cache: "no-store",
+                headers: {"Accept": "application/json"}
+            });
+            if (!response.ok) {
+                throw new Error("generation_status_unavailable");
+            }
+            const payload = await response.json();
+            const statuses = JSON.stringify(payload.slides.map((slide) => slide.status));
+            if (statuses !== previousStatuses) {
+                if (timerId !== null) {
+                    window.clearTimeout(timerId);
+                }
+                window.location.reload();
+                return;
+            }
+            if (!payload.processing) {
+                return;
+            }
+            previousStatuses = statuses;
+            timerId = window.setTimeout(pollGenerationStatus, 3000);
+        } catch (_error) {
+            timerId = window.setTimeout(pollGenerationStatus, 5000);
+        }
+    }
+
+    timerId = window.setTimeout(pollGenerationStatus, 3000);
+})();
+</script>
+{% endif %}
+{% endblock %}

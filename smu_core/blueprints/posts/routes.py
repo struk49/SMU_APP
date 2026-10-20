@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import datetime
 
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from smu_core.extensions import db
@@ -995,6 +995,34 @@ def view_post(post_id):
     )
 
 
+@login_required
+@subscription_required
+def carousel_generation_status(post_id):
+    post = Post.query.filter_by(id=post_id, user_id=current_user.id).first_or_404()
+    carousel_posts = (
+        _post_detail_helper("get_ordered_carousel_posts")(
+            post.group_id,
+            user_id=current_user.id,
+        )
+        if post.group_id
+        else [post]
+    )
+    slides = [
+        {
+            "id": item.id,
+            "status": item.status,
+            "file_url": item.file_url if item.status == "draft" else None,
+        }
+        for item in carousel_posts
+    ]
+    response = jsonify(
+        processing=any(item["status"] == "generating" for item in slides),
+        slides=slides,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 def _zernio_config():
     return {
         "api_key": current_app.config.get("ZERNIO_API_KEY", ""),
@@ -1465,6 +1493,11 @@ def register_routes(state):
         methods=["POST"],
     )
     state.app.add_url_rule("/post/<int:post_id>", "view_post", view_post)
+    state.app.add_url_rule(
+        "/post/<int:post_id>/generation-status",
+        "carousel_generation_status",
+        carousel_generation_status,
+    )
     state.app.add_url_rule(
         "/edit-post/<int:post_id>",
         "edit_post",
