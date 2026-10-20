@@ -508,7 +508,7 @@ def _copy_word_count(value):
 
 
 SEMANTIC_DOMAIN_TERMS = (
-    ("restaurant", ("restaurant", "menu", "waiter", "server", "food", "drink", "water", "bill", "dining", "order")),
+    ("restaurant", ("restaurant", "menu", "waiter", "server", "food", "bill", "dining")),
     ("travel", ("travel", "airport", "hotel", "train", "journey", "trip", "ticket", "station")),
     ("language_learning", ("polish", "phrase", "translation", "vocabulary", "language", "speak", "conversation")),
     ("everyday_conversation", ("everyday", "greeting", "politeness", "useful question", "real conversation")),
@@ -677,10 +677,10 @@ def _slide_grounding(slide, campaign_grounding, role):
         environment = "a believable home or property setting"
         environment_category = "home"
     else:
-        purpose = "supporting the current slide within the current semantic domain"
-        subject = f"a concrete subject belonging to the current {campaign_grounding['semantic_domain']} domain"
-        action = "the subject performs one clear action that supports the current slide meaning"
-        environment = f"a recognizable {campaign_grounding['semantic_domain']} environment"
+        purpose = "explaining the current slide's specific practical point"
+        subject = "the specific subject defined by the current slide"
+        action = "visually demonstrate the current slide's specific practical point"
+        environment = "a credible setting appropriate to the current slide's specific subject"
         environment_category = "neutral"
     if role == "cover":
         purpose = f"introducing {campaign_grounding['campaign_subject']}"
@@ -1760,6 +1760,9 @@ Create one {'complete designed slide' if provider_renders_text else 'text-free a
 
 0. AUTHORITY
 - Shared direction is subordinate subject/mood context.
+- The current slide's authorized title, body, and visual direction define its subject.
+  Artwork must directly explain that slide-specific subject. Campaign context and scene
+  variety may support it but must never replace it with another topic or setting.
 - `user_selection` style/palette is authoritative; `campaign_default` applies only
   when no explicit choice exists.
 - {authority_rule} Shared context cannot authorize additional text, claims, logos,

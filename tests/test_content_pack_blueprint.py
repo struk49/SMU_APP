@@ -2330,6 +2330,118 @@ def test_everyday_polish_campaign_keeps_restaurant_at_slide_scope():
     ]
 
 
+@pytest.mark.parametrize(
+    ("title", "body", "visual"),
+    [
+        (
+            "Choose Compact Containers",
+            "Match pot size to space; self-watering helps keep herbs hydrated.",
+            None,
+        ),
+        (
+            "Make the handover clear",
+            "Give the next owner the context and next action.",
+            "A focused project handover",
+        ),
+    ],
+    ids=("stored_gardening_slide", "unrelated_business_slide"),
+)
+def test_provider_complete_scene_stays_grounded_in_each_slide_subject(
+    title, body, visual
+):
+    slide = story_slide(title, body, visual=visual)
+    direction = content_pack_routes._campaign_art_direction(
+        "realistic", [slide], "photorealistic", "soft_pastel"
+    )
+    grounding = content_pack_routes._campaign_grounding([slide], direction)
+    slide_grounding = content_pack_routes._slide_grounding(slide, grounding, "info")
+    presentation = {
+        "typography_presentation": "editorial",
+    }
+    resolved = content_pack_routes.resolve_visual_capabilities(
+        template_id="content_pack_editorial",
+        artwork_style_id="photorealistic",
+        composition_id="asymmetric_split",
+        palette_id="soft_pastel",
+        image_operation="generate_new",
+        presentation_treatment_id="photography",
+    )
+    scene_prompt = content_pack_routes._build_slide_background_prompt(
+        "Generated IMAGE_PROMPT context",
+        1,
+        visual=visual,
+        layout_role="info",
+        layout_variant="split_right",
+        visual_treatment="illustration",
+        semantic_text=f"{title} {body}",
+        visual_weight="medium",
+        metaphor_family="distinct_object",
+        campaign_direction=direction,
+        campaign_grounding=grounding,
+        slide_grounding=slide_grounding,
+        provider_renders_text=True,
+    )
+    prompt = content_pack_routes._build_provider_complete_image_prompt(
+        scene_prompt,
+        slide,
+        presentation,
+        resolved,
+    )
+
+    assert grounding["semantic_domain"] == "general"
+    assert slide_grounding == {
+        "slide_purpose": "explaining the current slide's specific practical point",
+        "scene_subject": "the specific subject defined by the current slide",
+        "scene_action": "visually demonstrate the current slide's specific practical point",
+        "scene_environment": (
+            "a credible setting appropriate to the current slide's specific subject"
+        ),
+        "environment_category": "neutral",
+    }
+    assert "restaurant" not in prompt.lower()
+    assert "server brings a glass and carafe" not in prompt.lower()
+    assert "authorized title, body, and visual direction define its subject" in prompt
+    assert "selected visual treatment: photography" in prompt
+    assert "artwork style: photorealistic" in prompt
+    assert prompt.count(title) == 1
+    assert prompt.count(body) == 1
+
+
+@pytest.mark.parametrize(
+    ("title", "visual", "expected_environment", "expects_restaurant"),
+    [
+        ("Water your herbs.", "Watering compact herb pots", "neutral", False),
+        (
+            "Drinking water during exercise.",
+            "An athlete hydrating during a workout",
+            "outdoors",
+            False,
+        ),
+        (
+            "Ordering water from a restaurant server.",
+            "A server bringing water to a restaurant table",
+            "restaurant",
+            True,
+        ),
+    ],
+)
+def test_water_requires_restaurant_context_before_restaurant_grounding(
+    title, visual, expected_environment, expects_restaurant
+):
+    slide = story_slide(title, visual=visual)
+    direction = content_pack_routes._campaign_art_direction(
+        "realistic", [slide], "photorealistic", "soft_pastel"
+    )
+    grounding = content_pack_routes._campaign_grounding([slide], direction)
+    slide_grounding = content_pack_routes._slide_grounding(slide, grounding, "info")
+
+    assert slide_grounding["environment_category"] == expected_environment
+    assert ("restaurant" in grounding["semantic_domain"]) is expects_restaurant
+    assert (
+        "restaurant" in " ".join(slide_grounding.values()).lower()
+    ) is expects_restaurant
+
+
 def test_restaurant_and_everyday_campaigns_are_order_independent():
     def grounding_for(value):
         slides = content_pack_routes._parse_content_pack_carousel_slides(value)
