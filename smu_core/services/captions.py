@@ -1,6 +1,7 @@
 import json
 import re
 
+from smu_core.services.text_models import text_generation_options
 from smu_core.extensions import db
 from smu_core.models import BrandBrief, PostRevision
 
@@ -137,7 +138,7 @@ Rules:
 """
 
     response = openai_client.responses.create(
-        model="gpt-4.1-mini",
+        **text_generation_options(),
         input=prompt,
     )
 
@@ -201,7 +202,7 @@ IMPROVEMENTS:
 """
 
     response = openai_client.responses.create(
-        model="gpt-4.1-mini",
+        **text_generation_options(),
         input=prompt,
     )
 

@@ -65,8 +65,8 @@ def test_tiktok_service_returns_validated_structured_result():
     assert result.hashtags == "#one #two"
     assert len(client.calls) == 1
     call = client.calls[0]
-    assert call["model"] == "gpt-4.1-mini"
-    assert set(call.keys()) == {"model", "input", "text"}
+    assert call["model"] == "gpt-6-luna"
+    assert set(call.keys()) == {"model", "reasoning", "input", "text"}
     assert "/human" not in call["input"]
     assert call["text"]["format"] == {
         "type": "json_schema",
@@ -227,7 +227,7 @@ def test_tiktok_service_logs_request_metadata_without_sensitive_text(caplog):
     assert completed
     assert started[0]["transcript_length"] == len("Raw transcript fixture with private detail")
     assert started[0]["brand_context_configured"] is True
-    assert started[0]["model"] == "gpt-4.1-mini"
+    assert started[0]["model"] == "gpt-6-luna"
     assert started[0]["generation_version"] == "structured-v1"
     assert completed[0]["returned_object_type"] == "TikTokRepurposeResult"
     assert completed[0]["returned_field_names"] == list(

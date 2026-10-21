@@ -229,7 +229,7 @@ def test_structure_repair_uses_same_text_model_and_preserves_source_copy_in_prom
 
     assert result == repaired
     assert len(client.calls) == 1
-    assert client.calls[0]["model"] == "gpt-4.1-mini"
+    assert client.calls[0]["model"] == "gpt-6-luna"
     assert client.calls[0]["timeout"] == content.CONTENT_PACK_TIMEOUT_SECONDS
     assert "Return ONLY `Slide N:` blocks" in client.calls[0]["input"]
     assert "Dziękuję." in client.calls[0]["input"]
@@ -557,8 +557,8 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
     ) == VALID_CONTENT_PACK_OUTPUT
     call = client.calls[0]
 
-    assert call["model"] == "gpt-4.1-mini"
-    assert set(call.keys()) == {"model", "input", "timeout"}
+    assert call["model"] == "gpt-6-luna"
+    assert set(call.keys()) == {"model", "reasoning", "input", "timeout"}
     assert call["timeout"] == content.CONTENT_PACK_TIMEOUT_SECONDS
     assert call["input"].count("/human") == 1
     assert "Brand Brief:\nBrand context" in call["input"]

@@ -329,7 +329,7 @@ def test_rewrite_caption_actions_preserve_prompt_mapping(app, module):
             openai_client=fake_client,
         ) == "Rewritten caption"
         call = fake_client.responses.calls[-1]
-        assert call["model"] == "gpt-4.1-mini"
+        assert call["model"] == "gpt-6-luna"
         assert call["input"].count("/human") == 1
         assert call["input"].count(instruction) == 1
         assert "Current Caption:\nCaption" in call["input"]
@@ -383,7 +383,7 @@ def test_grade_post_with_ai_preserves_request_shape(app, module):
     call = fake_client.responses.calls[0]
 
     assert result == "OVERALL_SCORE: 7/10"
-    assert call["model"] == "gpt-4.1-mini"
+    assert call["model"] == "gpt-6-luna"
     assert "Post Caption:\nCaption" in call["input"]
     assert "Platform:\ninstagram" in call["input"]
     assert "Post Type:\ncarousel" in call["input"]

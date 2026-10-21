@@ -686,7 +686,7 @@ def test_real_app_wiring_uses_one_external_fallback_after_deterministic_decline(
         "timeout": 35.0,
         "max_retries": 0,
     }]
-    assert openai_client.calls[0]["model"] == "gpt-4.1-mini"
+    assert openai_client.calls[0]["model"] == "gpt-6-luna"
     assert len(posts) == 4
     assert "stage=deterministic_repair result=declined" in caplog.text
     assert "decline_reason=secondary_field_occupied" in caplog.text
