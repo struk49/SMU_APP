@@ -11,8 +11,14 @@ if (-not (Test-Path -LiteralPath $PythonPath)) {
     throw "Python executable not found: $PythonPath"
 }
 
+# This subprocess imports no app and initializes no database. Validate the same
+# inherited environment/.env precedence used by both children before either starts.
+& $PythonPath (Join-Path $projectRoot "local_carousel_worker.py") --check-config
+if ($LASTEXITCODE -ne 0) {
+    throw "Local startup configuration rejected; no application processes started."
+}
+
 New-Item -ItemType Directory -Force -Path (Join-Path $projectRoot "logs") | Out-Null
-$env:SMU_SCHEDULER_ENABLED = "false"
 
 $worker = Start-Process `
     -FilePath $PythonPath `

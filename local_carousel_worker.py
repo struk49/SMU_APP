@@ -2,15 +2,11 @@
 
 import os
 import signal
+import sys
 import threading
 import uuid
 
-from app import app, generate_pending_carousel_images
-from smu_core.extensions import db
-from smu_core.models.scheduler_lease import SchedulerLease
-from smu_core.services.local_carousel_worker import run_local_carousel_worker
-from smu_core.services.scheduler_lease import SchedulerLeaseCoordinator
-
+from local_startup import LocalStartupError, prepare_local_environment
 
 stop_event = threading.Event()
 
@@ -20,13 +16,21 @@ def request_stop(signum, frame):
 
 
 def main():
-    database_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-    if not database_uri.startswith("sqlite:"):
-        raise RuntimeError("The local carousel worker requires an isolated SQLite database.")
-    if app.config.get("SMU_SCHEDULER_ENABLED", True):
-        raise RuntimeError(
-            "Set SMU_SCHEDULER_ENABLED=false before starting the local image worker."
-        )
+    try:
+        prepare_local_environment()
+    except LocalStartupError as exc:
+        raise SystemExit(str(exc)) from None
+    if sys.argv[1:] == ["--check-config"]:
+        return
+    if sys.argv[1:]:
+        raise SystemExit("Unsupported local worker arguments.")
+
+    # Importing app initializes the database: all safety checks must precede it.
+    from app import app, generate_pending_carousel_images
+    from smu_core.extensions import db
+    from smu_core.models.scheduler_lease import SchedulerLease
+    from smu_core.services.local_carousel_worker import run_local_carousel_worker
+    from smu_core.services.scheduler_lease import SchedulerLeaseCoordinator
 
     signal.signal(signal.SIGTERM, request_stop)
     signal.signal(signal.SIGINT, request_stop)
