@@ -1,4 +1,5 @@
 from pathlib import Path
+from content_pack_provider_fixtures import provider_json_for_pack
 from contextlib import contextmanager
 from datetime import timedelta
 import logging
@@ -147,7 +148,7 @@ class FakeContentPackProvider:
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
-        return type("Response", (), {"output_text": self.output_text, "status": self.status})()
+        return type("Response", (), {"output_text": provider_json_for_pack(self.output_text), "status": self.status})()
 
 LIVE_COMPACT_LANGUAGE_CAROUSEL = """Slide 1: Speak Polish with confidence — Three phrases for everyday conversations
 Slide 2: Start a conversation — Cześć, jak się masz? — Hi, how are you?
@@ -2022,7 +2023,7 @@ def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(
     assert b"provider_timeout" not in response.data
 
 
-@pytest.mark.parametrize("failure", ["saved_prose", "count", "copy_changed", "copy_missing", "pair_multiplicity", "malformed", "truncated", "partial_status"])
+@pytest.mark.parametrize("failure", ["saved_prose", "saved_duplicate", "count", "copy_changed", "copy_missing", "pair_multiplicity", "malformed", "truncated", "partial_status"])
 def test_production_content_pack_path_rejects_saved_prose_and_preserves_input(
     client, app, module, monkeypatch, failure
 ):
@@ -2033,6 +2034,8 @@ def test_production_content_pack_path_rejects_saved_prose_and_preserves_input(
     output = VALID_GENERATED_CUSTOMER_ENQUIRIES_PACK
     if failure == "saved_prose":
         output = saved_output.read_text(encoding="utf-8")
+    elif failure == "saved_duplicate":
+        output = (Path(__file__).parent / "fixtures" / "content_pack_luna_duplicate.txt").read_text(encoding="utf-8")
     elif failure == "count":
         source = source.replace("exactly three", "exactly four")
     elif failure == "copy_changed":
@@ -2144,7 +2147,7 @@ def test_valid_generated_pack_reaches_normal_carousel_route_without_manual_editi
 
     assert generated.status_code == 200
     context = rendered[-1][1]
-    assert context["content_pack_result"] == output
+    assert context["content_pack_result"] == output.strip()
     assert context["carousel_intent_token"]
     assert len(provider.calls) == 1
 

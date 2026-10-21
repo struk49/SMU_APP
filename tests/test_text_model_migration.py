@@ -1,6 +1,7 @@
 """Exercise every production text call through the installed SDK with no network."""
 
 import json
+from content_pack_provider_fixtures import provider_json_for_pack
 from types import SimpleNamespace
 
 import httpx
@@ -74,7 +75,7 @@ def test_all_text_paths_use_central_selection_and_compatible_sdk_requests(app, m
         assert not {"temperature", "top_p", "max_tokens", "reasoning_effort"}.intersection(payload)
         if path in {"pack", "repair"}:
             assert request.extensions["timeout"]["read"] == content.CONTENT_PACK_TIMEOUT_SECONDS
-        return httpx.Response(200, json=sdk_response(output, model))
+        return httpx.Response(200, json=sdk_response(provider_json_for_pack(output) if path == "pack" else output, model))
 
     with OpenAI(api_key="test-key", max_retries=0, http_client=httpx.Client(transport=httpx.MockTransport(handle))) as sdk:
         result = invoke(path, sdk, monkeypatch)
@@ -82,6 +83,10 @@ def test_all_text_paths_use_central_selection_and_compatible_sdk_requests(app, m
     if path == "tiktok":
         assert result == tiktok.TikTokRepurposeResult(**TIKTOK_PAYLOAD)
         assert calls[0]["text"]["format"]["schema"] == tiktok.REPURPOSE_RESPONSE_SCHEMA
+        assert calls[0]["text"]["format"]["strict"] is True
+    elif path == "pack":
+        assert result == output
+        assert calls[0]["text"]["format"]["name"] == "content_pack"
         assert calls[0]["text"]["format"]["strict"] is True
     else:
         assert result == output

@@ -1,5 +1,7 @@
 import logging
 
+from content_pack_provider_fixtures import provider_json_for_pack
+
 import httpx
 import pytest
 
@@ -99,7 +101,7 @@ class FakeOpenAIClient:
     def create(self, **kwargs):
         self.calls.append(kwargs)
 
-        return type("Response", (), {"output_text": self.output_text})()
+        return type("Response", (), {"output_text": provider_json_for_pack(self.output_text) if kwargs.get("text", {}).get("format", {}).get("name") == "content_pack" else self.output_text, "status": "completed"})()
 
 
 def caption_entry(text, ext="vtt"):
@@ -558,13 +560,13 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
     call = client.calls[0]
 
     assert call["model"] == "gpt-6-luna"
-    assert set(call.keys()) == {"model", "reasoning", "input", "timeout"}
+    assert set(call.keys()) == {"model", "reasoning", "input", "text", "timeout"}
     assert call["timeout"] == content.CONTENT_PACK_TIMEOUT_SECONDS
     assert call["input"].count("/human") == 1
     assert "Brand Brief:\nBrand context" in call["input"]
     assert "--- BEGIN SOURCE MATERIAL ---\nTranscript text" in call["input"]
-    assert "INSTAGRAM_CAPTION:" in call["input"]
-    assert "REDDIT_POST:" in call["input"]
+    assert "INSTAGRAM_CAPTION" in call["text"]["format"]["schema"]["properties"]
+    assert "REDDIT_POST" in call["text"]["format"]["schema"]["properties"]
     assert "ONLY when the source genuinely teaches vocabulary" in call["input"]
     assert "rather than combining both into one field" in " ".join(
         call["input"].split()
@@ -1184,7 +1186,7 @@ def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
     normalized_prompt = " ".join(prompt.split())
 
     assert "ONE PRIMARY IDEA PER SLIDE" in prompt
-    assert "use 2 to 6 `Slide N:` structural blocks" in prompt
+    assert "use 2 to 6 slide objects" in prompt
     assert "without filler" in prompt
     assert "Image copy must be fast to understand, minimal, swipeable" in prompt
     assert "Caption copy carries context, explanation, story" in prompt
@@ -1197,8 +1199,8 @@ def test_content_pack_prompt_separates_carousel_copy_from_caption_copy():
     assert "Visual describes only a simple, relevant, text-free scene" in prompt
     assert "Never put exact overlay copy in Visual" in prompt
     assert "do not use emoji, decorative symbols, or icon glyphs" in prompt
-    assert "Put every `Slide N:` marker on its own line" in prompt
-    assert "Never place customer-facing copy after the marker" in normalized_prompt
+    assert "Return structured field values, not labelled lines" in prompt
+    assert "Never embed slide markers in copy" in normalized_prompt
     assert "Slide N: Heading — Phrase — Translation" in prompt
     assert "`Title: Campaign-level cover heading`" in prompt
     assert "`Subtitle: Compact campaign context`" in prompt
@@ -1285,7 +1287,7 @@ def test_content_pack_prompt_enforces_semantic_flow_and_copy_limits():
     )
     prompt = " ".join(client.calls[0]["input"].split())
 
-    assert "use 2 to 6 `Slide N:` structural blocks" in prompt
+    assert "use 2 to 6 slide objects" in prompt
     assert "Body is normally one concise sentence" in prompt
     assert "Never add a CTA or new claim merely because a slide is last" in prompt
     assert "Adapt story flow to the user's requested order" in prompt
