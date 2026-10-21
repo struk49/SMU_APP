@@ -2032,6 +2032,8 @@ def _enforce_carousel_request_intent(slides, intent):
 @login_required
 @subscription_required
 def content_pack():
+    source_input = ""
+    source_type = "text"
     source_text = ""
     content_pack_result = None
     carousel_intent_token = None
@@ -2151,15 +2153,19 @@ def content_pack():
                 ),
             }.get(exc.reason, "Your explicit carousel requirements could not be verified.")
             flash(message, "danger")
-        except ContentPackGenerationError:
+        except ContentPackGenerationError as exc:
             if reserved_content_pack_credit:
                 _content_pack_helper("release_content_pack_credits")(
                     current_user._get_current_object()
                 )
-            flash(
-                "We couldn't generate your Content Pack. Please try again.",
-                "danger",
+            message = (
+                "The generated Content Pack was incomplete or its carousel was not "
+                "structured as labelled slides. Your input has been preserved; "
+                "please try generating it again."
+                if exc.reason == "invalid_output"
+                else "We couldn't generate your Content Pack. Please try again."
             )
+            flash(message, "danger")
         except Exception as e:
             if reserved_content_pack_credit:
                 _content_pack_helper("release_content_pack_credits")(
@@ -2170,6 +2176,8 @@ def content_pack():
 
     return render_template(
         "content_pack.html",
+        source_input=source_input,
+        source_type=source_type,
         source_text=source_text,
         content_pack_result=content_pack_result,
         carousel_intent_token=carousel_intent_token,

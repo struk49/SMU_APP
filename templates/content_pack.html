@@ -37,8 +37,8 @@
                 <label class="form-label fw-semibold">Source Type</label>
 
                 <select name="source_type" class="form-select">
-                    <option value="text">Topic / Text</option>
-                    <option value="tiktok">TikTok URL</option>
+                    <option value="text" {% if source_type != "tiktok" %}selected{% endif %}>Topic / Text</option>
+                    <option value="tiktok" {% if source_type == "tiktok" %}selected{% endif %}>TikTok URL</option>
                 </select>
                 <div class="form-text">
                     TikTok URL extraction is currently in beta and availability may vary by video.
@@ -56,7 +56,7 @@
                     rows="5"
                     placeholder="Paste a topic, idea, transcript or source text..."
                     required
-                ></textarea>
+                >{{ source_input|default("") }}</textarea>
             </div>
 
             <button type="submit" class="btn btn-primary btn-lg w-100">

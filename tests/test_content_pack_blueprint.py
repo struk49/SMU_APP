@@ -1,3 +1,4 @@
+from pathlib import Path
 from contextlib import contextmanager
 from datetime import timedelta
 import logging
@@ -11,7 +12,7 @@ import app as smu_app
 from conftest import create_user, login
 from smu_core.models import BrandBrief, Post
 from smu_core.blueprints.content_pack import routes as content_pack_routes
-from smu_core.services import carousel_generation
+from smu_core.services import carousel_generation, content as content_service
 from smu_core.services.content import (
     CarouselStructureRepairError,
     ContentPackGenerationError,
@@ -76,6 +77,77 @@ Generic people-at-laptops office photography.
 HASHTAGS:
 #CustomerEnquiries
 """
+
+VALID_GENERATED_CUSTOMER_ENQUIRIES_PACK = """INSTAGRAM_CAPTION:
+Clearer customer enquiries start with keeping messages together and setting expectations.
+
+FACEBOOK_POST:
+Keep enquiries together and tell customers what happens next.
+
+CAROUSEL_IDEA:
+Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+Visual: An organised message flow
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+Visual: Messages collected into one organised inbox
+Slide 3:
+Title: Make the next step clear
+Body: Tell customers what happens next and when to expect a reply.
+Visual: A clear next-step process
+
+PINTEREST_PIN_TITLE:
+Clearer customer enquiries
+
+PINTEREST_PIN_DESCRIPTION:
+Three habits for clearer customer communication.
+
+REDDIT_POST:
+How do you keep customer enquiries clear and organised?
+
+X_POST:
+Keep enquiries together and make the next step clear.
+
+LINKEDIN_POST:
+Clear customer communication starts with an organised process.
+
+IMAGE_PROMPT:
+Clean editorial imagery grounded in each slide's message.
+
+HASHTAGS:
+#CustomerEnquiries
+"""
+
+CUSTOMER_ENQUIRIES_SOURCE = """Create exactly three carousel slides.
+
+Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+
+Slide 3:
+Title: Make the next step clear
+Body: Tell customers what happens next and when to expect a reply.
+
+Requirements:
+- Preserve the supplied copy exactly."""
+
+
+class FakeContentPackProvider:
+    def __init__(self, output_text, status="completed"):
+        self.status = status
+        self.output_text = output_text
+        self.calls = []
+        self.responses = self
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return type("Response", (), {"output_text": self.output_text, "status": self.status})()
 
 LIVE_COMPACT_LANGUAGE_CAROUSEL = """Slide 1: Speak Polish with confidence — Three phrases for everyday conversations
 Slide 2: Start a conversation — Cześć, jak się masz? — Hi, how are you?
@@ -1948,6 +2020,162 @@ def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(
     assert released == [user.id]
     assert b"We couldn&#39;t generate your Content Pack. Please try again." in response.data
     assert b"provider_timeout" not in response.data
+
+
+@pytest.mark.parametrize("failure", ["saved_prose", "count", "copy_changed", "copy_missing", "pair_multiplicity", "malformed", "truncated", "partial_status"])
+def test_production_content_pack_path_rejects_saved_prose_and_preserves_input(
+    client, app, module, monkeypatch, failure
+):
+    user = create_user(module, email="prose-output@example.com")
+    login(client, user)
+    saved_output = Path(__file__).parent / "fixtures" / "content_pack_prose_failure.txt"
+    source = CUSTOMER_ENQUIRIES_SOURCE
+    output = VALID_GENERATED_CUSTOMER_ENQUIRIES_PACK
+    if failure == "saved_prose":
+        output = saved_output.read_text(encoding="utf-8")
+    elif failure == "count":
+        source = source.replace("exactly three", "exactly four")
+    elif failure == "copy_changed":
+        output = output.replace("Use one place", "Use several places")
+    elif failure == "copy_missing":
+        output = output.replace("Body: Use one place to track messages and follow-ups.", "")
+    elif failure == "pair_multiplicity":
+        source = "Create exactly three slides.\nSlide 2:\nPhrase: Cześć\nTranslation: Hi\nSlide 3:\nPhrase: Cześć\nTranslation: Hi"
+        output = output.replace("Body: Use one place to track messages and follow-ups.", "Phrase: Cześć\nTranslation: Hi")
+    elif failure == "malformed":
+        output = output.replace("Slide 2:", "Slide 4:")
+    elif failure == "truncated":
+        output = output[:output.index("HASHTAGS:")]
+    provider = FakeContentPackProvider(output, "incomplete" if failure == "partial_status" else "completed")
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid output must fail before image credits or provider calls")
+    set_content_pack_helper(app, monkeypatch, "reserve_ai_image_credits", forbidden)
+    monkeypatch.setattr(carousel_generation, "generate_pending_carousel_images", forbidden)
+    released = []
+    release_credit = content_pack_routes._content_pack_helper("release_content_pack_credits")
+
+    def release(current_user):
+        released.append(current_user.id)
+        release_credit(current_user)
+
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "release_content_pack_credits",
+        release,
+    )
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda source_text, brand_context, **kwargs: content_service.generate_content_pack(
+            source_text,
+            brand_context,
+            openai_api_key="test-key",
+            openai_client=provider,
+            **kwargs,
+        ),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={"source_type": "text", "source_input": source},
+    )
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+    assert released == [user.id]
+    usage = module.UserUsage.query.filter_by(user_id=user.id).one()
+    assert usage.content_packs_used == 0
+    assert usage.ai_images_used == 0
+    assert "was incomplete or its carousel was not structured" in page
+    input_match = re.search(r'<textarea\s+name="source_input"[^>]*>(.*?)</textarea>', page, re.DOTALL)
+    assert input_match
+    from html import unescape
+    assert unescape(input_match.group(1)) == source
+    assert module.Post.query.count() == 0
+    assert 'name="content_pack_result"' not in page
+
+
+@pytest.mark.parametrize("topic", ["business", "gardening"])
+def test_valid_generated_pack_reaches_normal_carousel_route_without_manual_editing(
+    client, app, module, monkeypatch, topic
+):
+    user = create_user(module, email="valid-generated-pack@example.com")
+    login(client, user)
+    output = VALID_GENERATED_CUSTOMER_ENQUIRIES_PACK
+    source = CUSTOMER_ENQUIRIES_SOURCE
+    if topic == "gardening":
+        for old, new in (
+            ("Make customer enquiries easier", "Grow herbs in a small space"),
+            ("Three habits for clearer communication", "Practical container gardening"),
+            ("Keep enquiries together", "Choose a suitable container"),
+            ("Use one place to track messages and follow-ups.", "Use a pot with drainage holes."),
+            ("Make the next step clear", "Check before watering"),
+            ("Tell customers what happens next and when to expect a reply.", "Water when the soil feels dry."),
+        ):
+            output = output.replace(old, new)
+            source = source.replace(old, new)
+    provider = FakeContentPackProvider(output)
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_content_pack_credits", lambda current_user: True
+    )
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda source_text, brand_context, **kwargs: content_service.generate_content_pack(
+            source_text,
+            brand_context,
+            openai_api_key="test-key",
+            openai_client=provider,
+            **kwargs,
+        ),
+    )
+
+    with captured_templates(app) as rendered:
+        generated = client.post(
+            "/content-pack",
+            data={"source_type": "text", "source_input": source},
+        )
+
+    assert generated.status_code == 200
+    context = rendered[-1][1]
+    assert context["content_pack_result"] == output
+    assert context["carousel_intent_token"]
+    assert len(provider.calls) == 1
+
+    reserve_image_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_image_calls.append(1) or True,
+    )
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    created = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": context["content_pack_result"],
+            "carousel_intent_token": context["carousel_intent_token"],
+            "template_id": "content_pack_editorial",
+            "presentation_treatment": "photography",
+            "design_manager_style": "photorealistic",
+            "colour_theme": "monochrome",
+        },
+    )
+
+    assert created.status_code == 302
+    assert reserve_image_calls == [1]
+    assert module.Post.query.count() == 3
 
 
 def test_content_pack_tiktok_source_uses_transcript_helper(client, app, module, monkeypatch):

@@ -52,8 +52,46 @@ class FakeResponse:
         return None
 
 
+VALID_CONTENT_PACK_OUTPUT = """INSTAGRAM_CAPTION:
+Useful caption.
+
+FACEBOOK_POST:
+Useful Facebook post.
+
+CAROUSEL_IDEA:
+Slide 1:
+Title: Clear cover
+Subtitle: Useful context
+Visual: One relevant focal subject
+Slide 2:
+Title: Practical next step
+Body: One concise supporting point.
+Visual: One relevant supporting scene
+
+PINTEREST_PIN_TITLE:
+Useful pin title
+
+PINTEREST_PIN_DESCRIPTION:
+Useful pin description.
+
+REDDIT_POST:
+Useful discussion post.
+
+X_POST:
+Useful short post.
+
+LINKEDIN_POST:
+Useful professional post.
+
+IMAGE_PROMPT:
+One coherent text-free visual direction.
+
+HASHTAGS:
+#Useful"""
+
+
 class FakeOpenAIClient:
-    def __init__(self, output_text="PACK OUTPUT"):
+    def __init__(self, output_text=VALID_CONTENT_PACK_OUTPUT):
         self.calls = []
         self.responses = self
         self.output_text = output_text
@@ -516,7 +554,7 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
         "Brand context",
         openai_api_key="key",
         openai_client=client,
-    ) == "PACK OUTPUT"
+    ) == VALID_CONTENT_PACK_OUTPUT
     call = client.calls[0]
 
     assert call["model"] == "gpt-4.1-mini"
@@ -542,6 +580,184 @@ def test_generate_content_pack_prompt_model_and_missing_key_behaviour():
             openai_api_key="",
             openai_client=client,
         )
+
+
+def content_pack_with_carousel(carousel):
+    return VALID_CONTENT_PACK_OUTPUT.replace(
+        "Slide 1:\nTitle: Clear cover\nSubtitle: Useful context\n"
+        "Visual: One relevant focal subject\n"
+        "Slide 2:\nTitle: Practical next step\n"
+        "Body: One concise supporting point.\n"
+        "Visual: One relevant supporting scene",
+        carousel,
+    )
+
+
+SAVED_PROSE_ONLY_CAROUSEL = (
+    "A concise visual story showcasing how small businesses can improve customer "
+    "enquiry management through clarity. Starting with an inviting cover that "
+    "promises easier enquiries, followed by a focus on tracking all communication "
+    "centrally, and ending with highlighting the importance of clear next steps and "
+    "timing for customer replies. Each slide employs editorial photography "
+    "emphasizing organized workspaces and subtle visual metaphors around clarity "
+    "and connection."
+)
+
+
+def test_generate_content_pack_rejects_saved_prose_only_carousel_response():
+    client = FakeOpenAIClient(content_pack_with_carousel(SAVED_PROSE_ONLY_CAROUSEL))
+
+    with pytest.raises(content.ContentPackGenerationError) as raised:
+        content.generate_content_pack(
+            "Customer enquiry source",
+            openai_api_key="key",
+            openai_client=client,
+        )
+
+    assert raised.value.reason == "invalid_output"
+    assert len(client.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "carousel",
+    [
+        """Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+Visual: An organised message flow
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+Visual: Related enquiries grouped clearly
+Slide 3:
+Title: Make the next step clear
+Body: Tell customers what happens next and when to expect a reply.
+Visual: A clear next-step process""",
+        """Slide 1:
+Title: Grow herbs in a small space
+Subtitle: Practical container-growing guidance
+Visual: Compact herb containers
+Slide 2:
+Title: Water your herbs
+Body: Check the soil before watering.
+Visual: A hand watering compact herb pots""",
+    ],
+    ids=("general_business", "gardening"),
+)
+def test_generate_content_pack_accepts_labelled_general_carousels(carousel):
+    output = content_pack_with_carousel(carousel)
+    client = FakeOpenAIClient(output)
+
+    assert content.generate_content_pack(
+        "Source material",
+        openai_api_key="key",
+        openai_client=client,
+    ) == output
+    assert len(client.calls) == 1
+
+
+def test_generate_content_pack_rejects_explicit_count_mismatch():
+    source = "Create exactly three slides about customer enquiries."
+    intent = content.extract_explicit_carousel_intent(source)
+    client = FakeOpenAIClient()
+
+    with pytest.raises(content.ContentPackGenerationError) as raised:
+        content.generate_content_pack(
+            source,
+            carousel_intent=intent,
+            openai_api_key="key",
+            openai_client=client,
+        )
+
+    assert raised.value.reason == "invalid_output"
+    assert len(client.calls) == 1
+
+
+def test_generate_content_pack_rejects_changed_required_exact_copy():
+    source = """Create exactly two slides.
+Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+Requirements:
+- Preserve the supplied copy exactly."""
+    intent = content.extract_explicit_carousel_intent(source)
+    changed = VALID_CONTENT_PACK_OUTPUT.replace(
+        "Clear cover", "Make customer enquiries easier"
+    ).replace(
+        "Useful context", "Three habits for clearer communication"
+    ).replace(
+        "Practical next step", "Keep enquiries together"
+    ).replace(
+        "One concise supporting point.", "Use several places to track messages."
+    )
+
+    with pytest.raises(content.ContentPackGenerationError) as raised:
+        content.generate_content_pack(
+            source,
+            carousel_intent=intent,
+            openai_api_key="key",
+            openai_client=FakeOpenAIClient(changed),
+        )
+
+    assert raised.value.reason == "invalid_output"
+
+
+def test_generate_content_pack_rejects_missing_or_changed_required_phrase_pairs():
+    intent = content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
+    output = content_pack_with_carousel("""Slide 1:
+Title: Speak Polish with confidence
+Subtitle: Three phrases for everyday conversations
+Slide 2:
+Title: Start a conversation
+Phrase: Cześć, jak się masz?
+Translation: Hello, how are you?
+Slide 3:
+Title: Keep the conversation going
+Phrase: Co lubisz robić?
+Translation: What do you like doing?
+Slide 4:
+Title: Ask for a little help
+Phrase: Czy możesz powtórzyć?
+Translation: Can you repeat that?""")
+
+    with pytest.raises(content.ContentPackGenerationError) as raised:
+        content.generate_content_pack(
+            EXPLICIT_FOUR_SLIDE_REQUEST,
+            carousel_intent=intent,
+            openai_api_key="key",
+            openai_client=FakeOpenAIClient(output),
+        )
+
+    assert raised.value.reason == "invalid_output"
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "",
+        "INSTAGRAM_CAPTION:\nOnly one section",
+        content_pack_with_carousel("Slide 1:\nTitle: Only one slide"),
+        content_pack_with_carousel(
+            "Slide 1:\nTitle: Cover\nSlide 3:\nTitle: Skipped marker"
+        ),
+        content_pack_with_carousel(
+            "Slide 1:\nTitle: Cover\nSlide 2:\nUnlabelled prose"
+        ),
+    ],
+    ids=("empty", "truncated", "one_slide", "marker_gap", "unlabelled"),
+)
+def test_generate_content_pack_rejects_malformed_or_incomplete_output(output):
+    with pytest.raises(content.ContentPackGenerationError) as raised:
+        content.generate_content_pack(
+            "Source material",
+            openai_api_key="key",
+            openai_client=FakeOpenAIClient(output),
+        )
+
+    assert raised.value.reason == "invalid_output"
 
 
 EXPLICIT_FOUR_SLIDE_REQUEST = """Create a four-slide educational Instagram carousel for Polish with Me about everyday Polish conversation for beginners.
@@ -601,6 +817,17 @@ Requirements:
 - Illustrations should support friendly everyday conversations and leave clear space for text.
 - Write a short caption about these exact three phrases. Do not mention phrases absent from the carousel.
 - In the generated CAROUSEL_IDEA section, use separate labelled slide blocks. Use Title:, Phrase: and Translation: on separate lines for teaching slides."""
+
+VALID_EXPLICIT_FOUR_SLIDE_OUTPUT = content_pack_with_carousel(
+    "Slide 1:\nTitle: Speak Polish with confidence\n"
+    "Subtitle: Three phrases for everyday conversations\n"
+    "Slide 2:\nTitle: Start a conversation\n"
+    "Phrase: Cześć, jak się masz?\nTranslation: Hi, how are you?\n"
+    "Slide 3:\nTitle: Keep the conversation going\n"
+    "Phrase: Co lubisz robić?\nTranslation: What do you like doing?\n"
+    "Slide 4:\nTitle: Ask for a little help\n"
+    "Phrase: Czy możesz powtórzyć?\nTranslation: Can you repeat that?",
+)
 
 
 def test_explicit_carousel_intent_extracts_only_count_and_structural_pairs():
@@ -807,7 +1034,7 @@ def test_explicit_carousel_intent_rejects_conflicts_and_malformed_pairs():
 
 
 def test_explicit_carousel_intent_is_authoritative_in_generation_prompt():
-    client = FakeOpenAIClient()
+    client = FakeOpenAIClient(VALID_EXPLICIT_FOUR_SLIDE_OUTPUT)
     intent = content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
 
     content.generate_content_pack(
@@ -828,7 +1055,7 @@ def test_explicit_carousel_intent_is_authoritative_in_generation_prompt():
 
 
 def test_generation_prompt_keeps_exact_polish_brief_authoritative_and_source_delimited():
-    client = FakeOpenAIClient()
+    client = FakeOpenAIClient(VALID_EXPLICIT_FOUR_SLIDE_OUTPUT)
     intent = content.extract_explicit_carousel_intent(EXPLICIT_FOUR_SLIDE_REQUEST)
 
     content.generate_content_pack(
@@ -1208,3 +1435,82 @@ HASHTAGS:
     assert "deterministic SMU canvas supplies all typography" in styled
     assert "- square 1:1 format" in styled
     assert content.get_placeholder_image_url() == "/static/generating-image.svg"
+
+
+@pytest.mark.parametrize("status", ["incomplete", "failed", "cancelled", "in_progress"])
+def test_partial_provider_response_is_not_success_even_with_all_sections(status):
+    client = FakeOpenAIClient()
+    original_create = client.create
+    def create(**kwargs):
+        response = original_create(**kwargs)
+        response.status = status
+        return response
+    client.create = create
+    with pytest.raises(content.ContentPackGenerationError, match="invalid_output"):
+        content.generate_content_pack("Source", openai_api_key="key", openai_client=client)
+    assert len(client.calls) == 1
+
+
+@pytest.mark.parametrize("actual_count", [0, 1, 2, 3])
+def test_required_pair_multiplicity_is_validated(actual_count):
+    pair = ("Dzień dobry", "Good morning")
+    request = content.build_content_pack_request(
+        source_type="text", source_text="Source", original_input="Source",
+        carousel_intent={"required_phrase_pairs": [pair, pair]},
+    )
+    carousel = "Slide 1:\nTitle: Cover\nSlide 2:\nTitle: Greeting"
+    carousel += ("\nPhrase: Dzień dobry\nTranslation: Good morning" * actual_count)
+    output = content_pack_with_carousel(carousel)
+    client = FakeOpenAIClient(output)
+    if actual_count == 2:
+        assert content.generate_content_pack(
+            "Source", generation_request=request, openai_api_key="key", openai_client=client
+        ) == output
+    else:
+        with pytest.raises(content.ContentPackGenerationError, match="invalid_output"):
+            content.generate_content_pack(
+                "Source", generation_request=request, openai_api_key="key", openai_client=client
+            )
+    assert len(client.calls) == 1
+
+
+@pytest.mark.parametrize("carousel", [
+    "Slide 1:\nTitle: Cover\nSlide 2:\nTitle: Test\nTranslation: English\nPhrase: Polish",
+    "Slide 1:\nTitle: Cover\nSlide 2:\nTitle: Test\nPhrase: One\nPhrase: Two\nTranslation: First\nTranslation: Second",
+    "Slide 1:\nTitle: Cover\nSlide 2:\nTitle: Test\nSlide 3: Inline boundary",
+    "\n".join(f"Slide {n}:\nTitle: Test" for n in range(1, 8)),
+])
+def test_generation_rejects_ambiguous_blocks_and_out_of_range(carousel):
+    with pytest.raises(content.ContentPackGenerationError, match="invalid_output"):
+        content.generate_content_pack(
+            "Source", openai_api_key="key",
+            openai_client=FakeOpenAIClient(content_pack_with_carousel(carousel)),
+        )
+
+
+def test_explicit_count_enforced_without_prebuilt_intent():
+    with pytest.raises(content.ContentPackGenerationError, match="invalid_output"):
+        content.generate_content_pack(
+            "Create exactly three slides.", openai_api_key="key", openai_client=FakeOpenAIClient()
+        )
+
+
+@pytest.mark.parametrize("directive", ["Preserve the supplied copy exactly.", "Keep this copy verbatim."])
+def test_exact_multiline_copy_is_preserved(directive):
+    source = "Slide 1:\nTitle: Clear cover\nSlide 2:\nBody: First line\nSecond line\nRequirements:\n" + directive
+    output = VALID_CONTENT_PACK_OUTPUT.replace("One concise supporting point.", "First line\nSecond line")
+    assert content.generate_content_pack(
+        source, openai_api_key="key", openai_client=FakeOpenAIClient(output)
+    ) == output
+    with pytest.raises(content.ContentPackGenerationError, match="invalid_output"):
+        content.generate_content_pack(
+            source, openai_api_key="key", openai_client=FakeOpenAIClient(output.replace("Second line", "Changed"))
+        )
+
+
+def test_exact_copy_cannot_reference_slide_zero():
+    source = "Slide 0:\nTitle: Practical next step\nRequirements:\nKeep copy verbatim."
+    with pytest.raises(content.ContentPackGenerationError, match="invalid_output"):
+        content.generate_content_pack(
+            source, openai_api_key="key", openai_client=FakeOpenAIClient()
+        )
