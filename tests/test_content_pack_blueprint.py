@@ -1,3 +1,5 @@
+from pathlib import Path
+from content_pack_provider_fixtures import provider_json_for_pack
 from contextlib import contextmanager
 from datetime import timedelta
 import logging
@@ -11,7 +13,7 @@ import app as smu_app
 from conftest import create_user, login
 from smu_core.models import BrandBrief, Post
 from smu_core.blueprints.content_pack import routes as content_pack_routes
-from smu_core.services import carousel_generation
+from smu_core.services import carousel_generation, content as content_service
 from smu_core.services.content import (
     CarouselStructureRepairError,
     ContentPackGenerationError,
@@ -52,6 +54,101 @@ Bright image direction
 HASHTAGS:
 #one #two
 """
+
+CUSTOMER_ENQUIRIES_CONTENT_PACK = """INSTAGRAM_CAPTION:
+Clearer customer enquiries start with keeping messages together and setting expectations.
+
+CAROUSEL_IDEA:
+Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+Visual: Generic office photography with a person using a laptop.
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+Visual: A person holding a phone beside a coffee cup.
+Slide 3:
+Title: Make the next step clear
+Body: Tell customers what happens next and when to expect a reply.
+Visual: A person replying from an office desk.
+
+IMAGE_PROMPT:
+Generic people-at-laptops office photography.
+
+HASHTAGS:
+#CustomerEnquiries
+"""
+
+VALID_GENERATED_CUSTOMER_ENQUIRIES_PACK = """INSTAGRAM_CAPTION:
+Clearer customer enquiries start with keeping messages together and setting expectations.
+
+FACEBOOK_POST:
+Keep enquiries together and tell customers what happens next.
+
+CAROUSEL_IDEA:
+Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+Visual: An organised message flow
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+Visual: Messages collected into one organised inbox
+Slide 3:
+Title: Make the next step clear
+Body: Tell customers what happens next and when to expect a reply.
+Visual: A clear next-step process
+
+PINTEREST_PIN_TITLE:
+Clearer customer enquiries
+
+PINTEREST_PIN_DESCRIPTION:
+Three habits for clearer customer communication.
+
+REDDIT_POST:
+How do you keep customer enquiries clear and organised?
+
+X_POST:
+Keep enquiries together and make the next step clear.
+
+LINKEDIN_POST:
+Clear customer communication starts with an organised process.
+
+IMAGE_PROMPT:
+Clean editorial imagery grounded in each slide's message.
+
+HASHTAGS:
+#CustomerEnquiries
+"""
+
+CUSTOMER_ENQUIRIES_SOURCE = """Create exactly three carousel slides.
+
+Slide 1:
+Title: Make customer enquiries easier
+Subtitle: Three habits for clearer communication
+
+Slide 2:
+Title: Keep enquiries together
+Body: Use one place to track messages and follow-ups.
+
+Slide 3:
+Title: Make the next step clear
+Body: Tell customers what happens next and when to expect a reply.
+
+Requirements:
+- Preserve the supplied copy exactly."""
+
+
+class FakeContentPackProvider:
+    def __init__(self, output_text, status="completed"):
+        self.status = status
+        self.output_text = output_text
+        self.calls = []
+        self.responses = self
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return type("Response", (), {"output_text": provider_json_for_pack(self.output_text), "status": self.status})()
 
 LIVE_COMPACT_LANGUAGE_CAROUSEL = """Slide 1: Speak Polish with confidence — Three phrases for everyday conversations
 Slide 2: Start a conversation — Cześć, jak się masz? — Hi, how are you?
@@ -590,7 +687,7 @@ def test_real_app_wiring_uses_one_external_fallback_after_deterministic_decline(
         "timeout": 35.0,
         "max_retries": 0,
     }]
-    assert openai_client.calls[0]["model"] == "gpt-4.1-mini"
+    assert openai_client.calls[0]["model"] == "gpt-6-luna"
     assert len(posts) == 4
     assert "stage=deterministic_repair result=declined" in caplog.text
     assert "decline_reason=secondary_field_occupied" in caplog.text
@@ -1926,6 +2023,164 @@ def test_content_pack_provider_failure_is_safe_and_releases_reserved_credit(
     assert b"provider_timeout" not in response.data
 
 
+@pytest.mark.parametrize("failure", ["saved_prose", "saved_duplicate", "count", "copy_changed", "copy_missing", "pair_multiplicity", "malformed", "truncated", "partial_status"])
+def test_production_content_pack_path_rejects_saved_prose_and_preserves_input(
+    client, app, module, monkeypatch, failure
+):
+    user = create_user(module, email="prose-output@example.com")
+    login(client, user)
+    saved_output = Path(__file__).parent / "fixtures" / "content_pack_prose_failure.txt"
+    source = CUSTOMER_ENQUIRIES_SOURCE
+    output = VALID_GENERATED_CUSTOMER_ENQUIRIES_PACK
+    if failure == "saved_prose":
+        output = saved_output.read_text(encoding="utf-8")
+    elif failure == "saved_duplicate":
+        output = (Path(__file__).parent / "fixtures" / "content_pack_luna_duplicate.txt").read_text(encoding="utf-8")
+    elif failure == "count":
+        source = source.replace("exactly three", "exactly four")
+    elif failure == "copy_changed":
+        output = output.replace("Use one place", "Use several places")
+    elif failure == "copy_missing":
+        output = output.replace("Body: Use one place to track messages and follow-ups.", "")
+    elif failure == "pair_multiplicity":
+        source = "Create exactly three slides.\nSlide 2:\nPhrase: Cześć\nTranslation: Hi\nSlide 3:\nPhrase: Cześć\nTranslation: Hi"
+        output = output.replace("Body: Use one place to track messages and follow-ups.", "Phrase: Cześć\nTranslation: Hi")
+    elif failure == "malformed":
+        output = output.replace("Slide 2:", "Slide 4:")
+    elif failure == "truncated":
+        output = output[:output.index("HASHTAGS:")]
+    provider = FakeContentPackProvider(output, "incomplete" if failure == "partial_status" else "completed")
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid output must fail before image credits or provider calls")
+    set_content_pack_helper(app, monkeypatch, "reserve_ai_image_credits", forbidden)
+    monkeypatch.setattr(carousel_generation, "generate_pending_carousel_images", forbidden)
+    released = []
+    release_credit = content_pack_routes._content_pack_helper("release_content_pack_credits")
+
+    def release(current_user):
+        released.append(current_user.id)
+        release_credit(current_user)
+
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "release_content_pack_credits",
+        release,
+    )
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda source_text, brand_context, **kwargs: content_service.generate_content_pack(
+            source_text,
+            brand_context,
+            openai_api_key="test-key",
+            openai_client=provider,
+            **kwargs,
+        ),
+    )
+
+    response = client.post(
+        "/content-pack",
+        data={"source_type": "text", "source_input": source},
+    )
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert len(provider.calls) == 1
+    assert released == [user.id]
+    usage = module.UserUsage.query.filter_by(user_id=user.id).one()
+    assert usage.content_packs_used == 0
+    assert usage.ai_images_used == 0
+    assert "was incomplete or its carousel was not structured" in page
+    input_match = re.search(r'<textarea\s+name="source_input"[^>]*>(.*?)</textarea>', page, re.DOTALL)
+    assert input_match
+    from html import unescape
+    assert unescape(input_match.group(1)) == source
+    assert module.Post.query.count() == 0
+    assert 'name="content_pack_result"' not in page
+
+
+@pytest.mark.parametrize("topic", ["business", "gardening"])
+def test_valid_generated_pack_reaches_normal_carousel_route_without_manual_editing(
+    client, app, module, monkeypatch, topic
+):
+    user = create_user(module, email="valid-generated-pack@example.com")
+    login(client, user)
+    output = VALID_GENERATED_CUSTOMER_ENQUIRIES_PACK
+    source = CUSTOMER_ENQUIRIES_SOURCE
+    if topic == "gardening":
+        for old, new in (
+            ("Make customer enquiries easier", "Grow herbs in a small space"),
+            ("Three habits for clearer communication", "Practical container gardening"),
+            ("Keep enquiries together", "Choose a suitable container"),
+            ("Use one place to track messages and follow-ups.", "Use a pot with drainage holes."),
+            ("Make the next step clear", "Check before watering"),
+            ("Tell customers what happens next and when to expect a reply.", "Water when the soil feels dry."),
+        ):
+            output = output.replace(old, new)
+            source = source.replace(old, new)
+    provider = FakeContentPackProvider(output)
+    set_content_pack_helper(
+        app, monkeypatch, "reserve_content_pack_credits", lambda current_user: True
+    )
+    set_content_pack_helper(app, monkeypatch, "build_brand_context", lambda user_id: "")
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "generate_content_pack",
+        lambda source_text, brand_context, **kwargs: content_service.generate_content_pack(
+            source_text,
+            brand_context,
+            openai_api_key="test-key",
+            openai_client=provider,
+            **kwargs,
+        ),
+    )
+
+    with captured_templates(app) as rendered:
+        generated = client.post(
+            "/content-pack",
+            data={"source_type": "text", "source_input": source},
+        )
+
+    assert generated.status_code == 200
+    context = rendered[-1][1]
+    assert context["content_pack_result"] == output.strip()
+    assert context["carousel_intent_token"]
+    assert len(provider.calls) == 1
+
+    reserve_image_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_image_calls.append(1) or True,
+    )
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "get_placeholder_image_url",
+        lambda: "https://cdn.test/placeholder.jpg",
+    )
+    created = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": context["content_pack_result"],
+            "carousel_intent_token": context["carousel_intent_token"],
+            "template_id": "content_pack_editorial",
+            "presentation_treatment": "photography",
+            "design_manager_style": "photorealistic",
+            "colour_theme": "monochrome",
+        },
+    )
+
+    assert created.status_code == 302
+    assert reserve_image_calls == [1]
+    assert module.Post.query.count() == 3
+
+
 def test_content_pack_tiktok_source_uses_transcript_helper(client, app, module, monkeypatch):
     user = create_user(module)
     login(client, user)
@@ -2032,8 +2287,12 @@ def test_create_content_pack_carousel_creates_grouped_posts(client, app, module,
     for title, payload in zip(
         ["First slide", "Second slide", "Third slide"], payloads
     ):
-        assert title not in payload["background_prompt"]
-    assert all("no readable text" in payload["background_prompt"] for payload in payloads)
+        assert f"Title: {title}" in payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+    assert all(
+        "5. VISIBLE TEXT POLICY" in payload["background_prompt"]
+        for payload in payloads
+    )
     assert all(payload["overlay"]["body"] is None for payload in payloads)
     assert all(payload["credits_reserved"] is True for payload in payloads)
     assert response.location.endswith(f"/post/{posts[0].id}")
@@ -2300,6 +2559,118 @@ def test_everyday_polish_campaign_keeps_restaurant_at_slide_scope():
     assert [item["environment_category"] for item in plan] == [
         "neutral", "public_space", "neutral", "street", "restaurant", "neutral",
     ]
+
+
+@pytest.mark.parametrize(
+    ("title", "body", "visual"),
+    [
+        (
+            "Choose Compact Containers",
+            "Match pot size to space; self-watering helps keep herbs hydrated.",
+            None,
+        ),
+        (
+            "Make the handover clear",
+            "Give the next owner the context and next action.",
+            "A focused project handover",
+        ),
+    ],
+    ids=("stored_gardening_slide", "unrelated_business_slide"),
+)
+def test_provider_complete_scene_stays_grounded_in_each_slide_subject(
+    title, body, visual
+):
+    slide = story_slide(title, body, visual=visual)
+    direction = content_pack_routes._campaign_art_direction(
+        "realistic", [slide], "photorealistic", "soft_pastel"
+    )
+    grounding = content_pack_routes._campaign_grounding([slide], direction)
+    slide_grounding = content_pack_routes._slide_grounding(slide, grounding, "info")
+    presentation = {
+        "typography_presentation": "editorial",
+    }
+    resolved = content_pack_routes.resolve_visual_capabilities(
+        template_id="content_pack_editorial",
+        artwork_style_id="photorealistic",
+        composition_id="asymmetric_split",
+        palette_id="soft_pastel",
+        image_operation="generate_new",
+        presentation_treatment_id="photography",
+    )
+    scene_prompt = content_pack_routes._build_slide_background_prompt(
+        "Generated IMAGE_PROMPT context",
+        1,
+        visual=visual,
+        layout_role="info",
+        layout_variant="split_right",
+        visual_treatment="illustration",
+        semantic_text=f"{title} {body}",
+        visual_weight="medium",
+        metaphor_family="distinct_object",
+        campaign_direction=direction,
+        campaign_grounding=grounding,
+        slide_grounding=slide_grounding,
+        provider_renders_text=True,
+    )
+    prompt = content_pack_routes._build_provider_complete_image_prompt(
+        scene_prompt,
+        slide,
+        presentation,
+        resolved,
+    )
+
+    assert grounding["semantic_domain"] == "general"
+    assert slide_grounding == {
+        "slide_purpose": "explaining the current slide's specific practical point",
+        "scene_subject": "the specific subject defined by the current slide",
+        "scene_action": "visually demonstrate the current slide's specific practical point",
+        "scene_environment": (
+            "a credible setting appropriate to the current slide's specific subject"
+        ),
+        "environment_category": "neutral",
+    }
+    assert "restaurant" not in prompt.lower()
+    assert "server brings a glass and carafe" not in prompt.lower()
+    assert "authorized title, body, and visual direction define its subject" in prompt
+    assert "selected visual treatment: photography" in prompt
+    assert "artwork style: photorealistic" in prompt
+    assert prompt.count(title) == 1
+    assert prompt.count(body) == 1
+
+
+@pytest.mark.parametrize(
+    ("title", "visual", "expected_environment", "expects_restaurant"),
+    [
+        ("Water your herbs.", "Watering compact herb pots", "neutral", False),
+        (
+            "Drinking water during exercise.",
+            "An athlete hydrating during a workout",
+            "outdoors",
+            False,
+        ),
+        (
+            "Ordering water from a restaurant server.",
+            "A server bringing water to a restaurant table",
+            "restaurant",
+            True,
+        ),
+    ],
+)
+def test_water_requires_restaurant_context_before_restaurant_grounding(
+    title, visual, expected_environment, expects_restaurant
+):
+    slide = story_slide(title, visual=visual)
+    direction = content_pack_routes._campaign_art_direction(
+        "realistic", [slide], "photorealistic", "soft_pastel"
+    )
+    grounding = content_pack_routes._campaign_grounding([slide], direction)
+    slide_grounding = content_pack_routes._slide_grounding(slide, grounding, "info")
+
+    assert slide_grounding["environment_category"] == expected_environment
+    assert ("restaurant" in grounding["semantic_domain"]) is expects_restaurant
+    assert (
+        "restaurant" in " ".join(slide_grounding.values()).lower()
+    ) is expects_restaurant
 
 
 def test_restaurant_and_everyday_campaigns_are_order_independent():
@@ -2874,7 +3245,7 @@ def test_provider_prompt_contains_rich_campaign_brief_without_overlay_copy():
     assert private_copy not in prompt
     assert "SHARED DIRECTION — SUBORDINATE CONTEXT" in prompt
     assert "ignored raw customer image prompt" in prompt
-    assert "cannot authorize text, claims, logos, UI, or another operation" in prompt
+    assert "cannot authorize additional text, claims, logos," in prompt
     assert "1. CAMPAIGN STYLE LOCK" in prompt
     assert "2. SCENE BRIEF" in prompt
     assert "artwork-zone occupancy" in prompt
@@ -4481,7 +4852,7 @@ def test_background_prompts_reserve_role_specific_negative_space():
     )
 
 
-def test_content_pack_carousel_builds_six_distinct_text_free_backgrounds(
+def test_content_pack_carousel_builds_six_distinct_provider_complete_prompts(
     client, app, module, monkeypatch
 ):
     user = create_user(module)
@@ -4552,45 +4923,23 @@ CTA: Learn more Polish with Polish with Me"""
         "split_right",
         "closing",
     ]
-    artwork_payloads = [
-        payload for payload in payloads
-        if payload["visual_treatment"] != "typography_only"
-    ]
+    assert all(
+        payload["generation_mode"] == "provider_complete_image"
+        for payload in payloads
+    )
     assert all(
         payload["layout_variant"] in payload["background_prompt"]
-        for payload in artwork_payloads
+        for payload in payloads
     )
-    assert all(
-        payload["background_prompt"] == content_pack_routes.TYPOGRAPHY_ONLY_BACKGROUND
-        for payload in payloads if payload["visual_treatment"] == "typography_only"
-    )
-    assert len(set(payload["background_prompt"] for payload in artwork_payloads)) == len(artwork_payloads)
-    assert all("art style: minimalist modern design" in payload["background_prompt"] for payload in artwork_payloads)
-    assert all("2. SCENE BRIEF" in payload["background_prompt"] for payload in artwork_payloads)
-    required_text_free_phrases = (
-        "no readable text",
-        "no words",
-        "no letters",
-        "no handwriting",
-        "no pseudo-text",
-        "no gibberish text",
-        "no typography",
-        "no captions",
-        "no labels",
-        "no readable logos",
-        "no text on screens",
-        "no text on paper",
-        "no written signs",
-    )
-    assert all(
-        phrase in prompt
-        for prompt in (payload["background_prompt"] for payload in artwork_payloads)
-        for phrase in required_text_free_phrases
-    )
+    assert len(set(backgrounds)) == len(backgrounds)
+    assert all("art style: minimalist modern design" in prompt for prompt in backgrounds)
+    assert all("2. SCENE BRIEF" in prompt for prompt in backgrounds)
+    assert all("5. VISIBLE TEXT POLICY" in prompt for prompt in backgrounds)
+    assert all("7. AUTHORIZED VISIBLE COPY" in prompt for prompt in backgrounds)
     for payload in payloads:
         for value in payload["overlay"].values():
             if value:
-                assert value not in payload["background_prompt"]
+                assert value in payload["background_prompt"]
 
 
 @pytest.mark.parametrize(
@@ -4635,8 +4984,15 @@ def test_content_pack_carousel_keeps_selected_style_across_all_six_slides(
     assert all(expected_treatment in prompt for prompt in artwork_backgrounds)
     assert all("1. CAMPAIGN STYLE LOCK" in prompt for prompt in artwork_backgrounds)
     assert all(
-        "Private overlay copy" not in prompt for prompt in backgrounds
+        payload["generation_mode"] == "provider_complete_image"
+        for payload in payloads
     )
+    assert [
+        f"Title: Private overlay copy {index}" in prompt
+        for index, prompt in enumerate(backgrounds, start=1)
+    ] == [True] * 6
+    assert all("AUTHORIZED VISIBLE COPY" in prompt for prompt in backgrounds)
+    assert all("Do not display the field labels themselves" in prompt for prompt in backgrounds)
     for payload in payloads:
         resolved = payload["resolved_capabilities"]
         assert resolved["template_id"] == "content_pack_structured"
@@ -4689,6 +5045,10 @@ def test_content_pack_carousel_default_style_uses_existing_fallback(
         {"design_manager_style": "unknown-style"},
         {"colour_theme": "unknown-palette"},
         {"template_id": "provider_canvas"},
+        {
+            "presentation_treatment": "infographic",
+            "design_manager_style": "photorealistic",
+        },
     ],
 )
 def test_content_pack_carousel_rejects_unsupported_explicit_selections_before_rows(
@@ -4715,11 +5075,64 @@ def test_content_pack_carousel_rejects_unsupported_explicit_selections_before_ro
 
     assert response.status_code == 200
     assert (
-        "selected carousel template, artwork style, or palette is not supported"
+        "selected template, visual treatment, artwork style, palette, or visual description is not supported"
         in response.get_data(as_text=True)
     )
     assert module.Post.query.count() == 0
     assert reserve_calls == []
+
+
+def test_invalid_visual_combination_preserves_form_and_same_intent_can_succeed(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="visual-redisplay@example.com")
+    login(client, user)
+    token = register_intent_for_client(
+        client,
+        app,
+        user.id,
+        {"required_slide_count": 3},
+    )
+    reserve_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+    description = "Use <arrows> & purposeful icons."
+    submitted = {
+        "content_pack_result": CUSTOMER_ENQUIRIES_CONTENT_PACK,
+        "carousel_intent_token": token,
+        "template_id": "content_pack_geometric",
+        "presentation_treatment": "infographic",
+        "design_manager_style": "photorealistic",
+        "colour_theme": "warm_sunset",
+        "visual_description": description,
+    }
+
+    rejected = client.post("/content-pack/create-carousel", data=submitted)
+    page = rejected.get_data(as_text=True)
+
+    assert rejected.status_code == 200
+    assert "Choose a visual treatment and artwork style that work together." in page
+    assert 'value="content_pack_geometric"\n                               checked' in page
+    assert 'value="infographic" selected' in page
+    assert 'value="photorealistic" selected' in page
+    assert 'value="warm_sunset" selected' in page
+    assert "Use &lt;arrows&gt; &amp; purposeful icons." in page
+    assert CUSTOMER_ENQUIRIES_CONTENT_PACK.strip().replace("&", "&amp;") in page
+    assert f'value="{token}"' in page
+    assert "Create Instagram Carousel Draft" in page
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
+
+    submitted["design_manager_style"] = "bold_graphic"
+    corrected = client.post("/content-pack/create-carousel", data=submitted)
+
+    assert corrected.status_code == 302
+    assert reserve_calls == [1]
+    assert module.Post.query.count() == 3
 
 
 @pytest.mark.parametrize(
@@ -4766,6 +5179,12 @@ def test_template_picker_selection_is_independent_and_survives_to_rows(
         payload["resolved_capabilities"]["legacy_render_style"]
         for payload in payloads
     } == {"realistic"}
+    assert all(
+        f"template: {template_id}" in payload["background_prompt"]
+        and "artwork style: photorealistic" in payload["background_prompt"]
+        and "palette: warm_sunset" in payload["background_prompt"]
+        for payload in payloads
+    )
 
 
 def test_content_pack_page_exposes_three_thumbnail_template_choices(
@@ -4792,6 +5211,136 @@ def test_content_pack_page_exposes_three_thumbnail_template_choices(
         "content_pack_minimalist",
     ):
         assert f'value="{template_id}"' in page
+
+    assert 'name="presentation_treatment"' in page
+    assert '<option value="infographic" selected>' in page
+    assert 'name="visual_description"' in page
+    assert 'name="image_style" value=""' in page
+    assert "Carousel Image Style" not in page
+
+
+def test_infographic_control_reaches_provider_prompt_and_worker_without_overlay(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="infographic-acceptance@example.com")
+    login(client, user)
+    token = register_intent_for_client(
+        client,
+        app,
+        user.id,
+        {"required_slide_count": 3},
+    )
+    visual_description = (
+        "Use a simple message-flow diagram, a grouped inbox icon, and a clear "
+        "next-step path. Avoid people and office photography."
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": CUSTOMER_ENQUIRIES_CONTENT_PACK,
+            "carousel_intent_token": token,
+            "template_id": "content_pack_editorial",
+            "presentation_treatment": "infographic",
+            "design_manager_style": "auto",
+            "colour_theme": "monochrome",
+            "visual_description": visual_description,
+        },
+    )
+    posts = module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    payloads = [
+        carousel_generation.parse_overlay_prompt(post.prompt) for post in posts
+    ]
+
+    assert response.status_code == 302
+    assert len(payloads) == 3
+    assert [payload["overlay"] for payload in payloads] == [
+        {
+            "title": "Make customer enquiries easier",
+            "body": "Three habits for clearer communication",
+            "cta": None,
+            "brand": None,
+        },
+        {
+            "title": "Keep enquiries together",
+            "body": "Use one place to track messages and follow-ups.",
+            "cta": None,
+            "brand": None,
+        },
+        {
+            "title": "Make the next step clear",
+            "body": "Tell customers what happens next and when to expect a reply.",
+            "cta": None,
+            "brand": None,
+        },
+    ]
+    for payload in payloads:
+        resolved = payload["resolved_capabilities"]
+        prompt = payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+        assert payload["selected_visual_treatment"] == "infographic"
+        assert payload["visual_description"] == visual_description
+        assert resolved["presentation_treatment_id"] == "infographic"
+        assert resolved["template_id"] == "content_pack_editorial"
+        assert resolved["artwork_style_id"] == "bold_graphic"
+        assert resolved["palette_id"] == "monochrome"
+        assert "5A. USER-SELECTED VISUAL AUTHORITY" in prompt
+        assert "Generic people-at-laptops office photography" not in prompt
+        assert "explicit user visual controls are authoritative" in prompt
+        assert "selected visual treatment: infographic" in prompt
+        assert visual_description in prompt
+        assert "Do not default to people, laptops, coffee cups" in prompt
+        assert "infographic does not imply monochrome" in prompt
+        assert "add no visible wording beyond section 7" in prompt
+        for value in payload["overlay"].values():
+            if value:
+                assert prompt.count(value) == 1
+
+    calls = []
+
+    def fake_generate(prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return f"https://cdn.test/infographic-{len(calls)}.jpg"
+
+    monkeypatch.setattr(module, "generate_openai_image", fake_generate)
+    worker_result = module.generate_pending_carousel_images()
+
+    assert worker_result["succeeded_count"] == 3
+    assert len(calls) == 3
+    assert [prompt for prompt, _ in calls] == [
+        payload["background_prompt"] for payload in payloads
+    ]
+    assert [kwargs for _, kwargs in calls] == [{}, {}, {}]
+
+
+def test_oversized_visual_description_fails_before_credits_and_rows(
+    client, app, module, monkeypatch
+):
+    user = create_user(module, email="visual-description-limit@example.com")
+    login(client, user)
+    reserve_calls = []
+    set_content_pack_helper(
+        app,
+        monkeypatch,
+        "reserve_ai_image_credits",
+        lambda *args, **kwargs: reserve_calls.append(1) or True,
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": CUSTOMER_ENQUIRIES_CONTENT_PACK,
+            "presentation_treatment": "infographic",
+            "design_manager_style": "auto",
+            "visual_description": "x" * 601,
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "visual description is not supported" in response.get_data(as_text=True)
+    assert reserve_calls == []
+    assert module.Post.query.count() == 0
 
 
 def test_content_pack_carousel_preserves_exact_polish_slide_copy(
@@ -4827,7 +5376,84 @@ def test_content_pack_carousel_preserves_exact_polish_slide_copy(
     assert response.status_code == 302
     assert [payload["overlay"]["title"] for payload in payloads] == polish_slides
     for text, payload in zip(polish_slides, payloads):
-        assert text not in payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+        assert f"Title: {text}" in payload["background_prompt"]
+        assert "Copy these values exactly, including Unicode" in payload[
+            "background_prompt"
+        ]
+
+
+@pytest.mark.parametrize(
+    "structured_slides",
+    [
+        """Slide 1:
+Title: Build a clearer weekly plan
+Subtitle: A practical rhythm for team decisions
+Slide 2:
+Title: Name the next decision
+Body: Give every open question a clear owner
+Slide 3:
+CTA: Review the plan together on Friday""",
+        """Slide 1:
+Title: Organise product feedback
+Subtitle: A practical evidence-review workflow
+Slide 2:
+Title: Group repeated themes
+Body: Keep related customer observations together
+Slide 3:
+CTA: Review the evidence before prioritising""",
+    ],
+    ids=("general_business", "product_workflow"),
+)
+def test_provider_complete_general_content_prompt_has_one_authorized_copy_block(
+    client, module, structured_slides
+):
+    user = create_user(module)
+    login(client, user)
+    first_title = re.search(r"^Title: (.+)$", structured_slides, re.MULTILINE).group(1)
+    content_pack_result = CONTENT_PACK_RESULT.replace(
+        "Slide 1: First slide\nSlide 2: Second slide\nSlide 3: Third slide",
+        structured_slides,
+    ).replace(
+        "Bright image direction",
+        f"Text-free premium brand artwork for {first_title} with calm, trustworthy lighting",
+    )
+
+    response = client.post(
+        "/content-pack/create-carousel",
+        data={
+            "content_pack_result": content_pack_result,
+            "template_id": "content_pack_geometric",
+            "design_manager_style": "photorealistic",
+            "colour_theme": "cool_tech",
+        },
+    )
+    payloads = [
+        carousel_generation.parse_overlay_prompt(post.prompt)
+        for post in module.Post.query.order_by(module.Post.sort_order.asc()).all()
+    ]
+
+    assert response.status_code == 302
+    assert len(payloads) == 3
+    for payload in payloads:
+        prompt = payload["background_prompt"]
+        assert payload["generation_mode"] == "provider_complete_image"
+        assert "template: content_pack_geometric" in prompt
+        assert "artwork style: photorealistic" in prompt
+        assert "palette: cool_tech" in prompt
+        assert f"composition: {payload['editorial_composition']}" in prompt
+        assert "Any text-free or no-typography wording inside it" in prompt
+        assert "Authorized copy and resolved user selections" in prompt
+        assert "ABSOLUTELY NO READABLE TEXT" not in prompt
+        assert "All visible typography is added later by SMU" not in prompt
+        assert "Polish phrase" not in prompt
+        assert "English translation" not in prompt
+        for value in payload["overlay"].values():
+            if value:
+                assert prompt.count(value) == 1
+    assert "[authorized visible copy omitted from artwork direction]" in payloads[0][
+        "background_prompt"
+    ]
 
 
 def test_content_pack_carousel_rejects_oversized_slide_without_rows(

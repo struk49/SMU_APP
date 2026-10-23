@@ -15,14 +15,22 @@ CAROUSEL_GENERATION_BATCH_SIZE = 5
 OVERLAY_PAYLOAD_PREFIX = "SMU_OVERLAY_V1:"
 LEGACY_OVERLAY_PAYLOAD_VERSION = 1
 NORMALIZED_OVERLAY_PAYLOAD_VERSION = 2
-MAX_OVERLAY_PAYLOAD_BYTES = 8192
+LOCAL_OVERLAY_GENERATION_MODE = "local_overlay"
+PROVIDER_COMPLETE_IMAGE_GENERATION_MODE = "provider_complete_image"
+CONTENT_PACK_GENERATION_MODES = {
+    LOCAL_OVERLAY_GENERATION_MODE,
+    PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
+}
+MAX_OVERLAY_PAYLOAD_BYTES = 16384
 MAX_BACKGROUND_PROMPT_LENGTH = 6200
+MAX_PROVIDER_COMPLETE_IMAGE_PROMPT_LENGTH = 10000
 MAX_OVERLAY_TITLE_LENGTH = 180
 MAX_OVERLAY_BODY_LENGTH = 600
 MAX_OVERLAY_CTA_LENGTH = 120
 MAX_OVERLAY_BRAND_LENGTH = 120
 MAX_OVERLAY_EYEBROW_LENGTH = 60
 MAX_OVERLAY_EMPHASIS_LENGTH = 120
+MAX_VISUAL_DESCRIPTION_LENGTH = 600
 OVERLAY_EMPHASIS_ROLES = {"primary", "accent", "normal"}
 OVERLAY_VISUAL_TREATMENTS = {
     "typography_only",
@@ -59,6 +67,9 @@ OVERLAY_CAMPAIGN_STYLES = {
 OVERLAY_CAMPAIGN_PALETTES = {
     "smu_classic", "monochrome", "warm_sunset", "cool_tech",
     "earth_and_cream", "electric", "soft_pastel",
+}
+OVERLAY_PRESENTATION_TREATMENTS = {
+    "auto", "infographic", "photography", "illustration", "text_led",
 }
 OVERLAY_LAYOUT_ROLES = {"cover", "phrase", "info", "cta"}
 GROUNDING_FIELDS = {
@@ -197,14 +208,22 @@ def build_content_pack_overlay_prompt(
     campaign_palette=None,
     campaign_grounding=None,
     resolved_capabilities=None,
+    selected_visual_treatment=None,
+    visual_description=None,
+    generation_mode=LOCAL_OVERLAY_GENERATION_MODE,
 ):
     body = _normalize_optional_overlay_text(body)
     cta = _normalize_optional_overlay_text(cta)
     brand = _normalize_optional_overlay_text(brand)
+    prompt_limit = (
+        MAX_PROVIDER_COMPLETE_IMAGE_PROMPT_LENGTH
+        if generation_mode == PROVIDER_COMPLETE_IMAGE_GENERATION_MODE
+        else MAX_BACKGROUND_PROMPT_LENGTH
+    )
     if (
         not isinstance(background_prompt, str)
         or not background_prompt.strip()
-        or len(background_prompt) > MAX_BACKGROUND_PROMPT_LENGTH
+        or len(background_prompt) > prompt_limit
         or not isinstance(title, str)
         or not title
         or len(title) > MAX_OVERLAY_TITLE_LENGTH
@@ -212,6 +231,14 @@ def build_content_pack_overlay_prompt(
         or not _valid_optional_overlay_text(cta, MAX_OVERLAY_CTA_LENGTH)
         or not _valid_optional_overlay_text(brand, MAX_OVERLAY_BRAND_LENGTH)
         or not isinstance(credits_reserved, bool)
+        or generation_mode not in CONTENT_PACK_GENERATION_MODES
+        or (
+            selected_visual_treatment is not None
+            and selected_visual_treatment not in OVERLAY_PRESENTATION_TREATMENTS
+        )
+        or not _valid_optional_overlay_text(
+            visual_description, MAX_VISUAL_DESCRIPTION_LENGTH
+        )
         or (
             render_style is not None
             and (
@@ -307,6 +334,8 @@ def build_content_pack_overlay_prompt(
             or normalized_capabilities.artwork_style_id != campaign_style
             or normalized_capabilities.palette_id != campaign_palette
             or normalized_capabilities.legacy_render_style != render_style
+            or normalized_capabilities.presentation_treatment_id
+            != (selected_visual_treatment or "auto")
         ):
             raise OverlayPayloadError()
 
@@ -359,7 +388,7 @@ def build_content_pack_overlay_prompt(
     if campaign_grounding is not None:
         payload["campaign_grounding"] = dict(campaign_grounding)
     if normalized_capabilities is not None:
-        payload["resolved_capabilities"] = {
+        resolved_payload = {
             "template_id": normalized_capabilities.template_id,
             "artwork_style_id": normalized_capabilities.artwork_style_id,
             "composition_id": normalized_capabilities.composition_id,
@@ -367,6 +396,17 @@ def build_content_pack_overlay_prompt(
             "image_operation": normalized_capabilities.image_operation,
             "legacy_render_style": normalized_capabilities.legacy_render_style,
         }
+        if selected_visual_treatment is not None:
+            resolved_payload["presentation_treatment_id"] = (
+                normalized_capabilities.presentation_treatment_id
+            )
+        payload["resolved_capabilities"] = resolved_payload
+    if selected_visual_treatment is not None:
+        payload["selected_visual_treatment"] = selected_visual_treatment
+    if visual_description is not None:
+        payload["visual_description"] = visual_description
+    if generation_mode != LOCAL_OVERLAY_GENERATION_MODE:
+        payload["generation_mode"] = generation_mode
     try:
         encoded = OVERLAY_PAYLOAD_PREFIX + json.dumps(
             payload,
@@ -414,11 +454,18 @@ def parse_overlay_prompt(prompt):
         "campaign_palette",
         "campaign_grounding",
         "resolved_capabilities",
+        "generation_mode",
+        "selected_visual_treatment",
+        "visual_description",
     }
     if (
         not isinstance(payload, dict)
         or not expected_keys.issubset(payload)
         or not set(payload).issubset(allowed_keys)
+        or (
+            "generation_mode" in payload
+            and payload["generation_mode"] not in CONTENT_PACK_GENERATION_MODES
+        )
         or (
             "render_style" in payload
             and (
@@ -429,6 +476,17 @@ def parse_overlay_prompt(prompt):
         or (
             "credits_reserved" in payload
             and not isinstance(payload["credits_reserved"], bool)
+        )
+        or (
+            "selected_visual_treatment" in payload
+            and payload["selected_visual_treatment"]
+            not in OVERLAY_PRESENTATION_TREATMENTS
+        )
+        or (
+            "visual_description" in payload
+            and not _valid_optional_overlay_text(
+                payload["visual_description"], MAX_VISUAL_DESCRIPTION_LENGTH
+            )
         )
         or (
             "layout_role" in payload
@@ -544,15 +602,23 @@ def parse_overlay_prompt(prompt):
             != payload.get("campaign_palette")
             or normalized_capabilities.legacy_render_style
             != payload.get("render_style")
+            or normalized_capabilities.presentation_treatment_id
+            != payload.get("selected_visual_treatment", "auto")
         ):
             raise OverlayPayloadError()
 
     background_prompt = payload["background_prompt"]
     overlay = payload["overlay"]
+    prompt_limit = (
+        MAX_PROVIDER_COMPLETE_IMAGE_PROMPT_LENGTH
+        if payload.get("generation_mode")
+        == PROVIDER_COMPLETE_IMAGE_GENERATION_MODE
+        else MAX_BACKGROUND_PROMPT_LENGTH
+    )
     if (
         not isinstance(background_prompt, str)
         or not background_prompt.strip()
-        or len(background_prompt) > MAX_BACKGROUND_PROMPT_LENGTH
+        or len(background_prompt) > prompt_limit
         or not isinstance(overlay, dict)
         or set(overlay) != {"title", "body", "cta", "brand"}
         or not isinstance(overlay["title"], str)
@@ -655,6 +721,10 @@ def generate_pending_carousel_images(
             reserved_credit = credits_pre_reserved or bool(reserve_image_credits)
             if overlay_payload is None:
                 image_url = image_generator(pending_post.prompt)
+            elif overlay_payload.get(
+                "generation_mode", LOCAL_OVERLAY_GENERATION_MODE
+            ) == PROVIDER_COMPLETE_IMAGE_GENERATION_MODE:
+                image_url = image_generator(overlay_payload["background_prompt"])
             else:
                 overlay = dict(overlay_payload["overlay"])
                 if "layout_role" in overlay_payload:

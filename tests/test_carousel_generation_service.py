@@ -109,6 +109,37 @@ def test_grounding_metadata_round_trips_and_legacy_payload_remains_valid():
     assert "campaign_grounding" not in carousel_generation.parse_overlay_prompt(legacy)
 
 
+def test_provider_complete_image_mode_skips_local_overlay_and_preserves_legacy_rows(
+    app, module
+):
+    user = create_user(module)
+    complete = make_pending(module, user, group_id="complete", sort_order=0)
+    legacy = make_pending(module, user, group_id="legacy", sort_order=0)
+    complete.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "COMPLETE IMAGE PROMPT WITH Exact Polish: Zażółć gęślą jaźń",
+        "Zażółć gęślą jaźń",
+        generation_mode=carousel_generation.PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
+    )
+    legacy.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "LEGACY BACKGROUND PROMPT", "Legacy exact title"
+    )
+    module.db.session.commit()
+    calls = []
+
+    def generate(prompt, **kwargs):
+        calls.append((prompt, kwargs))
+        return f"https://cdn.test/{len(calls)}.jpg"
+
+    result = run_worker(module, generate, batch_size=2)
+
+    assert result["succeeded_count"] == 2
+    assert calls[0] == (
+        "COMPLETE IMAGE PROMPT WITH Exact Polish: Zażółć gęślą jaźń", {}
+    )
+    assert calls[1][0] == "LEGACY BACKGROUND PROMPT"
+    assert calls[1][1]["overlay"]["title"] == "Legacy exact title"
+
+
 def test_sequential_worker_rows_use_only_their_own_persisted_campaign_prompt(app, module):
     user = create_user(module)
     love = make_pending(module, user, group_id="love", sort_order=0)
@@ -845,6 +876,51 @@ def test_resolved_visual_capabilities_round_trip_and_reach_worker(app, module):
     assert calls[0]["overlay"]["resolved_capabilities"] == resolved
 
 
+def test_provider_complete_user_visual_direction_round_trips_without_local_overlay(
+    app, module
+):
+    user = create_user(module, email="provider-visual-direction@example.com")
+    post = make_pending(module, user, group_id="provider-visual-direction")
+    description = "Use purposeful message-flow icons and avoid office photography."
+    resolved = {
+        "template_id": "content_pack_editorial",
+        "artwork_style_id": "bold_graphic",
+        "composition_id": "asymmetric_split",
+        "palette_id": "warm_sunset",
+        "image_operation": "generate_new",
+        "legacy_render_style": None,
+        "presentation_treatment_id": "infographic",
+    }
+    post.prompt = carousel_generation.build_content_pack_overlay_prompt(
+        "Complete infographic prompt",
+        "Exact title",
+        layout_role="info",
+        layout_variant="split_left",
+        editorial_composition="asymmetric_split",
+        campaign_style="bold_graphic",
+        campaign_palette="warm_sunset",
+        resolved_capabilities=resolved,
+        selected_visual_treatment="infographic",
+        visual_description=description,
+        generation_mode=carousel_generation.PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
+    )
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append((prompt, kwargs))
+        or "https://cdn.test/generated.jpg",
+    )
+
+    payload = carousel_generation.parse_overlay_prompt(post.prompt)
+    assert result["succeeded_count"] == 1
+    assert payload["selected_visual_treatment"] == "infographic"
+    assert payload["visual_description"] == description
+    assert payload["resolved_capabilities"] == resolved
+    assert calls == [("Complete infographic prompt", {})]
+
+
 def test_resolved_visual_capabilities_must_match_legacy_overlay_fields():
     resolved = {
         "template_id": "content_pack_structured",
@@ -1090,6 +1166,58 @@ def test_overlay_payload_rejects_malformed_unicode_with_safe_error():
         assert private_copy not in str(exc)
     else:
         raise AssertionError("malformed Unicode payload was accepted")
+
+
+def test_complete_image_mode_has_bounded_prompt_and_invalid_mode_never_falls_back():
+    complete_prompt = "x" * (carousel_generation.MAX_BACKGROUND_PROMPT_LENGTH + 1)
+    encoded = carousel_generation.build_content_pack_overlay_prompt(
+        complete_prompt,
+        "Exact title",
+        generation_mode=carousel_generation.PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
+    )
+    assert carousel_generation.parse_overlay_prompt(encoded)["generation_mode"] == (
+        carousel_generation.PROVIDER_COMPLETE_IMAGE_GENERATION_MODE
+    )
+
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.build_content_pack_overlay_prompt(
+            complete_prompt,
+            "Exact title",
+        )
+
+    payload = json.loads(
+        encoded[len(carousel_generation.OVERLAY_PAYLOAD_PREFIX):]
+    )
+    payload["generation_mode"] = "untrusted_mode"
+    malformed = carousel_generation.OVERLAY_PAYLOAD_PREFIX + json.dumps(payload)
+    with pytest.raises(carousel_generation.OverlayPayloadError):
+        carousel_generation.parse_overlay_prompt(malformed)
+
+
+def test_worker_rejects_invalid_generation_mode_without_calling_provider(app, module):
+    user = create_user(module)
+    post = make_pending(module, user, group_id="invalid-mode", sort_order=0)
+    encoded = carousel_generation.build_content_pack_overlay_prompt(
+        "Complete provider prompt",
+        "Exact title",
+        generation_mode=carousel_generation.PROVIDER_COMPLETE_IMAGE_GENERATION_MODE,
+    )
+    payload = json.loads(
+        encoded[len(carousel_generation.OVERLAY_PAYLOAD_PREFIX):]
+    )
+    payload["generation_mode"] = "untrusted_mode"
+    post.prompt = carousel_generation.OVERLAY_PAYLOAD_PREFIX + json.dumps(payload)
+    module.db.session.commit()
+    calls = []
+
+    result = run_worker(
+        module,
+        lambda prompt, **kwargs: calls.append((prompt, kwargs)),
+    )
+
+    assert result["failed_count"] == 1
+    assert calls == []
+    assert module.db.session.get(module.Post, post.id).status == "generation_failed"
 
 
 def test_worker_logs_safe_context_without_prompt_caption_or_api_key(

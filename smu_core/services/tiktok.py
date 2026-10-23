@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import json
 import logging
 
+from smu_core.services.text_models import text_generation_options
+
 
 logger = logging.getLogger(__name__)
 REPURPOSE_GENERATION_VERSION = "structured-v1"
@@ -326,6 +328,7 @@ def repurpose_tiktok_content(
     if not openai_api_key:
         raise Exception("OPENAI_API_KEY is missing from your .env file")
 
+    model_options = text_generation_options()
     logger.info(
         "tiktok_repurpose_request_started",
         extra={
@@ -333,7 +336,7 @@ def repurpose_tiktok_content(
                 "stage": "repurpose_request",
                 "transcript_length": len(transcript or ""),
                 "brand_context_configured": bool(brand_context),
-                "model": "gpt-4.1-mini",
+                "model": model_options["model"],
                 "generation_version": REPURPOSE_GENERATION_VERSION,
             },
         },
@@ -347,7 +350,7 @@ def repurpose_tiktok_content(
     )
 
     response = openai_client.responses.create(
-        model="gpt-4.1-mini",
+        **model_options,
         input=prompt,
         text={
             "format": {
@@ -365,7 +368,7 @@ def repurpose_tiktok_content(
         extra={
             "smu_context": {
                 "stage": "repurpose_response",
-                "model": "gpt-4.1-mini",
+                "model": model_options["model"],
                 "response_received": response is not None,
                 "output_text_length": (
                     len(output_text) if isinstance(output_text, str) else None

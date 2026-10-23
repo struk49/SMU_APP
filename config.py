@@ -1,5 +1,7 @@
 import os
 
+from smu_core.services.text_models import DEFAULT_TEXT_MODEL
+
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
@@ -30,6 +32,7 @@ def normalise_database_url(database_url):
 
 
 class Config:
+    OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", DEFAULT_TEXT_MODEL).strip()
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-key")
     DATABASE_URL = normalise_database_url(os.getenv("DATABASE_URL", "").strip())
     SQLALCHEMY_DATABASE_URI = (

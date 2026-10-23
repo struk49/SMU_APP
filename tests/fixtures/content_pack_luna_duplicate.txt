@@ -1,0 +1,82 @@
+INSTAGRAM_CAPTION:
+A small space can still make room for fresh herbs. Think vertically, choose compact containers, and match each herb to the light you actually have.
+
+Save these five tips for your next windowsill or balcony planting.
+
+FACEBOOK_POST:
+Growing herbs in a small space is less about finding a bigger spot and more about using the space well. A sunny windowsill, balcony corner, or a few shelves can be a starting point.
+
+Try going vertical, choosing compact pots, and checking how much light each spot gets before deciding what to plant. Which herbs would you most like to grow at home?
+
+CAROUSEL_IDEA:
+Slide 1:
+Title: Grow herbs in small spaces
+Subtitle: Five practical tips for a compact garden
+Visual: A small, lush herb garden arranged across a bright windowsill, viewed from an inviting angle.
+Emphasis: small spaces
+Visual Weight: heavy
+
+Slide 2:
+Title: Grow upward
+Body: Use a wall shelf or hanging planters to make vertical room.
+Visual: Herbs in hanging planters and on a wall-mounted shelf, seen from below.
+Emphasis: Grow upward
+Visual Weight: medium
+
+Slide 3:
+Title: Choose compact pots
+Body: Small containers can fit where larger planters cannot.
+Visual: A close-up of several compact herb pots arranged along a narrow balcony ledge.
+Emphasis: compact pots
+Visual Weight: medium
+
+Slide 4:
+Title: Follow the light
+Body: Place herbs where they can get the light they need.
+Visual: Sunlight falling across herbs on a windowsill, with a softly shaded corner nearby.
+Emphasis: Follow the light
+Visual Weight: light
+
+Slide 5:
+Title: Give each herb room
+Body: Avoid overcrowding plants in a small container.
+Visual: A few individual herb plants in separate pots, viewed from above.
+Emphasis: room
+Visual Weight: medium
+
+Slide 6:
+Title: Keep care within reach
+Body: Place your herb garden where watering and tending are convenient.
+Visual: A compact cluster of herbs beside a small watering can on a balcony.
+Emphasis: within reach
+Visual Weight: light
+
+PINTEREST_PIN_TITLE:
+5 Tips for Growing Herbs in Small Spaces
+
+PINTEREST_PIN_DESCRIPTION:
+Make the most of a windowsill, balcony, or compact corner with these five small-space herb gardening tips: grow vertically, choose compact pots, follow the light, avoid overcrowding, and keep plants easy to tend.
+
+REDDIT_POST:
+I’m putting together practical tips for growing herbs when there isn’t much room: use vertical space, pick compact pots, pay attention to available light, avoid crowding plants, and keep them somewhere convenient to care for.
+
+What’s worked best for you in a small indoor or balcony herb garden?
+
+X_POST:
+No spare garden bed? A windowsill or balcony can still make room for herbs. Start by using vertical space and choosing compact pots that fit the spot you have.
+
+LINKEDIN_POST:
+Small-space herb gardening is a useful reminder that the growing area doesn’t have to be large to be intentional.
+
+Start with the conditions you have: note where the light falls, choose containers that fit, and keep plants accessible for regular care. Vertical space can help when floor or counter space is limited.
+
+LINKEDIN_POST:
+Small-space herb gardening is a useful reminder that the growing area doesn’t have to be large to be intentional.
+
+Start with the conditions you have: note where the light falls, choose containers that fit, and keep plants accessible for regular care. Vertical space can help when floor or counter space is limited.
+
+IMAGE_PROMPT:
+Create a cohesive text-free carousel art direction in balanced modern editorial illustration. Use a restrained garden palette of leafy greens, warm terracotta, cream, and soft natural wood, with gentle daylight, crisp focal details, subtle paper-like texture, and a calm, optimistic mood. Keep the visuals uncluttered and mobile-friendly; vary each slide’s setting and camera angle while maintaining the same palette and illustrative style. No text, lettering, labels, logos, or readable screens.
+
+HASHTAGS:
+#SmallSpaceGardening #HerbGarden #ContainerGardening #UrbanGardening #GrowHerbs

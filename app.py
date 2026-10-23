@@ -26,6 +26,7 @@ import cloudinary.uploader
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 from smu_core import create_app
+from smu_core.services.text_models import text_generation_options
 from smu_core.extensions import csrf, db, login_manager
 from smu_core.models.user import User
 from smu_core.models.beta_application import BetaApplication
@@ -404,7 +405,7 @@ Original caption:
 """
 
     response = openai_client.responses.create(
-        model="gpt-4.1-mini",
+        **text_generation_options(),
         input=prompt,
     )
 
@@ -450,7 +451,7 @@ Rules:
 """
 
     response = openai_client.responses.create(
-        model="gpt-4.1-mini",
+        **text_generation_options(),
         input=prompt,
     )
 
@@ -1527,7 +1528,7 @@ Rules:
 """
 
     response = openai_client.responses.create(
-        model="gpt-4.1-mini",
+        **text_generation_options(),
         input=prompt,
     )
 

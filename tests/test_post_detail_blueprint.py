@@ -45,6 +45,75 @@ def test_post_detail_url_for_compatibility(module):
         assert url_for("view_post", post_id=1) == "/post/1"
 
 
+def test_carousel_generation_status_preserves_global_endpoint_alias(module):
+    rules = rules_for(module.app, "/post/<int:post_id>/generation-status")
+
+    assert len(rules) == 1
+    assert rules[0].endpoint == "carousel_generation_status"
+    assert "GET" in rules[0].methods
+    with module.app.test_request_context():
+        assert (
+            url_for("carousel_generation_status", post_id=1)
+            == "/post/1/generation-status"
+        )
+
+
+def test_carousel_generation_status_reports_owned_rows(client, module):
+    user = create_user(module)
+    cover = create_post(
+        module,
+        user,
+        group_id="generation-status",
+        sort_order=0,
+        is_cover=True,
+        status="generating",
+        file_url="/static/generating-image.svg",
+    )
+    ready = create_post(
+        module,
+        user,
+        group_id="generation-status",
+        sort_order=1,
+        status="draft",
+        file_url="https://cdn.test/ready.jpg",
+    )
+    login(client, user)
+
+    response = client.get(f"/post/{cover.id}/generation-status")
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.get_json() == {
+        "processing": True,
+        "slides": [
+            {"id": cover.id, "status": "generating", "file_url": None},
+            {"id": ready.id, "status": "draft", "file_url": "https://cdn.test/ready.jpg"},
+        ],
+    }
+
+
+def test_post_page_polls_only_while_carousel_is_generating(client, module):
+    user = create_user(module)
+    post = create_post(
+        module,
+        user,
+        group_id="polling-carousel",
+        status="generating",
+    )
+    login(client, user)
+
+    response = client.get(f"/post/{post.id}")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert f"/post/{post.id}/generation-status" in html
+    assert "window.setTimeout(pollGenerationStatus, 3000)" in html
+
+    post.status = "draft"
+    module.db.session.commit()
+    completed_html = client.get(f"/post/{post.id}").get_data(as_text=True)
+    assert f"/post/{post.id}/generation-status" not in completed_html
+
+
 def test_post_detail_requires_login(client, module):
     user = create_user(module)
     post = create_post(module, user)
@@ -119,6 +188,22 @@ def test_another_user_is_redirected_from_post_detail(client, module):
 
     assert response.status_code == 302
     assert response.location.endswith("/")
+
+
+def test_another_user_cannot_read_carousel_generation_status(client, module):
+    owner = create_user(module, email="status-owner@example.com")
+    other = create_user(module, email="status-other@example.com")
+    post = create_post(
+        module,
+        owner,
+        group_id="private-generation-status",
+        status="generating",
+    )
+    login(client, other)
+
+    response = client.get(f"/post/{post.id}/generation-status")
+
+    assert response.status_code == 404
 
 
 def test_missing_post_preserves_404_behaviour(client, module):
@@ -203,6 +288,7 @@ def test_failed_carousel_slide_does_not_render_generating_placeholder(
     assert "Generation Failed" in html
     assert "This slide could not be completed." in html
     assert html.count("/static/generating-image.svg") == 0
+    assert f"/post/{complete.id}/generation-status" not in html
 
 
 def test_carousel_group_lookup_is_user_scoped(client, app, module):
