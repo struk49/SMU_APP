@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
+{% from 'components/single_image_controls.html' import controls %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -37,6 +38,11 @@
                 >
             </div>
 
+            <div class="mb-3">
+                <label class="form-label" for="repurposeInstructions">Your instructions (optional)</label>
+                <textarea id="repurposeInstructions" name="user_instructions" class="form-control" rows="3" maxlength="600">{{ request.form.get('user_instructions', '') }}</textarea>
+                <p class="form-text">The transcript is source material, not instructions. Add your own requirements here. This creates repurposed posts, not TikTok videos.</p>
+            </div>
             <button type="submit" class="btn btn-primary btn-lg w-100">
                 Generate Repurposed Content
             </button>
@@ -80,7 +86,7 @@
         </div>
 
         <div class="mb-3">
-            <label class="form-label fw-semibold" for="imagePrompt">Image Prompt</label>
+            <label class="form-label fw-semibold" for="imagePrompt">Generated visual suggestion (editable, source context only)</label>
             <textarea id="imagePrompt" class="form-control" rows="4">{{ repurpose_result.image_prompt }}</textarea>
         </div>
 
@@ -93,8 +99,36 @@
             Review the generated content. Then choose whether to create a single image draft or a carousel draft.
         </div>
 
+        <div class="row g-3">
+
+            <div class="col-12">
+                <form method="POST" action="{{ url_for('create_tiktok_draft') }}">
+                    {% include "_csrf.html" %}
+                    <input type="hidden" name="caption" class="captionHidden">
+                    <input type="hidden" name="image_prompt" class="imagePromptHidden">
+                    {% for field in ['instagram_caption', 'facebook_caption', 'carousel_idea', 'hashtags'] %}
+                    <input type="hidden" name="{{ field }}" data-result-field="{{ field }}" value="{{ repurpose_result[field] }}">
+                    {% endfor %}
+                    <input type="hidden" name="tiktok_url" value="{{ tiktok_url }}">
+                    <input type="hidden" name="user_instructions" id="singleUserInstructions" value="{{ request.form.get('user_instructions', '') }}">
+                    {{ controls(request.form if single_image_form else {}, 'tiktok-single') }}
+
+                    <button type="submit" class="btn btn-success btn-lg w-100">
+                        Generate Image + Save Draft
+                    </button>
+                </form>
+            </div>
+
+            <div class="col-12">
+                <form method="POST" action="{{ url_for('create_tiktok_carousel_draft') }}">
+                    {% include "_csrf.html" %}
+                    <input type="hidden" name="caption" class="captionHidden">
+                    <input type="hidden" name="image_prompt" class="imagePromptHidden">
+                    <input type="hidden" name="carousel_idea" class="carouselIdeaHidden">
+                    <input type="hidden" name="image_style" class="imageStyleHidden">
+
         <div class="mb-4">
-            <label class="form-label fw-semibold">Image Style</label>
+            <label class="form-label fw-semibold">Carousel image style</label>
 
             <select id="imageStyleSelect" class="form-select">
                 <option value="">Default</option>
@@ -107,32 +141,9 @@
             </select>
 
             <div class="form-text">
-                Choose a style for the image or carousel generated from this TikTok content.
+                Choose a style for the existing carousel workflow. Single-image controls are separate above.
             </div>
         </div>
-
-        <div class="row g-3">
-
-            <div class="col-md-6">
-                <form method="POST" action="{{ url_for('create_tiktok_draft') }}">
-                    {% include "_csrf.html" %}
-                    <input type="hidden" name="caption" class="captionHidden">
-                    <input type="hidden" name="image_prompt" class="imagePromptHidden">
-                    <input type="hidden" name="image_style" class="imageStyleHidden">
-
-                    <button type="submit" class="btn btn-success btn-lg w-100">
-                        Generate Image + Save Draft
-                    </button>
-                </form>
-            </div>
-
-            <div class="col-md-6">
-                <form method="POST" action="{{ url_for('create_tiktok_carousel_draft') }}">
-                    {% include "_csrf.html" %}
-                    <input type="hidden" name="caption" class="captionHidden">
-                    <input type="hidden" name="image_prompt" class="imagePromptHidden">
-                    <input type="hidden" name="carousel_idea" class="carouselIdeaHidden">
-                    <input type="hidden" name="image_style" class="imageStyleHidden">
 
                     <button type="submit" class="btn btn-dark btn-lg w-100">
                         Generate Carousel Draft
@@ -148,6 +159,10 @@
 
 <script>
 function prepareDraftFields() {
+    const singleInstructions = document.getElementById('singleUserInstructions');
+    if (singleInstructions) {
+        singleInstructions.value = document.getElementById('repurposeInstructions').value;
+    }
     const instagramCaptionEl = document.getElementById("instagramCaption");
     const hashtagsEl = document.getElementById("hashtags");
     const imagePromptEl = document.getElementById("imagePrompt");
@@ -158,6 +173,8 @@ function prepareDraftFields() {
         return;
     }
 
+    const resultFields = {instagram_caption: instagramCaptionEl.value, facebook_caption: document.getElementById('facebookCaption').value, carousel_idea: carouselIdeaEl.value, hashtags: hashtagsEl.value};
+    document.querySelectorAll('[data-result-field]').forEach(input => { input.value = resultFields[input.dataset.resultField]; });
     const selectedStyle = imageStyleSelect ? imageStyleSelect.value : "";
     const instagramCaption = instagramCaptionEl.value.trim();
     const hashtags = hashtagsEl.value.trim();
@@ -192,6 +209,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     const structuredContentInputs = [
         document.getElementById("instagramCaption"),
+        document.getElementById("facebookCaption"),
         document.getElementById("hashtags"),
         document.getElementById("imagePrompt"),
         document.getElementById("carouselIdea")

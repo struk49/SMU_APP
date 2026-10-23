@@ -766,11 +766,13 @@ def extract_tiktok_transcript(tiktok_url):
 
 def repurpose_tiktok_content(
     transcript,
-    brand_context=""
+    brand_context="",
+    *, user_instructions="",
 ):
     return tiktok_service.repurpose_tiktok_content(
         transcript,
         brand_context,
+        user_instructions=user_instructions,
         openai_api_key=OPENAI_API_KEY,
         openai_client=openai_client,
     )

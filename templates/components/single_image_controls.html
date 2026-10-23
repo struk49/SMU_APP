@@ -1,0 +1,31 @@
+{% macro controls(values, prefix='single') %}
+<fieldset class="border rounded-3 p-3 mb-4" data-single-image-controls>
+    <legend class="h6 float-none w-auto px-2">AI single-image visuals</legend>
+    <p class="small text-muted">For newly generated single images only. Uploaded media is used unchanged: these settings do not edit, restyle, or place uploads in templates. Single images use a free canvas; template selection is not supported.</p>
+    {% for name, label, options in [
+        ('presentation_treatment', 'Visual treatment', [('auto','Auto'),('infographic','Infographic'),('photography','Photography'),('illustration','Illustration'),('text_led','Text-led')]),
+        ('artwork_style', 'Artwork style', [('auto','Auto / compatible with treatment'),('editorial_illustration','Editorial illustration'),('minimal_premium','Minimal premium'),('photorealistic','Photorealistic'),('three_d_clay','3D clay'),('bold_graphic','Bold graphic'),('collage_magazine','Magazine collage')]),
+        ('palette', 'Palette', [('auto','Auto / subject colours'),('smu_classic','SMU classic'),('monochrome','Monochrome'),('warm_sunset','Warm sunset'),('cool_tech','Cool tech'),('earth_and_cream','Earth and cream'),('electric','Electric'),('soft_pastel','Soft pastel')])
+    ] %}
+    {% set selected = values.get(name, 'auto') %}
+    <div class="mb-3">
+        <label class="form-label" for="{{ prefix }}-{{ name }}">{{ label }}</label>
+        <select id="{{ prefix }}-{{ name }}" name="{{ name }}" class="form-select">
+            {% if selected not in options|map(attribute=0)|list %}
+            <option value="{{ selected }}" selected>Unsupported selection: {{ selected }}</option>
+            {% endif %}
+            {% for value, text in options %}<option value="{{ value }}" {% if value == selected %}selected{% endif %}>{{ text }}</option>{% endfor %}
+        </select>
+    </div>
+    {% endfor %}
+    <p class="form-text">Photography uses Photorealistic. Infographic and Illustration support drawn, graphic, collage and 3D styles. Text-led supports drawn, minimal, graphic and collage styles. Auto chooses a compatible style. Palette is independent.</p>
+    <div class="mb-3">
+        <label class="form-label" for="{{ prefix }}-image-text">Text in image (optional, exact wording)</label>
+        <textarea id="{{ prefix }}-image-text" name="image_text" class="form-control" rows="3" maxlength="1200">{{ values.get('image_text', '') }}</textarea>
+        <div class="form-text">Only this wording may appear in the image. If you request wording in your brief or visual instructions, also enter it here. Leaving this field blank intentionally requests a text-free image. Caption text stays separate. Text-led requires wording here.</div>
+    </div>
+    <label class="form-label" for="{{ prefix }}-visual-description">Describe the visuals (optional)</label>
+    <textarea id="{{ prefix }}-visual-description" name="visual_description" class="form-control" rows="3" maxlength="600">{{ values.get('visual_description', '') }}</textarea>
+    <div class="form-text">Describe subjects, setting and composition. Your instructions and selections override compatible generated suggestions. Put any visible wording in Text in image above.</div>
+</fieldset>
+{% endmacro %}

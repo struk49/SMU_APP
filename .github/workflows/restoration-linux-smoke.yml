@@ -1,4 +1,4 @@
-name: Restoration Linux startup smoke
+name: SMU Linux startup and image checks
 
 on:
   pull_request:
@@ -10,17 +10,24 @@ permissions:
 
 jobs:
   linux-smoke:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.head_ref == 'codex/content-pack-complete-image-restore' ||
+       github.head_ref == 'codex/single-image-visual-controls')
     runs-on: ubuntu-24.04
     env:
       PRODUCTION_PYTHON: "3.14.3"
     timeout-minutes: 15
     steps:
-      - name: Require the same-repository restoration PR
+      - name: Require an explicitly supported same-repository PR
         env:
           SELECTED_BRANCH: ${{ github.head_ref }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
-          test "$SELECTED_BRANCH" = codex/content-pack-complete-image-restore
+          case "$SELECTED_BRANCH" in
+            codex/content-pack-complete-image-restore|codex/single-image-visual-controls) ;;
+            *) exit 1 ;;
+          esac
           test "$HEAD_REPOSITORY" = "$GITHUB_REPOSITORY"
 
       - name: Check out explicit PR head (not the synthetic merge)
@@ -34,9 +41,13 @@ jobs:
       - name: Verify and report application revision
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SELECTED_BRANCH: ${{ github.head_ref }}
         run: |
           test "$(git -C subject rev-parse HEAD)" = "$PR_HEAD_SHA"
           git -C subject merge-base --is-ancestor 608391b1c2e03dc166f1042a11706cfcca389c27 HEAD
+          if test "$SELECTED_BRANCH" = codex/single-image-visual-controls; then
+            git -C subject merge-base --is-ancestor 83e90a6f96f4e8a6613965e1a6b7a0ae1ba28f05 HEAD
+          fi
           echo "Application revision: $PR_HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
           echo "Checkout: PR head; synthetic merge is not tested." >> "$GITHUB_STEP_SUMMARY"
           echo "Runtime: Ubuntu 24.04 / Python 3.14.3" >> "$GITHUB_STEP_SUMMARY"
@@ -52,6 +63,12 @@ jobs:
           python -c 'import os, platform; assert platform.python_version() == os.environ["PRODUCTION_PYTHON"]'
           python -m venv "$RUNNER_TEMP/smu-smoke-venv"
           "$RUNNER_TEMP/smu-smoke-venv/bin/python" -m pip --isolated install --no-cache-dir --index-url https://pypi.org/simple -r subject/requirements.txt
+          "$RUNNER_TEMP/smu-smoke-venv/bin/python" -m pip --isolated check
+
+      - name: Install pinned regression test runner
+        if: github.head_ref == 'codex/single-image-visual-controls'
+        run: |
+          "$RUNNER_TEMP/smu-smoke-venv/bin/python" -m pip --isolated install --no-cache-dir --index-url https://pypi.org/simple pytest==9.1.1
           "$RUNNER_TEMP/smu-smoke-venv/bin/python" -m pip --isolated check
 
       - name: Exercise application with loopback-only networking and dummy configuration
@@ -72,6 +89,24 @@ jobs:
             "$PWD/subject/scripts/ci" "$RUNNER_TEMP/smu-smoke-venv/bin/python" \
             "$python_library_dir" "$PR_HEAD_SHA"
 
+      - name: Run mocked single-image and carousel regression suites
+        if: github.head_ref == 'codex/single-image-visual-controls'
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/smu-single-image-state"
+          python_library_dir=$(python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')
+          sudo unshare --net -- bash -euo pipefail -c '
+            ip link set lo up
+            cd "$1"
+            exec env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 \
+              LD_LIBRARY_PATH="$5" SMU_SMOKE_MODE=1 \
+              SMU_SMOKE_ROOT="$1" SMU_SMOKE_STATE="$2" SMU_SMOKE_SUBJECT="$6" \
+              PYTHONPATH="$3" "$4" "$3/single_image_checks.py"
+          ' regressions "$PWD/subject" "$RUNNER_TEMP/smu-single-image-state" \
+            "$PWD/subject/scripts/ci" "$RUNNER_TEMP/smu-smoke-venv/bin/python" \
+            "$python_library_dir" "$PR_HEAD_SHA"
+
       - name: Report isolated smoke result
         if: always()
         run: |
@@ -79,4 +114,7 @@ jobs:
             cat "$RUNNER_TEMP/smu-smoke-state/result.json" >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'Smoke did not complete; inspect the failed step. Linux compatibility is not established.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if test -f "$RUNNER_TEMP/smu-single-image-state/result.json"; then
+            cat "$RUNNER_TEMP/smu-single-image-state/result.json" >> "$GITHUB_STEP_SUMMARY"
           fi

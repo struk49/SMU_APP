@@ -116,7 +116,7 @@ import os, subprocess
 from pathlib import Path
 import linux_smoke
 root = Path(os.environ['SMU_SMOKE_ROOT'])
-sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+sha = subprocess.check_output(['git', '-c', f'safe.directory={root}', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
 os.environ['SMU_SMOKE_SUBJECT'] = sha
 assert linux_smoke.application_revision(root) == sha
 for invalid in ('0' * 40, 'not-a-sha'):
