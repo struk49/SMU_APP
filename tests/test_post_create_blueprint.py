@@ -132,10 +132,10 @@ def test_single_ai_generation_creates_one_post_without_real_openai(client, app, 
     assert post.file_url == "https://cdn.test/generated.jpg"
     assert post.file_type == "image"
     assert "Make a launch image" in post.prompt
-    assert "Authoritative user artwork brief:" in post.prompt
-    assert "Do not add claims, offers, testimonials" in post.prompt
-    assert "selected artwork style is applied separately" in post.prompt
-    assert "STYLE:minimal" in post.prompt
+    assert "Authoritative user artwork brief (visual instructions only" in post.prompt
+    assert "Do not invent statistics, offers, testimonials" in post.prompt
+    assert "artwork style: minimal_premium" in post.prompt
+    assert "TEXT-FREE IMAGE" in post.prompt
     assert post.caption == "Launch caption"
     assert post.platforms == "facebook"
     assert post.status == "draft"
@@ -280,7 +280,7 @@ def test_missing_prompt_and_file_preserves_validation_response(client, module):
 
     response = client.post("/create", data={}, follow_redirects=True)
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     assert "Upload a file or enter a prompt." in response.get_data(as_text=True)
     assert Post.query.count() == 0
 
@@ -306,8 +306,8 @@ def test_unsupported_upload_type_preserves_error_response(client, app, module, m
         follow_redirects=True,
     )
 
-    assert response.status_code == 200
-    assert "Failed: Unsupported file type: txt" in response.get_data(as_text=True)
+    assert response.status_code == 422
+    assert "Your text and selections are preserved" in response.get_data(as_text=True)
     assert upload_calls == []
     assert Post.query.count() == 0
 
@@ -359,8 +359,8 @@ def test_upload_failure_preserves_current_error_response(client, app, module, mo
         follow_redirects=True,
     )
 
-    assert response.status_code == 200
-    assert "Failed: upload failed" in response.get_data(as_text=True)
+    assert response.status_code == 422
+    assert "Your text and selections are preserved" in response.get_data(as_text=True)
     assert Post.query.count() == 0
 
 

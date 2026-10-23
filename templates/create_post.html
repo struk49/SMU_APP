@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% block content %}
+{% from 'components/single_image_controls.html' import controls %}
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -116,7 +117,7 @@
                                 class="form-check-input"
                                 type="checkbox"
                                 name="make_carousel"
-                                id="makeCarousel"
+                                id="makeCarousel" {% if request.form.get("make_carousel") == "on" %}checked{% endif %}
                             >
                         </div>
 
@@ -150,7 +151,7 @@
 
                     <div class="mb-4">
                         <label class="form-label fw-semibold">
-                            AI Image Prompt
+                            Image brief (ordinary language)
                         </label>
 
                         <textarea
@@ -158,7 +159,7 @@
                             class="form-control"
                             rows="5"
                             placeholder="Example: luxury modern estate agent advert, cinematic lighting, clean professional design"
-                        ></textarea>
+                        >{{ request.form.get("prompt", "") }}</textarea>
 
                         <div class="form-text">
                             This prompt generates new AI artwork only. It does not edit uploaded
@@ -167,24 +168,14 @@
                         </div>
                     </div>
 
-                    <div class="mb-4">
-                        <label class="form-label fw-semibold">
-                            Image Style
-                        </label>
-
-                        <select name="image_style" class="form-select">
-                            <option value="">Default</option>
-                            <option value="realistic">Realistic</option>
-                            <option value="viral_carousel">Viral Carousel</option>
-                            <option value="luxury">Luxury Brand</option>
-                            <option value="minimal">Minimalist</option>
-                            <option value="corporate">Corporate</option>
-                            <option value="pixar">3D Animated</option>
+                    {{ controls(request.form, 'create') }}
+                    <div class="mb-4" id="legacyCarouselStyle">
+                        <label class="form-label" for="carouselImageStyle">Carousel artwork style (existing workflow)</label>
+                        <select id="carouselImageStyle" name="image_style" class="form-select">
+                        {% for value, label in [('', 'Default'),('realistic','Realistic'),('viral_carousel','Viral Carousel'),('luxury','Luxury Brand'),('minimal','Minimalist'),('corporate','Corporate'),('pixar','3D Animated')] %}
+                        <option value="{{ value }}" {% if request.form.get('image_style', '') == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
                         </select>
-
-                        <div class="form-text">
-                            Choose a style for AI-generated images.
-                        </div>
                     </div>
 
                     <div class="mb-4">
@@ -197,7 +188,7 @@
                             class="form-control"
                             rows="5"
                             placeholder="Write your social media caption here..."
-                        ></textarea>
+                        >{{ request.form.get("caption", "") }}</textarea>
                     </div>
 
                     <div class="mb-4">
@@ -223,7 +214,7 @@
                                         name="platforms"
                                         value="{{ platform }}"
                                         id="platform{{ platform }}"
-                                        {% if platform in ['instagram', 'facebook'] %}
+                                        {% if platform in (request.form.getlist('platforms') if request.method == 'POST' else ['instagram', 'facebook']) %}
                                             checked
                                         {% endif %}
                                     >
@@ -255,7 +246,7 @@
                             type="datetime-local"
                             name="scheduled_time"
                             class="form-control"
-                            value="{{ default_scheduled_time or '' }}"
+                            value="{{ request.form.get('scheduled_time', default_scheduled_time or '') }}"
                         >
 
                         <div class="form-text">
@@ -279,6 +270,17 @@
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 
 <script>
+    function updateSingleControls() {
+        const carousel = document.getElementById('makeCarousel').checked;
+        const uploaded = document.getElementById('mediaInput').files.length > 0;
+        document.querySelector('[data-single-image-controls]').disabled = carousel || uploaded;
+        document.getElementById('legacyCarouselStyle').hidden = !carousel;
+        document.getElementById('carouselImageStyle').disabled = !carousel || uploaded;
+    }
+    document.addEventListener('DOMContentLoaded', updateSingleControls);
+    document.getElementById('makeCarousel').addEventListener('change', updateSingleControls);
+    document.getElementById('mediaInput').addEventListener('change', updateSingleControls);
+
     const mediaInput = document.getElementById("mediaInput");
     const previewSection = document.getElementById("previewSection");
     const mainPreview = document.getElementById("mainPreview");

@@ -33,7 +33,7 @@ CAPABILITY_REGISTRY = MappingProxyType({
         **{
             style: {
                 "available": True,
-                "surfaces": ("content_pack",),
+                "surfaces": ("content_pack", "create_post", "tiktok"),
                 "content_pack_selectable": True,
             }
             for style in (
@@ -66,7 +66,7 @@ CAPABILITY_REGISTRY = MappingProxyType({
             "surfaces": ("content_pack", "create_post", "tiktok"),
         },
         **{
-            palette: {"available": True, "surfaces": ("content_pack",)}
+            palette: {"available": True, "surfaces": ("content_pack", "create_post", "tiktok")}
             for palette in (
                 "smu_classic", "monochrome", "warm_sunset", "cool_tech",
                 "earth_and_cream", "electric", "soft_pastel",
@@ -74,7 +74,7 @@ CAPABILITY_REGISTRY = MappingProxyType({
         },
     },
     "visual_treatments": {
-        treatment: {"available": True, "surfaces": ("content_pack",)}
+        treatment: {"available": True, "surfaces": ("content_pack", "create_post", "tiktok")}
         for treatment in (
             "auto", "infographic", "photography", "illustration", "text_led",
         )

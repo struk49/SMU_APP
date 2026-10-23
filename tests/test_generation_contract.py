@@ -82,7 +82,7 @@ def test_capability_registry_records_supported_and_unavailable_operations():
     assert "tiktok" in capability("palettes", "auto")["surfaces"]
     assert capability("visual_treatments", "infographic") == {
         "available": True,
-        "surfaces": ("content_pack",),
+        "surfaces": ("content_pack", "create_post", "tiktok"),
     }
 
 

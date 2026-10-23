@@ -11,6 +11,8 @@ from smu_core.services import publishing
 from smu_core.services import zernio
 from smu_core.services.access import subscription_required
 from smu_core.services.time_utils import utc_now
+from smu_core.services.single_image import build_single_image_prompt, validate_single_image_controls, checked_text
+from smu_core.services.generation_contract import GenerationContractError
 
 
 posts_bp = Blueprint("posts", __name__)
@@ -146,6 +148,9 @@ Authoritative user artwork brief:
 def create_post():
     default_scheduled_time = ""
 
+    def redisplay():
+        return render_template("create_post.html", default_scheduled_time=default_scheduled_time), 422
+
     if request.method == "GET":
         scheduled_date = request.args.get("scheduled_date", "").strip()
 
@@ -175,9 +180,11 @@ def create_post():
 
         scheduled_time = None
         if scheduled_time_str:
-            scheduled_time = _post_create_helper("convert_uk_time_to_utc")(
-                scheduled_time_str
-            )
+            try:
+                scheduled_time = _post_create_helper("convert_uk_time_to_utc")(scheduled_time_str)
+            except (ValueError, TypeError):
+                flash("Check the scheduled date and time. Your input is preserved.", "danger")
+                return redisplay()
 
         original_files = [
             (index, file)
@@ -234,7 +241,7 @@ def create_post():
 
         if not prompt and not has_files and not linkedin_text_only:
             flash("Upload a file or enter a prompt.", "danger")
-            return redirect(url_for("create_post"))
+            return redisplay()
 
         reserved_image_credits = 0
 
@@ -242,7 +249,7 @@ def create_post():
             if linkedin_text_only:
                 if not caption.strip():
                     flash("LinkedIn text posts require a caption.", "danger")
-                    return redirect(url_for("create_post"))
+                    return redisplay()
 
                 post = Post(
                     file_url="",
@@ -263,6 +270,15 @@ def create_post():
 
             if prompt and not has_files:
                 image_count = 3 if make_carousel else 1
+                if make_carousel and any(request.form.get(key, default) != default for key, default in (
+                    ("presentation_treatment", "auto"), ("artwork_style", "auto"),
+                    ("palette", "auto"), ("image_text", ""), ("visual_description", ""),
+                )):
+                    raise GenerationContractError("Single-image visual controls cannot be applied to the existing Create Post carousel workflow.")
+                # Validate before credits or provider calls; uploaded media bypasses AI.
+                controls = validate_single_image_controls(request.form) if not make_carousel else None
+                if controls is not None:
+                    checked_text(prompt, "image brief", limit=20000, required=True)
 
                 if not _post_create_helper("reserve_ai_image_credits")(
                     current_user._get_current_object(),
@@ -278,7 +294,7 @@ def create_post():
                         ),
                         "warning",
                     )
-                    return redirect(url_for("create_post"))
+                    return redisplay()
 
                 reserved_image_credits = image_count
 
@@ -291,10 +307,14 @@ def create_post():
                     prompt,
                 )
 
-                styled_prompt = _post_create_helper("apply_image_style")(
-                    branded_prompt,
-                    image_style
-                )
+                if controls is not None:
+                    styled_prompt = build_single_image_prompt(
+                        brief=prompt, controls=controls, brand_context=brand_context,
+                    )
+                else:
+                    styled_prompt = _post_create_helper("apply_image_style")(
+                        branded_prompt, image_style,
+                    )
 
                 image_urls = _post_create_helper("generate_multiple_openai_images")(
                     styled_prompt,
@@ -392,9 +412,9 @@ def create_post():
                     current_user._get_current_object(),
                     reserved_image_credits,
                 )
-            print("Create post error:", e)
-            flash(f"Failed: {e}", "danger")
-            return redirect(url_for("create_post"))
+            flash(str(e) if isinstance(e, GenerationContractError) else
+                  "We couldn't create this post. Your text and selections are preserved; please reselect any uploaded files.", "danger")
+            return redisplay()
 
     return render_template(
         "create_post.html",

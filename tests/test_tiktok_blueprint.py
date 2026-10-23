@@ -505,23 +505,20 @@ def test_create_tiktok_draft_creates_current_user_single_post(
         data={
             "caption": "  Draft caption  ",
             "image_prompt": "  Image prompt  ",
-            "image_style": "bold",
+            "image_style": "minimal",
         },
     )
     post = module.Post.query.first()
 
     assert response.status_code == 302
-    assert calls == {
-        "prompt": "Image prompt",
-        "style": "bold",
-        "generated_prompt": "bold:Image prompt",
-    }
+    assert "artwork style: minimal_premium" in calls["generated_prompt"]
+    assert "TEXT-FREE IMAGE" in calls["generated_prompt"]
     assert post is not None
     assert post.user_id == other.id
     assert post.user_id != owner.id
     assert post.file_url == "https://cdn.test/tiktok.jpg"
     assert post.file_type == "image"
-    assert post.prompt == "bold:Image prompt"
+    assert post.prompt == calls["generated_prompt"]
     assert post.caption == "Draft caption"
     assert post.platforms == "instagram,facebook"
     assert post.post_type == "single"
@@ -540,8 +537,7 @@ def test_create_tiktok_draft_validation_creates_no_row(client, module):
         data={"caption": "", "image_prompt": "Image prompt"},
     )
 
-    assert response.status_code == 302
-    assert response.location.endswith("/tiktok")
+    assert response.status_code == 422
     assert module.Post.query.count() == 0
 
 
@@ -570,16 +566,16 @@ def test_create_tiktok_draft_image_failure_rolls_back_without_post(
         data={
             "caption": "Caption",
             "image_prompt": "Image prompt",
-            "image_style": "bold",
+            "image_style": "minimal",
         },
         follow_redirects=True,
     )
     html = response.get_data(as_text=True)
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     assert rollback_calls == ["rollback"]
     assert module.Post.query.count() == 0
-    assert "We couldn&#39;t generate the image for this draft. Please try again." in html
+    assert "We couldn&#39;t generate the image. Your text and selections are preserved." in html
     assert "image provider raw detail" not in html
     assert "image provider raw detail" not in caplog.text
     contexts = log_contexts(caplog, "tiktok_single_draft_image_failed")
@@ -624,7 +620,7 @@ def test_create_tiktok_draft_commit_failure_rolls_back_without_post(
         data={
             "caption": "Caption",
             "image_prompt": "Image prompt",
-            "image_style": "bold",
+            "image_style": "minimal",
         },
         follow_redirects=True,
     )
@@ -632,7 +628,7 @@ def test_create_tiktok_draft_commit_failure_rolls_back_without_post(
     text = unescape(html)
     user_usage = module.UserUsage.query.filter_by(user_id=user.id).one()
 
-    assert response.status_code == 200
+    assert response.status_code == 422
     assert rollback_calls == ["rollback"]
     assert module.Post.query.count() == 0
     assert user_usage.ai_images_used == 0

@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
+from smu_core.services.single_image import build_single_image_prompt, validate_single_image_controls, checked_text
+from smu_core.services.generation_contract import GenerationContractError
 from smu_core.extensions import db
 from smu_core.models import Post
 from smu_core.services.access import subscription_required
@@ -141,8 +143,15 @@ def tiktok_repurpose():
         )
 
         try:
+            checked_text(request.form.get("user_instructions", ""), "your instructions", limit=600)
             transcript = _tiktok_helper("extract_tiktok_transcript")(tiktok_url)
 
+        except GenerationContractError as e:
+            flash(str(e), "danger")
+            return render_template(
+                "tiktok.html", tiktok_url=tiktok_url, transcript=transcript,
+                repurpose_result=repurpose_result,
+            ), 422
         except Exception as e:
             logger.error(
                 "tiktok_transcript_extraction_failed",
@@ -184,7 +193,9 @@ def tiktok_repurpose():
             repurpose_result = validate_repurpose_result(
                 _tiktok_helper("repurpose_tiktok_content")(
                     transcript,
-                    brand_context
+                    brand_context,
+                    **({"user_instructions": request.form.get("user_instructions")}
+                       if request.form.get("user_instructions") else {}),
                 )
             )
 
@@ -258,19 +269,24 @@ def tiktok_repurpose():
 def create_tiktok_draft():
     caption = request.form.get("caption", "").strip()
     image_prompt = request.form.get("image_prompt", "").strip()
-    image_style = request.form.get("image_style", "").strip()
 
-    if not caption:
-        flash("No caption found. Please generate TikTok content first.", "danger")
-        return redirect(url_for("tiktok_repurpose"))
-
-    if not image_prompt:
-        flash("No image prompt found. Please generate TikTok content first.", "danger")
-        return redirect(url_for("tiktok_repurpose"))
+    def redisplay():
+        result = {field: request.form.get(field, "") for field in tiktok_service.EXPECTED_REPURPOSE_FIELDS}
+        result["instagram_caption"] = request.form.get("instagram_caption", caption)
+        result["image_prompt"] = image_prompt
+        return render_template("tiktok.html", tiktok_url=request.form.get("tiktok_url", ""),
+                               repurpose_result=result, transcript=None, single_image_form=True), 422
 
     reserved_image_credit = False
 
     try:
+        controls = validate_single_image_controls(request.form)
+        checked_text(caption, "caption", limit=20000, required=True)
+        checked_text(image_prompt, "generated visual suggestion", limit=6000, required=True)
+        styled_prompt = build_single_image_prompt(
+            brief=caption, controls=controls, suggestion=image_prompt, source_only=True,
+            brand_context=_tiktok_helper("build_brand_context")(current_user.id),
+        )
         user = current_user._get_current_object()
         if not _tiktok_helper("reserve_ai_image_credits")(user, 1):
             summary = _tiktok_helper("get_usage_summary")(user)
@@ -281,10 +297,9 @@ def create_tiktok_draft():
                 ),
                 "warning",
             )
-            return redirect(url_for("tiktok_repurpose"))
+            return redisplay()
 
         reserved_image_credit = True
-        styled_prompt = _tiktok_helper("apply_image_style")(image_prompt, image_style)
         image_url = _tiktok_helper("generate_openai_image")(styled_prompt)
 
     except Exception as e:
@@ -305,10 +320,10 @@ def create_tiktok_draft():
             },
         )
         flash(
-            "We couldn't generate the image for this draft. Please try again.",
+            str(e) if isinstance(e, GenerationContractError) else "We couldn't generate the image. Your text and selections are preserved.",
             "danger",
         )
-        return redirect(url_for("tiktok_repurpose"))
+        return redisplay()
 
     try:
         post = Post(
@@ -359,7 +374,7 @@ def create_tiktok_draft():
             },
         )
         flash("We couldn't create this draft. Please try again.", "danger")
-        return redirect(url_for("tiktok_repurpose"))
+        return redisplay()
 
 
 @login_required
