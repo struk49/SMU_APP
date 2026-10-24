@@ -344,7 +344,9 @@ def test_requested_subtitles_are_preferred_over_other_caption_sources():
     )
 
     assert transcript == "Requested"
-    assert FakeYoutubeDL.options == {
+    options = dict(FakeYoutubeDL.options)
+    assert isinstance(options.pop("logger"), content._QuietTikTokDownloaderLogger)
+    assert options == {
         "skip_download": True,
         "quiet": True,
         "no_warnings": True,
@@ -543,7 +545,7 @@ def test_tiktok_diagnostics_are_safe(caplog):
     assert "SECRET DESCRIPTION" not in output
     assert "SECRET TRANSCRIPT" not in output
     assert reached_contexts
-    assert reached_contexts[0]["url_hostname"] == "www.tiktok.com"
+    assert "url_hostname" not in reached_contexts[0]
     assert final_contexts
     assert final_contexts[0]["final_transcript_length"] == len("SECRET TRANSCRIPT")
 

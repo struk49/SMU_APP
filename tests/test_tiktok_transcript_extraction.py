@@ -1,4 +1,6 @@
 import logging
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -608,3 +610,153 @@ def test_no_fallback_download_when_metadata_succeeds(module):
     ) == "Metadata transcript"
 
     assert [call["download"] for call in MetadataOnlyYoutubeDL.calls] == [False]
+
+
+def extraction_events(caplog):
+    return [json.loads(record.getMessage()) for record in caplog.records
+            if record.name == "smu.tiktok_extraction"]
+
+
+@pytest.mark.parametrize("failure,stage,outcome", [
+    ("url", "url_validation", "failed"),
+    ("redirect", "shortlink_resolution", "failed"),
+    ("metadata", "metadata_extraction", "failed"),
+    ("captions", "caption_selection", "failed"),
+    ("configuration", "transcription_configuration", "failed"),
+    ("download", "media_download", "failed"),
+    ("missing_file", "media_download", "failed"),
+    ("transcription", "transcription", "failed"),
+    ("empty", "transcription", "empty_transcription"),
+])
+def test_extraction_diagnostics_are_correlated_and_secret_safe(
+    module, caplog, capsys, failure, stage, outcome,
+):
+    caplog.set_level(logging.INFO)
+    secret = "PRIVATE cookie=private-cookie Authorization: private-key private-transcript"
+    signed_url = "https://www.tiktok.com/@private/video/123?token=private-token"
+    calls = []
+
+    class Downloader(DownloadingYoutubeDL):
+        def extract_info(self, url, download=False):
+            calls.append(download)
+            self.options["logger"].debug(secret)
+            self.options["logger"].warning(signed_url)
+            self.options["logger"].error(secret)
+            if not download:
+                if failure == "metadata":
+                    return {"title": None}
+                if failure == "captions":
+                    return {"subtitles": ["invalid container"]}
+                return {"title": "", "description": ""}
+            if failure == "download":
+                raise RuntimeError(secret + signed_url)
+            if failure == "missing_file":
+                return {}
+            return super().extract_info(url, download=True)
+
+    client = FakeOpenAIClient(error=RuntimeError(secret + signed_url)
+                             if failure == "transcription" else None)
+    if failure == "empty":
+        client.response = {"text": " \n\t"}
+    url = ("http://[invalid" if failure == "url" else
+           "https://vm.tiktok.com/private-token" if failure == "redirect" else signed_url)
+    with pytest.raises(Exception):
+        module.content_service.extract_tiktok_transcript(
+            url, youtube_dl_cls=Downloader,
+            requests_get=lambda *a, **k: FakeResponse("", url="https://outside.test/private-token"),
+            openai_api_key="" if failure == "configuration" else "private-key",
+            openai_client=client,
+        )
+    events = extraction_events(caplog)
+    assert len(events) == 2
+    assert events[0]["outcome"] == "started"
+    assert events[-1]["stage"] == stage
+    assert events[-1]["outcome"] == outcome
+    assert events[0]["correlation_id"] == events[-1]["correlation_id"]
+    assert re.fullmatch(r"[0-9a-f]{32}", events[0]["correlation_id"])
+    assert all(set(event) == {"event", "stage", "outcome", "correlation_id"}
+               for event in events)
+    emitted = caplog.text + capsys.readouterr().err
+    for forbidden in (secret, signed_url, "private-token", "private-cookie", "private-key", "private-transcript"):
+        assert forbidden not in emitted
+        assert forbidden not in str([getattr(r, "smu_context", {}) for r in caplog.records])
+    assert len(client.calls) == (1 if failure in {"transcription", "empty"} else 0)
+    assert calls.count(True) <= 1
+
+
+def test_metadata_failure_and_transcription_success_share_correlation(module, caplog):
+    caplog.set_level(logging.INFO)
+
+    class Downloader(DownloadingYoutubeDL):
+        def extract_info(self, url, download=False):
+            if not download:
+                raise RuntimeError("private raw downloader error")
+            return super().extract_info(url, download=True)
+
+    client = FakeOpenAIClient()
+    result = module.content_service.extract_tiktok_transcript(
+        "https://www.tiktok.com/@user/video/123", youtube_dl_cls=Downloader,
+        openai_api_key="dummy", openai_client=client,
+    )
+    assert result == FakeTranscriptionResponse.text
+    events = extraction_events(caplog)
+    assert [(event["stage"], event["outcome"]) for event in events] == [
+        ("url_validation", "started"), ("metadata_extraction", "failed"),
+        ("transcription", "succeeded"),
+    ]
+    assert len({event["correlation_id"] for event in events}) == 1
+    assert "private raw downloader error" not in caplog.text
+    assert len(client.calls) == 1
+
+
+def test_metadata_success_uses_unique_correlation_per_call(module, caplog):
+    caplog.set_level(logging.INFO)
+    for _ in range(2):
+        assert module.content_service.extract_tiktok_transcript(
+            "https://www.tiktok.com/@user/video/123", youtube_dl_cls=MetadataOnlyYoutubeDL,
+        ) == "Metadata transcript"
+    events = extraction_events(caplog)
+    assert [event["outcome"] for event in events] == ["started", "succeeded"] * 2
+    assert events[0]["correlation_id"] == events[1]["correlation_id"]
+    assert events[2]["correlation_id"] == events[3]["correlation_id"]
+    assert events[0]["correlation_id"] != events[2]["correlation_id"]
+
+
+@pytest.mark.parametrize("correlation,stage,outcome", [
+    ("private URL", "transcription", "failed"),
+    ("a" * 32, "private cookie", "failed"),
+    ("a" * 32, "transcription", "private transcript"),
+])
+def test_diagnostic_rejects_non_allowlisted_fields(module, caplog, correlation, stage, outcome):
+    with pytest.raises(ValueError):
+        module.content_service._log_tiktok_extraction(correlation, stage, outcome)
+    assert not extraction_events(caplog)
+
+
+def test_extraction_json_reaches_application_file_and_stderr(module, monkeypatch, tmp_path, capsys):
+    smu_logger = logging.getLogger("smu")
+    diagnostic_logger = logging.getLogger("smu.tiktok_extraction")
+    monkeypatch.setattr(module, "BASE_DIR", str(tmp_path))
+    monkeypatch.setattr(smu_logger, "handlers", [])
+    monkeypatch.setattr(diagnostic_logger, "handlers", [])
+    module.configure_logging()
+    module.configure_logging()
+    try:
+        assert len(smu_logger.handlers) == len(diagnostic_logger.handlers) == 1
+        module.content_service.extract_tiktok_transcript(
+            "https://www.tiktok.com/@user/video/123", youtube_dl_cls=MetadataOnlyYoutubeDL,
+        )
+        with pytest.raises(Exception):
+            module.content_service.extract_tiktok_transcript(
+                "http://[invalid", youtube_dl_cls=MetadataOnlyYoutubeDL,
+            )
+        file_events = [json.loads(line) for line in (tmp_path / "logs/smu.log").read_text().splitlines()]
+        stderr_events = [json.loads(line) for line in capsys.readouterr().err.splitlines()]
+        assert file_events == stderr_events
+        assert [event["outcome"] for event in file_events] == ["started", "succeeded", "started", "failed"]
+        assert file_events[0]["correlation_id"] == file_events[1]["correlation_id"]
+        assert file_events[2]["correlation_id"] == file_events[3]["correlation_id"]
+        assert file_events[3]["stage"] == "url_validation"
+    finally:
+        for handler in smu_logger.handlers + diagnostic_logger.handlers:
+            handler.close()

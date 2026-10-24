@@ -1,7 +1,6 @@
 import logging
 import uuid
 from dataclasses import fields, is_dataclass
-from urllib.parse import urlparse
 
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
@@ -39,10 +38,6 @@ def _tiktok_helper(name):
         },
     )
     return helper
-
-
-def _safe_tiktok_hostname(tiktok_url):
-    return urlparse(tiktok_url).hostname or ""
 
 
 def _build_tiktok_carousel_artwork_prompt(
@@ -134,7 +129,6 @@ def tiktok_repurpose():
                 "smu_context": {
                     "user_id": current_user.id,
                     "stage": "start",
-                    "url_hostname": _safe_tiktok_hostname(tiktok_url),
                     "service_file": getattr(tiktok_service, "__file__", ""),
                     "blueprint_file": __file__,
                     "generation_version": tiktok_service.REPURPOSE_GENERATION_VERSION,
@@ -159,7 +153,6 @@ def tiktok_repurpose():
                     "smu_context": {
                         "user_id": current_user.id,
                         "stage": "transcript_extraction",
-                        "url_hostname": _safe_tiktok_hostname(tiktok_url),
                         "exception_class": e.__class__.__name__,
                     },
                 },
