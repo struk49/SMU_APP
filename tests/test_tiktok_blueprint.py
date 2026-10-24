@@ -1,4 +1,5 @@
 import logging
+import json
 from contextlib import contextmanager
 from html import unescape
 
@@ -405,8 +406,56 @@ def test_tiktok_transcript_exception_shows_friendly_error_without_raw_details(
     assert contexts
     assert contexts[0]["stage"] == "transcript_extraction"
     assert contexts[0]["user_id"] == user.id
-    assert contexts[0]["url_hostname"] == "tiktok.test"
+    assert "url_hostname" not in contexts[0]
     assert contexts[0]["exception_class"] == "RuntimeError"
+
+
+def test_route_extraction_failure_emits_diagnostic_before_any_generation(
+    client, app, module, monkeypatch, caplog,
+):
+    login(client, create_user(module))
+    caplog.set_level(logging.INFO)
+    secret = "cookie=private-cookie https://signed.test/media?token=private-token"
+
+    class FailingDownloader:
+        def __init__(self, options):
+            self.options = options
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def extract_info(self, *args, **kwargs):
+            self.options["logger"].error(secret)
+            raise RuntimeError(secret)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("No generation or image credits after extraction failure")
+
+    monkeypatch.setattr(module, "YoutubeDL", FailingDownloader)
+    monkeypatch.setattr(module, "OPENAI_API_KEY", "dummy")
+    monkeypatch.setattr(module, "openai_client", object())
+    set_tiktok_helper(app, monkeypatch, "repurpose_tiktok_content", forbidden)
+    set_tiktok_helper(app, monkeypatch, "reserve_ai_image_credits", forbidden)
+    set_tiktok_helper(app, monkeypatch, "generate_openai_image", forbidden)
+    url = "https://www.tiktok.com/@user/video/123?token=private-token"
+    response = client.post("/tiktok", data={"tiktok_url": url})
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "We couldn&#39;t extract usable content" in html
+    assert url in html  # Preserve the submitted input, without logging it.
+    assert Post.query.count() == 0
+    events = [json.loads(r.getMessage()) for r in caplog.records
+              if r.name == "smu.tiktok_extraction"]
+    assert [(e["stage"], e["outcome"]) for e in events] == [
+        ("url_validation", "started"), ("metadata_extraction", "failed"),
+        ("media_download", "failed"),
+    ]
+    assert len({e["correlation_id"] for e in events}) == 1
+    assert "private-cookie" not in caplog.text
+    assert "private-token" not in caplog.text
 
 
 def test_tiktok_unexpected_exception_shows_friendly_error_without_raw_details(

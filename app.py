@@ -75,6 +75,14 @@ def configure_logging():
         handler.setFormatter(logging.Formatter("%(message)s"))
         logger.addHandler(handler)
 
+    # Extraction diagnostics also reach Render's application stderr logs.
+    extraction_logger = logging.getLogger("smu.tiktok_extraction")
+    extraction_logger.setLevel(logging.INFO)
+    if not extraction_logger.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        extraction_logger.addHandler(handler)
+
     return logger
 
 

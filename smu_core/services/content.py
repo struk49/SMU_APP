@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import tempfile
+import uuid
 from collections import Counter
 from pathlib import Path
 from urllib.parse import urlparse
@@ -504,11 +505,30 @@ def clean_transcript_text(text):
     return text.strip()
 
 
-def _safe_exception_message(error, *, max_length=180):
-    message = re.sub(r"https?://\S+", "[url]", str(error or ""))
-    message = re.sub(r"(?i)(api[_-]?key|token|authorization|cookie)=\S+", r"\1=[redacted]", message)
-    message = re.sub(r"\s+", " ", message).strip()
-    return message[:max_length]
+class _QuietTikTokDownloaderLogger:
+    """yt-dlp messages may contain signed URLs or cookies; never forward them."""
+
+    def debug(self, message):
+        pass
+
+    warning = debug
+    error = debug
+
+
+def _log_tiktok_extraction(correlation_id, stage, outcome):
+    # Never accept an exception, URL or source/provider text in this record.
+    if not isinstance(correlation_id, str) or not re.fullmatch(r"[0-9a-f]{32}", correlation_id):
+        raise ValueError("Invalid extraction correlation ID")
+    if stage not in {
+        "url_validation", "shortlink_resolution", "metadata_extraction",
+        "caption_selection", "transcription_configuration", "media_download",
+        "transcription",
+    } or outcome not in {"started", "succeeded", "failed", "empty_transcription"}:
+        raise ValueError("Unsupported extraction diagnostic")
+    logging.getLogger("smu.tiktok_extraction").info(json.dumps({
+        "event": "tiktok_extraction", "correlation_id": correlation_id,
+        "stage": stage, "outcome": outcome,
+    }, sort_keys=True))
 
 
 def _hostname(value):
@@ -569,6 +589,26 @@ def extract_tiktok_transcript(
     openai_api_key=None,
     openai_client=None,
 ):
+    correlation_id = uuid.uuid4().hex
+    diagnostic = {"stage": "url_validation", "outcome": "failed", "correlation_id": correlation_id}
+    _log_tiktok_extraction(correlation_id, diagnostic["stage"], "started")
+    try:
+        transcript = _extract_tiktok_transcript(
+            tiktok_url, youtube_dl_cls=youtube_dl_cls, requests_get=requests_get,
+            openai_api_key=openai_api_key, openai_client=openai_client,
+            diagnostic=diagnostic,
+        )
+    except Exception:
+        _log_tiktok_extraction(correlation_id, diagnostic["stage"], diagnostic["outcome"])
+        raise
+    _log_tiktok_extraction(correlation_id, diagnostic["stage"], "succeeded")
+    return transcript
+
+
+def _extract_tiktok_transcript(
+    tiktok_url, *, youtube_dl_cls, requests_get, openai_api_key, openai_client,
+    diagnostic,
+):
     requests_get = requests_get or requests.get
     hostname = urlparse(tiktok_url).hostname or ""
     is_tiktok_url = _is_tiktok_hostname(hostname.lower())
@@ -578,7 +618,6 @@ def extract_tiktok_transcript(
         extra={
             "smu_context": {
                 "helper_reached": True,
-                "url_hostname": hostname,
                 "appears_tiktok_url": is_tiktok_url,
                 "is_shortlink": is_shortlink,
                 "stage": "transcript_extraction",
@@ -587,17 +626,16 @@ def extract_tiktok_transcript(
     )
 
     try:
+        diagnostic["stage"] = "shortlink_resolution"
         extraction_url = _resolve_tiktok_url(tiktok_url, requests_get)
     except Exception as e:
         logger.warning(
             "tiktok_shortlink_resolution_failed",
             extra={
                 "smu_context": {
-                    "url_hostname": hostname,
                     "appears_tiktok_url": is_tiktok_url,
                     "is_shortlink": is_shortlink,
                     "exception_class": e.__class__.__name__,
-                    "exception_message": _safe_exception_message(e),
                     "stage": "shortlink_resolution",
                 },
             },
@@ -860,12 +898,12 @@ def extract_tiktok_transcript(
         return None
 
     def transcribe_downloaded_media():
+        diagnostic["stage"] = "transcription_configuration"
         if not openai_api_key or not openai_client:
             logger.warning(
                 "tiktok_transcription_unavailable",
                 extra={
                     "smu_context": {
-                        "url_hostname": hostname,
                         "appears_tiktok_url": is_tiktok_url,
                         "is_shortlink": is_shortlink,
                         "stage": "transcription_config",
@@ -876,8 +914,10 @@ def extract_tiktok_transcript(
             raise Exception(NO_TIKTOK_TRANSCRIPT_ERROR)
 
         with tempfile.TemporaryDirectory(prefix="smu-tiktok-") as temp_dir:
+            diagnostic["stage"] = "media_download"
             output_template = str(Path(temp_dir) / "tiktok-%(id)s.%(ext)s")
             download_opts = {
+                "logger": _QuietTikTokDownloaderLogger(),
                 "quiet": True,
                 "no_warnings": True,
                 "noplaylist": True,
@@ -895,11 +935,9 @@ def extract_tiktok_transcript(
                     "tiktok_media_download_failed",
                     extra={
                         "smu_context": {
-                            "url_hostname": hostname,
                             "appears_tiktok_url": is_tiktok_url,
                             "is_shortlink": is_shortlink,
                             "exception_class": e.__class__.__name__,
-                            "exception_message": _safe_exception_message(e),
                             "stage": "media_download",
                         },
                     },
@@ -914,7 +952,6 @@ def extract_tiktok_transcript(
                     "tiktok_media_download_missing_file",
                     extra={
                         "smu_context": {
-                            "url_hostname": hostname,
                             "appears_tiktok_url": is_tiktok_url,
                             "is_shortlink": is_shortlink,
                             "download_returned_info": download_info is not None,
@@ -924,6 +961,7 @@ def extract_tiktok_transcript(
                 )
                 raise Exception(NO_TIKTOK_TRANSCRIPT_ERROR)
 
+            diagnostic["stage"] = "transcription"
             try:
                 with media_file.open("rb") as audio_file:
                     response = openai_client.audio.transcriptions.create(
@@ -935,11 +973,9 @@ def extract_tiktok_transcript(
                     "tiktok_transcription_failed",
                     extra={
                         "smu_context": {
-                            "url_hostname": hostname,
                             "appears_tiktok_url": is_tiktok_url,
                             "is_shortlink": is_shortlink,
                             "exception_class": e.__class__.__name__,
-                            "exception_message": _safe_exception_message(e),
                             "downloaded_media_extension": media_file.suffix.lower(),
                             "downloaded_media_size_bytes": media_file.stat().st_size,
                             "transcription_model": TIKTOK_TRANSCRIPTION_MODEL,
@@ -955,7 +991,6 @@ def extract_tiktok_transcript(
                 "tiktok_transcription_completed",
                 extra={
                     "smu_context": {
-                        "url_hostname": hostname,
                         "appears_tiktok_url": is_tiktok_url,
                         "is_shortlink": is_shortlink,
                         "downloaded_media_extension": media_file.suffix.lower(),
@@ -968,11 +1003,13 @@ def extract_tiktok_transcript(
             )
 
             if not transcript:
+                diagnostic["outcome"] = "empty_transcription"
                 raise Exception(NO_TIKTOK_TRANSCRIPT_ERROR)
 
             return transcript
 
     ydl_opts = {
+        "logger": _QuietTikTokDownloaderLogger(),
         "skip_download": True,
         "quiet": True,
         "no_warnings": True,
@@ -982,20 +1019,20 @@ def extract_tiktok_transcript(
         "socket_timeout": 20,
     }
 
+    diagnostic["stage"] = "metadata_extraction"
     try:
         with youtube_dl_cls(ydl_opts) as ydl:
             info = ydl.extract_info(extraction_url, download=False)
     except Exception as e:
+        _log_tiktok_extraction(diagnostic["correlation_id"], "metadata_extraction", "failed")
         logger.error(
             "tiktok_extract_info_failed",
             extra={
                 "smu_context": {
                     "extract_info_exception_class": e.__class__.__name__,
-                    "exception_message": _safe_exception_message(e),
                     "appears_tiktok_url": is_tiktok_url,
                     "is_shortlink": is_shortlink,
                     "stage": "extract_info",
-                    "url_hostname": hostname,
                 },
             },
         )
@@ -1036,6 +1073,7 @@ def extract_tiktok_transcript(
         },
     )
 
+    diagnostic["stage"] = "caption_selection"
     selected_caption = select_caption(info)
     transcript = ""
     fallback_source = "none"
