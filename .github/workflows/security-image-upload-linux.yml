@@ -1,0 +1,121 @@
+name: SMU isolated image security comparison
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  security-linux:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'codex/security-image-upload-hardening'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      BASELINE_SHA: b84ce74b94d280fd24a1bd3512fdae414f668873
+      PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Check out explicit reviewed PR head
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: subject
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out untouched production baseline
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: b84ce74b94d280fd24a1bd3512fdae414f668873
+          path: baseline
+          persist-credentials: false
+
+      - name: Verify revisions and unchanged dependency pin
+        run: |
+          set -euo pipefail
+          test "$(git -C subject rev-parse HEAD)" = "$PR_HEAD_SHA"
+          test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SHA"
+          git -C subject diff --quiet HEAD --
+          git -C baseline diff --quiet HEAD --
+          git -C subject merge-base --is-ancestor "$BASELINE_SHA" "$PR_HEAD_SHA"
+          cmp baseline/requirements.txt subject/requirements.txt
+          grep -Fx 'Pillow==11.3.0' subject/requirements.txt
+          echo "Application revision: $PR_HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Untouched baseline: $BASELINE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Explicit PR head; synthetic merge is not tested." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up production Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.14.3'
+          architecture: x64
+
+      - name: Install identical committed dependencies in a clean environment
+        run: |
+          set -euo pipefail
+          python -c 'import platform; assert platform.python_version() == "3.14.3"'
+          python -m venv "$RUNNER_TEMP/security-venv"
+          "$RUNNER_TEMP/security-venv/bin/python" -m pip --isolated install --no-cache-dir --index-url https://pypi.org/simple -r subject/requirements.txt pytest==9.1.1
+          "$RUNNER_TEMP/security-venv/bin/python" -m pip --isolated check
+
+      - name: Run both startup smokes and complete suites without external networking
+        run: |
+          set -euo pipefail
+          support="$PWD/subject/scripts/ci"
+          python_library_dir=$(python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')
+          for checkout in baseline subject; do
+            revision="$BASELINE_SHA"
+            if test "$checkout" = subject; then revision="$PR_HEAD_SHA"; fi
+            for check in smoke tests; do
+              state="$RUNNER_TEMP/security-$checkout-$check"
+              mkdir "$state"
+              # No fallback if unshare fails. Application processes inherit no
+              # repository tokens/secrets and have only loopback networking.
+              sudo unshare --net -- bash -euo pipefail -c '
+                ip link set lo up
+                root=$1 state=$2 support=$3 interpreter=$4 libdir=$5 subject=$6
+                if test "$7" = tests; then
+                  set -- "$support/security_image_checks.py" run
+                else
+                  set -- "$support/linux_smoke.py"
+                fi
+                cd "$root"
+                exec env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 \
+                  LD_LIBRARY_PATH="$libdir" SMU_SMOKE_MODE=1 \
+                  SMU_SMOKE_ROOT="$root" SMU_SMOKE_STATE="$state" SMU_SMOKE_SUBJECT="$subject" \
+                  PYTHONPATH="$support" "$interpreter" "$@"
+              ' security "$PWD/$checkout" "$state" "$support" \
+                "$RUNNER_TEMP/security-venv/bin/python" "$python_library_dir" \
+                "$revision" "$check"
+            done
+          done
+
+      - name: Compare failures, retained coverage and all new security cases
+        run: |
+          set -euo pipefail
+          git -C subject diff --quiet HEAD --
+          git -C baseline diff --quiet HEAD --
+          "$RUNNER_TEMP/security-venv/bin/python" subject/scripts/ci/security_image_checks.py compare \
+            --baseline "$RUNNER_TEMP/security-baseline-tests/security-result.json" \
+            --patched "$RUNNER_TEMP/security-subject-tests/security-result.json" \
+            --head "$PR_HEAD_SHA" --output "$RUNNER_TEMP/security-comparison.json"
+
+      - name: Report comparison and smoke results honestly
+        if: always()
+        run: |
+          set -euo pipefail
+          echo 'Ubuntu 24.04 / Python 3.14.3 / Pillow 11.3.0. No deployment.' >> "$GITHUB_STEP_SUMMARY"
+          for report in "$RUNNER_TEMP/security-baseline-smoke/result.json" \
+                        "$RUNNER_TEMP/security-subject-smoke/result.json" \
+                        "$RUNNER_TEMP/security-comparison.json"; do
+            if test -f "$report"; then
+              cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo 'A required report is absent; successful validation is not established.' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          echo 'Parity success does not mean a clean full suite: known failures remain explicitly listed.' >> "$GITHUB_STEP_SUMMARY"

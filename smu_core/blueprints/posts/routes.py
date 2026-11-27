@@ -13,6 +13,9 @@ from smu_core.services.access import subscription_required
 from smu_core.services.time_utils import utc_now
 from smu_core.services.single_image import build_single_image_prompt, validate_single_image_controls, checked_text
 from smu_core.services.generation_contract import GenerationContractError
+from smu_core.services.image_validation import (
+    ImageValidationError, reject_document_upload, validate_raster_image,
+)
 
 
 posts_bp = Blueprint("posts", __name__)
@@ -364,12 +367,23 @@ def create_post():
                 group_id = str(uuid.uuid4()) if is_carousel else None
                 created_posts = []
 
-                for index, file in enumerate(uploaded_files):
-                    file_type = _post_create_helper("get_file_type")(file.filename)
-
+                # Preflight the entire batch before any upload or pending Post row.
+                file_types = []
+                for file in uploaded_files:
+                    try:
+                        file_type = _post_create_helper("get_file_type")(file.filename)
+                    except Exception as exc:
+                        raise ImageValidationError(
+                            "Unsupported upload. Choose JPEG, PNG, GIF, WebP or a supported video."
+                        ) from exc
                     if make_carousel and file_type != "image":
-                        raise Exception("Carousel posts currently support images only.")
+                        raise ImageValidationError("Carousel uploads support JPEG, PNG, GIF and WebP images only.")
+                    reject_document_upload(file)
+                    if file_type == "image":
+                        validate_raster_image(file)
+                    file_types.append(file_type)
 
+                for index, (file, file_type) in enumerate(zip(uploaded_files, file_types)):
                     upload_result = _post_create_helper("upload_to_cloudinary")(
                         file,
                         force_jpeg=(
@@ -412,7 +426,7 @@ def create_post():
                     current_user._get_current_object(),
                     reserved_image_credits,
                 )
-            flash(str(e) if isinstance(e, GenerationContractError) else
+            flash(str(e) if isinstance(e, (GenerationContractError, ImageValidationError)) else
                   "We couldn't create this post. Your text and selections are preserved; please reselect any uploaded files.", "danger")
             return redisplay()
 
