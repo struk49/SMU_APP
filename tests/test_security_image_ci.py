@@ -25,6 +25,10 @@ def results():
         "subject": checks.BASELINE, "pytest_exit_code": 1,
         "collected": [failure, checks.REPLACED_TEST], "failed": [failure], "skipped": [],
         "passed": 1, "blocked_attempts_by_test": {},
+        "legacy_visual_evidence": {
+            "test": checks.LEGACY_VISUAL_TEST, "measurement": {"fits": True},
+            "render_sha256": "1" * 64, "font_sha256": "2" * 64, "freetype": "fixture",
+        },
     }
     new = deepcopy(old)
     new.update(subject=HEAD, passed=91,
@@ -114,3 +118,25 @@ def test_runner_rejects_failed_isolation_before_app_import(tmp_path, monkeypatch
     assert json.loads((tmp_path / "security-result.json").read_text()) == {
         "status": "infrastructure_failed", "error_type": "RuntimeError",
     }
+
+
+def test_proven_linux_snapshot_failure_requires_matching_render_evidence(results):
+    old, new = results
+    for result in (old, new):
+        result["collected"].append(checks.LEGACY_VISUAL_TEST)
+        result["failed"].append(checks.LEGACY_VISUAL_TEST)
+    report = checks.compare(old, new, HEAD)
+    assert checks.LEGACY_VISUAL_TEST in report["known_failures_remaining"]
+    assert report["full_suite_green"] is False
+    assert report["legacy_visual_evidence"] == old["legacy_visual_evidence"]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("measurement", {"fits": False}), ("render_sha256", "3" * 64),
+    ("font_sha256", "4" * 64), ("freetype", "different"),
+])
+def test_existing_snapshot_failure_does_not_hide_visual_regressions(results, field, value):
+    old, new = results
+    new["legacy_visual_evidence"][field] = value
+    with pytest.raises(ValueError, match="Legacy visual output"):
+        checks.compare(old, new, HEAD)

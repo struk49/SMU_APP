@@ -1,7 +1,10 @@
 """Isolated Linux full-suite comparison; never a deployment entrypoint."""
 
 import argparse
+import ast
+import hashlib
 from importlib.metadata import version
+from io import BytesIO
 import json
 import logging
 import os
@@ -11,7 +14,11 @@ import sys
 
 
 BASELINE = "b84ce74b94d280fd24a1bd3512fdae414f668873"
+LEGACY_VISUAL_TEST = "tests/test_social_text_service.py::test_structured_legacy_typography_and_render_match_c6b82fa_snapshot"
 KNOWN_FAILURES = {
+    # Both Linux revisions reproduce the stored snapshot's three-pixel bounds
+    # mismatch. Require identical full render evidence below; do not alter it.
+    LEGACY_VISUAL_TEST,
     "tests/test_linkedin_publishing.py::test_create_route_rejects_blank_linkedin_text_only_caption",
     "tests/test_public_landing.py::test_landing_sections_render_current_product_capabilities",
     "tests/test_scheduler_service.py::test_scheduler_defaults_on_for_local_development",
@@ -23,6 +30,33 @@ KNOWN_FAILURES = {
 }
 # The security patch deliberately replaces the old invalid-artwork canvas fallback.
 REPLACED_TEST = "tests/test_social_text_service.py::test_invalid_viral_artwork_falls_back_to_safe_local_canvas"
+
+
+def legacy_visual_evidence(root):
+    """Measure/render the unchanged snapshot fixture without replacing its test."""
+    from PIL import Image, features
+    from smu_core.services import social_text
+
+    source = ast.parse((root / "tests/test_social_text_service.py").read_text(encoding="utf-8"))
+    test = next(node for node in source.body if isinstance(node, ast.FunctionDef)
+                and node.name == LEGACY_VISUAL_TEST.split("::")[1])
+    arguments = next(ast.literal_eval(node.value) for node in test.body
+                     if isinstance(node, ast.Assign)
+                     and any(isinstance(target, ast.Name) and target.id == "arguments" for target in node.targets))
+    measurement = social_text.preflight_viral_carousel_text(**arguments)
+    image = Image.new("RGB", (1024, 1024), (35, 57, 89))
+    buffer = BytesIO()
+    image.save(buffer, "PNG")
+    rendered = social_text.render_social_text(
+        buffer.getvalue(), campaign_style="photorealistic",
+        campaign_palette="warm_sunset", **arguments,
+    )
+    return {
+        "test": LEGACY_VISUAL_TEST, "measurement": measurement,
+        "render_sha256": hashlib.sha256(rendered).hexdigest(),
+        "font_sha256": hashlib.sha256(social_text.FONT_PATH.read_bytes()).hexdigest(),
+        "freetype": features.version("freetype2"),
+    }
 
 
 class Results:
@@ -90,6 +124,7 @@ def run():
             collected=records.collected, failed=sorted(records.failed),
             skipped=sorted(records.skipped), passed=len(records.passed - records.failed),
             blocked_attempts_by_test=records.blocked,
+            legacy_visual_evidence=legacy_visual_evidence(root),
         )
         # A test-failure exit is evaluated by compare(), never silently ignored.
         return 0 if code in (0, 1) else 1
@@ -115,6 +150,11 @@ def compare(baseline, patched, expected_head):
     old_failures, new_failures = set(baseline["failed"]), set(patched["failed"])
     if not old_failures <= KNOWN_FAILURES or new_failures != old_failures:
         raise ValueError("Unexpected baseline failure or changed failure set")
+    old_visual, new_visual = baseline["legacy_visual_evidence"], patched["legacy_visual_evidence"]
+    if (old_visual != new_visual or old_visual.get("test") != LEGACY_VISUAL_TEST
+            or not old_visual.get("measurement") or not old_visual.get("freetype")
+            or any(len(old_visual.get(key, "")) != 64 for key in ("render_sha256", "font_sha256"))):
+        raise ValueError("Legacy visual output differs or evidence is incomplete")
     old_tests, new_tests = set(baseline["collected"]), set(patched["collected"])
     if old_tests - new_tests - {REPLACED_TEST}:
         raise ValueError("Existing tests disappeared")
@@ -135,6 +175,7 @@ def compare(baseline, patched, expected_head):
         "known_failures_remaining": sorted(old_failures),
         "full_suite_green": not old_failures,
         "blocked_attempts_by_test": patched["blocked_attempts_by_test"],
+        "legacy_visual_evidence": new_visual,
         "scope": "Explicit PR head; synthetic merge is not tested. No deployment.",
     }
 
