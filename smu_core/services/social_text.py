@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageStat, UnidentifiedImageError
+from smu_core.services.image_validation import RASTER_FORMATS, ImageValidationError, validate_raster_image
 
 from smu_core.services.generation_contract import (
     GenerationContractError,
@@ -2171,7 +2172,12 @@ def render_social_text(
     )
 
     try:
-        with Image.open(BytesIO(image_bytes)) as source:
+        validated_bytes = validate_raster_image(image_bytes, max_dimension=MAX_DIMENSION)
+    except ImageValidationError as exc:
+        raise SocialTextRenderError(exc.reason) from exc
+
+    try:
+        with Image.open(BytesIO(validated_bytes), formats=RASTER_FORMATS) as source:
             width, height = source.size
             if (
                 width < 1
@@ -2185,10 +2191,7 @@ def render_social_text(
     except SocialTextRenderError:
         raise
     except (UnidentifiedImageError, OSError, ValueError) as exc:
-        if designed_template and layout_role is not None:
-            image = Image.new("RGBA", (1024, 1024), (9, 18, 34, 255))
-        else:
-            raise SocialTextRenderError("invalid_image") from exc
+        raise SocialTextRenderError("invalid_image") from exc
 
     width, height = image.size
     margin = max(16, round(min(width, height) * 0.08))

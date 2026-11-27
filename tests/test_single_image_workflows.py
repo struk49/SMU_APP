@@ -1,6 +1,7 @@
 """Actual route/worker integration, using local rows and mocked images only."""
 
 from io import BytesIO
+from PIL import Image
 import socket
 
 import pytest
@@ -142,10 +143,13 @@ def test_uploaded_media_bypasses_all_ai_controls_and_credits(client, app, module
         uploads.append(file.read())
         return {"secure_url": "https://cdn.test/upload.jpg"}
     monkeypatch.setitem(app.extensions["smu_post_create_helpers"], "upload_to_cloudinary", upload)
-    response = client.post("/create", data={"media": (BytesIO(b"original"), "photo.jpg"),
+    original = BytesIO()
+    Image.new("RGB", (8, 8), "green").save(original, format="JPEG")
+    original_bytes = original.getvalue()
+    response = client.post("/create", data={"media": (BytesIO(original_bytes), "photo.jpg"),
         "caption": "Keep caption", "palette": "invalid", "presentation_treatment": "invalid"})
     assert response.status_code == 302
-    assert uploads == [b"original"]
+    assert uploads == [original_bytes]
     assert Post.query.one().caption == "Keep caption"
     assert calls == {"images": [], "reserve": [], "release": []}
 

@@ -4,6 +4,9 @@ from urllib.parse import urlparse
 
 import cloudinary.uploader
 from PIL import Image
+from smu_core.services.image_validation import (
+    RASTER_FORMATS, reject_document_upload, validate_raster_image,
+)
 
 
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -25,15 +28,8 @@ def get_file_type(filename: str) -> str:
 
 
 def normalize_image_to_jpeg(file_or_bytes):
-    if isinstance(file_or_bytes, bytes):
-        source = BytesIO(file_or_bytes)
-    else:
-        source = file_or_bytes
-
-    if hasattr(source, "seek"):
-        source.seek(0)
-
-    with Image.open(source) as image:
+    source = BytesIO(validate_raster_image(file_or_bytes))
+    with Image.open(source, formats=RASTER_FORMATS) as image:
         source_format = image.format or "unknown"
 
         if image.mode in {"RGBA", "LA"} or (
@@ -137,6 +133,12 @@ def upload_to_cloudinary(
 
     if force_jpeg:
         return upload_jpeg_func(file_or_url)
+
+    if isinstance(file_or_url, bytes) or hasattr(file_or_url, "read"):
+        reject_document_upload(file_or_url)
+        filename = getattr(file_or_url, "filename", "") or getattr(file_or_url, "name", "")
+        if not isinstance(filename, str) or filename.rsplit(".", 1)[-1].lower() not in VIDEO_EXTENSIONS:
+            validate_raster_image(file_or_url)
 
     return upload_func(
         file_or_url,

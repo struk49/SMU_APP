@@ -1356,17 +1356,17 @@ def test_closing_artwork_zone_remains_secondary():
     assert (right - left) * (bottom - top) < 0.30 * 1024 * 1024
 
 
-def test_invalid_viral_artwork_falls_back_to_safe_local_canvas():
-    output = social_text.render_social_text(
-        b"not an image",
-        title="Safe fallback",
-        layout_role="info",
-        layout_variant="split_left",
-        design_style="viral_carousel",
-        visual_treatment="illustration",
-    )
-
-    assert output.startswith(b"\x89PNG")
+def test_invalid_viral_artwork_is_rejected_before_rendering():
+    with pytest.raises(social_text.SocialTextRenderError) as raised:
+        social_text.render_social_text(
+            b"not an image",
+            title="Safe fallback",
+            layout_role="info",
+            layout_variant="split_left",
+            design_style="viral_carousel",
+            visual_treatment="illustration",
+        )
+    assert raised.value.reason == "invalid_image"
 
 
 @pytest.mark.parametrize(

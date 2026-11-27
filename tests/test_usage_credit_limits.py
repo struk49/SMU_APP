@@ -1,6 +1,7 @@
 from datetime import timedelta
 from html import unescape
 from io import BytesIO
+from PIL import Image
 
 from conftest import create_post, create_user, login
 from smu_core.services.time_utils import utc_now
@@ -92,11 +93,14 @@ def test_uploaded_image_creation_does_not_consume_ai_credit(
         "upload_to_cloudinary",
         lambda file, force_jpeg=False: {"secure_url": "https://cdn.test/uploaded.jpg"},
     )
+    original = BytesIO()
+    Image.new("RGB", (8, 8), "green").save(original, format="PNG")
+    original.seek(0)
 
     response = client.post(
         "/create",
         data={
-            "media": (BytesIO(b"image"), "upload.png"),
+            "media": (original, "upload.png"),
             "caption": "Caption",
             "platforms": ["instagram"],
         },

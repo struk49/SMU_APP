@@ -1,10 +1,18 @@
 from io import BytesIO
+from PIL import Image
 
 from flask import template_rendered, url_for
 
 import app as smu_app
 from conftest import create_user, login
 from smu_core.models import Post
+
+
+def raster_upload():
+    output = BytesIO()
+    Image.new("RGB", (8, 8), "green").save(output, format="PNG")
+    output.seek(0)
+    return output
 
 
 def rules_for(app, path):
@@ -78,7 +86,7 @@ def test_single_upload_creates_one_post_without_real_cloudinary(client, app, mod
     response = client.post(
         "/create",
         data={
-            "media": (BytesIO(b"image"), "single.png"),
+            "media": (raster_upload(), "single.png"),
             "prompt": "  Prompt  ",
             "caption": "  Caption  ",
             "platforms": ["instagram", "pinterest"],
@@ -170,7 +178,7 @@ def test_product_post_uses_uploaded_photo_unchanged_without_generation(
     response = client.post(
         "/create",
         data={
-            "media": (BytesIO(b"photo"), "product.jpg"),
+            "media": (raster_upload(), "product.jpg"),
             "prompt": "Use this exact supplied product photo unchanged.",
             "caption": "A source-backed product caption.",
             "platforms": ["instagram"],
@@ -200,9 +208,9 @@ def test_carousel_upload_creates_grouped_posts_in_cover_order(client, app, modul
         "/create",
         data={
             "media": [
-                (BytesIO(b"one"), "one.png"),
-                (BytesIO(b"two"), "two.png"),
-                (BytesIO(b"three"), "three.png"),
+                (raster_upload(), "one.png"),
+                (raster_upload(), "two.png"),
+                (raster_upload(), "three.png"),
             ],
             "caption": "Carousel caption",
             "prompt": "Carousel prompt",
@@ -307,7 +315,7 @@ def test_unsupported_upload_type_preserves_error_response(client, app, module, m
     )
 
     assert response.status_code == 422
-    assert "Your text and selections are preserved" in response.get_data(as_text=True)
+    assert "Unsupported upload. Choose JPEG, PNG, GIF, WebP" in response.get_data(as_text=True)
     assert upload_calls == []
     assert Post.query.count() == 0
 
@@ -353,7 +361,7 @@ def test_upload_failure_preserves_current_error_response(client, app, module, mo
     response = client.post(
         "/create",
         data={
-            "media": (BytesIO(b"image"), "single.png"),
+            "media": (raster_upload(), "single.png"),
         },
         content_type="multipart/form-data",
         follow_redirects=True,
