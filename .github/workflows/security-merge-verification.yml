@@ -1,0 +1,145 @@
+name: SMU exact merged security verification
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  security-merged-linux:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'codex/security-merge-verification'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      APPLICATION_SHA: c3d6bebfd3798f21017c4bd41e3ecfa0d0e0a8bd
+      BASELINE_SHA: b84ce74b94d280fd24a1bd3512fdae414f668873
+      REVIEWED_HEAD_SHA: ea04c6cbcb6ac49a1bcc209bdf066cedf34270e4
+      EXPECTED_TREE: a849977bfdf225934c4aa717958079a88d6b044d
+      VERIFIER_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Check out exact merged application, not verifier head or synthetic merge
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: c3d6bebfd3798f21017c4bd41e3ecfa0d0e0a8bd
+          path: subject
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out untouched original production baseline
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: b84ce74b94d280fd24a1bd3512fdae414f668873
+          path: baseline
+          persist-credentials: false
+
+      - name: Verify exact application SHA, parents, tree and unchanged dependencies
+        run: |
+          set -euo pipefail
+          test "$(git -C subject rev-parse HEAD)" = "$APPLICATION_SHA"
+          test "$(git -C subject rev-parse 'HEAD^{tree}')" = "$EXPECTED_TREE"
+          test "$(git -C subject show -s --format=%P HEAD)" = "$BASELINE_SHA $REVIEWED_HEAD_SHA"
+          test "$(git -C baseline rev-parse HEAD)" = "$BASELINE_SHA"
+          test "$APPLICATION_SHA" != "$VERIFIER_SHA"
+          git -C subject diff --quiet HEAD --
+          git -C baseline diff --quiet HEAD --
+          cmp baseline/requirements.txt subject/requirements.txt
+          grep -Fx 'Pillow==11.3.0' subject/requirements.txt
+          echo "Tested application revision: $APPLICATION_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Application source tree: $EXPECTED_TREE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Untouched production baseline: $BASELINE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "Verification workflow revision (not the application): $VERIFIER_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Set up production Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: '3.14.3'
+          architecture: x64
+
+      - name: Install identical committed dependencies in a clean environment
+        run: |
+          set -euo pipefail
+          python -c 'import platform; assert platform.python_version() == "3.14.3"'
+          python -m venv "$RUNNER_TEMP/merge-security-venv"
+          "$RUNNER_TEMP/merge-security-venv/bin/python" -m pip --isolated install --no-cache-dir --index-url https://pypi.org/simple -r subject/requirements.txt pytest==9.1.1
+          "$RUNNER_TEMP/merge-security-venv/bin/python" -m pip --isolated check
+
+      - name: Run both startup smokes and full suites in loopback-only namespaces
+        run: |
+          set -euo pipefail
+          support="$PWD/subject/scripts/ci"
+          python_library_dir=$(python -c 'import sysconfig; print(sysconfig.get_config_var("LIBDIR"))')
+          for checkout in baseline subject; do
+            revision="$BASELINE_SHA"
+            if test "$checkout" = subject; then revision="$APPLICATION_SHA"; fi
+            for check in smoke tests; do
+              state="$RUNNER_TEMP/merge-security-$checkout-$check"
+              mkdir "$state"
+              # Mandatory OS isolation. Never fall back to unrestricted checks.
+              # Application processes receive no GitHub tokens or real credentials.
+              sudo unshare --net -- bash -euo pipefail -c '
+                ip link set lo up
+                root=$1 state=$2 support=$3 interpreter=$4 libdir=$5 subject=$6
+                if test "$7" = tests; then
+                  set -- "$support/security_image_checks.py" run
+                else
+                  set -- "$support/linux_smoke.py"
+                fi
+                cd "$root"
+                exec env -i PATH=/usr/bin:/bin PYTHONDONTWRITEBYTECODE=1 \
+                  LD_LIBRARY_PATH="$libdir" SMU_SMOKE_MODE=1 \
+                  SMU_SMOKE_ROOT="$root" SMU_SMOKE_STATE="$state" SMU_SMOKE_SUBJECT="$subject" \
+                  PYTHONPATH="$support" "$interpreter" "$@"
+              ' merged-security "$PWD/$checkout" "$state" "$support" \
+                "$RUNNER_TEMP/merge-security-venv/bin/python" "$python_library_dir" \
+                "$revision" "$check"
+            done
+          done
+
+      - name: Enforce baseline parity, all security cases and unchanged typography
+        run: |
+          set -euo pipefail
+          git -C subject diff --quiet HEAD --
+          git -C baseline diff --quiet HEAD --
+          "$RUNNER_TEMP/merge-security-venv/bin/python" subject/scripts/ci/security_image_checks.py compare \
+            --baseline "$RUNNER_TEMP/merge-security-baseline-tests/security-result.json" \
+            --patched "$RUNNER_TEMP/merge-security-subject-tests/security-result.json" \
+            --head "$APPLICATION_SHA" --output "$RUNNER_TEMP/merge-security-comparison.json" \
+            > "$RUNNER_TEMP/merge-security-comparator.stdout"
+          # Correct only the existing harness's PR-head display label. Keep the
+          # tested source, comparison criteria and every result field unchanged.
+          export COMPARISON_FILE="$RUNNER_TEMP/merge-security-comparison.json"
+          "$RUNNER_TEMP/merge-security-venv/bin/python" - <<'PY'
+          import json, os, pathlib, re
+          path = pathlib.Path(os.environ["COMPARISON_FILE"])
+          result = json.loads(path.read_text())
+          assert result["subject"] == os.environ["APPLICATION_SHA"]
+          assert result["baseline"] == os.environ["BASELINE_SHA"]
+          assert re.fullmatch(r"[0-9a-f]{40}", os.environ["VERIFIER_SHA"])
+          assert result["subject"] != os.environ["VERIFIER_SHA"]
+          result["scope"] = "Exact merged application revision; separate verification workflow revision. No deployment."
+          result["verification_workflow_sha"] = os.environ["VERIFIER_SHA"]
+          result["application_tree"] = os.environ["EXPECTED_TREE"]
+          path.write_text(json.dumps(result, indent=2) + "\n")
+          print(json.dumps(result, indent=2))
+          PY
+
+      - name: Report exact-revision results without claiming full-suite success
+        if: always()
+        run: |
+          set -euo pipefail
+          echo 'Ubuntu 24.04 / Python 3.14.3 / Pillow 11.3.0. No deployment.' >> "$GITHUB_STEP_SUMMARY"
+          for report in "$RUNNER_TEMP/merge-security-baseline-smoke/result.json" \
+                        "$RUNNER_TEMP/merge-security-subject-smoke/result.json" \
+                        "$RUNNER_TEMP/merge-security-comparison.json"; do
+            if test -f "$report"; then
+              cat "$report" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo 'Required verification report absent; successful verification is not established.' >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          echo 'A passing parity check is distinct from a fully passing suite. Known failures remain explicit.' >> "$GITHUB_STEP_SUMMARY"
